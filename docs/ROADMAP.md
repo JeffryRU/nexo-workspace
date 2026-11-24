@@ -39,6 +39,14 @@ leer y escribir en un panel abierto en la ventana.
 - Codex (`codex app-server`), ACP (Gemini y otros agentes ACP), Antigravity (`agy --output-format
   stream-json`), Ollama.
 
+## F3.5 — Memoria observacional (ADR 0007)
+
+- Observador y Reflector en el daemon sobre la transcripción normalizada (`SummarizerPort`; Ollama,
+  Haiku o Gemini Flash), con alcance por sesión y por proyecto.
+- Inyección por proveedor (`MemoryInjectionPort`), reinyección tras la compactación de Claude Code,
+  renovación opcional de sesión y `memory.search` / `memory.recall` por MCP.
+- Panel de costo del Observador; se puede apagar.
+
 ## F4 — Historial, límites y visor
 
 - Historial de los proveedores agrupado por proyecto; límites de uso (Claude, Codex); visor lateral
