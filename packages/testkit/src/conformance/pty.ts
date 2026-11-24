@@ -1,4 +1,4 @@
-import type { PtyExit, PtyPort, PtyProcess } from '@atalaya/core'
+import type { PtyExit, PtyPort, PtyProcess } from '@nexo/core'
 import { afterEach, describe, expect, it } from 'vitest'
 import { sleep } from '../timers.ts'
 

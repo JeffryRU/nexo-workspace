@@ -3,6 +3,6 @@ import { es } from './es.ts'
 
 describe('i18n/es', () => {
   it('define el nombre de la app', () => {
-    expect(es.appName).toBe('Atalaya')
+    expect(es.appName).toBe('Nexo Workspace')
   })
 })

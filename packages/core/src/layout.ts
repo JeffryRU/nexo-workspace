@@ -4,7 +4,7 @@ import {
   type PaneId,
   type SplitDirection,
   type SplitNode,
-} from '@atalaya/contracts'
+} from '@nexo/contracts'
 
 /**
  * Operaciones puras e inmutables sobre el árbol de distribución.

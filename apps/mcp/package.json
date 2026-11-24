@@ -1,5 +1,5 @@
 {
-  "name": "@atalaya/mcp",
+  "name": "@nexo/mcp",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@atalaya/contracts": "workspace:*",
-    "@atalaya/client": "workspace:*"
+    "@nexo/contracts": "workspace:*",
+    "@nexo/client": "workspace:*"
   }
 }

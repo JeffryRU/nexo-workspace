@@ -5,7 +5,7 @@ import {
   TabId,
   TerminalId,
   WorkspaceId,
-} from '@atalaya/contracts'
+} from '@nexo/contracts'
 import type {
   AgentProviderPort,
   BusEvent,
@@ -28,7 +28,7 @@ import type {
   RunResult,
   SessionStorePort,
   Unsubscribe,
-} from '@atalaya/core'
+} from '@nexo/core'
 import { schedule } from './timers.ts'
 
 /** Reloj controlable: el tiempo solo avanza con `advance`. */

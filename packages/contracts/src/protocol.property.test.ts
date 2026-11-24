@@ -1,4 +1,4 @@
-import { arbHostileJson, arbMutated, arbRequest, arbServerMessage } from '@atalaya/testkit'
+import { arbHostileJson, arbMutated, arbRequest, arbServerMessage } from '@nexo/testkit'
 import * as fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { ERROR_CODES, parseRequest, parseServerMessage } from './index.ts'

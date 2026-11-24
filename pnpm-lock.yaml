@@ -193,37 +193,37 @@ importers:
 
   apps/cli:
     dependencies:
-      '@atalaya/client':
+      '@nexo/client':
         specifier: workspace:*
         version: link:../../packages/client
-      '@atalaya/contracts':
+      '@nexo/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
 
   apps/daemon:
     dependencies:
-      '@atalaya/contracts':
+      '@nexo/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@atalaya/core':
+      '@nexo/core':
         specifier: workspace:*
         version: link:../../packages/core
 
   apps/mcp:
     dependencies:
-      '@atalaya/client':
+      '@nexo/client':
         specifier: workspace:*
         version: link:../../packages/client
-      '@atalaya/contracts':
+      '@nexo/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
 
   apps/web:
     dependencies:
-      '@atalaya/client':
+      '@nexo/client':
         specifier: workspace:*
         version: link:../../packages/client
-      '@atalaya/contracts':
+      '@nexo/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
       '@tanstack/solid-query':
@@ -239,7 +239,7 @@ importers:
 
   packages/client:
     dependencies:
-      '@atalaya/contracts':
+      '@nexo/contracts':
         specifier: workspace:*
         version: link:../contracts
 
@@ -249,26 +249,26 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
     devDependencies:
-      '@atalaya/testkit':
+      '@nexo/testkit':
         specifier: workspace:*
         version: link:../testkit
 
   packages/core:
     dependencies:
-      '@atalaya/contracts':
+      '@nexo/contracts':
         specifier: workspace:*
         version: link:../contracts
     devDependencies:
-      '@atalaya/testkit':
+      '@nexo/testkit':
         specifier: workspace:*
         version: link:../testkit
 
   packages/testkit:
     dependencies:
-      '@atalaya/contracts':
+      '@nexo/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@atalaya/core':
+      '@nexo/core':
         specifier: workspace:*
         version: link:../core
 

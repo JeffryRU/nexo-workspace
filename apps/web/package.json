@@ -1,5 +1,5 @@
 {
-  "name": "@atalaya/web",
+  "name": "@nexo/web",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -9,8 +9,8 @@
     "build": "vite build"
   },
   "dependencies": {
-    "@atalaya/client": "workspace:*",
-    "@atalaya/contracts": "workspace:*",
+    "@nexo/client": "workspace:*",
+    "@nexo/contracts": "workspace:*",
     "@tanstack/solid-query": "^5.108.4",
     "solid-js": "^1.9.20"
   },

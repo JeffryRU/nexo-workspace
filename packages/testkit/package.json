@@ -1,5 +1,5 @@
 {
-  "name": "@atalaya/testkit",
+  "name": "@nexo/testkit",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@atalaya/contracts": "workspace:*",
-    "@atalaya/core": "workspace:*"
+    "@nexo/contracts": "workspace:*",
+    "@nexo/core": "workspace:*"
   }
 }

@@ -1,6 +1,6 @@
-// TODO(F1): comandos ls, new, split, send, read, focus sobre @atalaya/client.
+// TODO(F1): comandos ls, new, split, send, read, focus sobre @nexo/client.
 
-export const HELP = 'atalaya: CLI de Atalaya (esqueleto, sin comandos todavia)'
+export const HELP = 'nexo: CLI de Nexo (esqueleto, sin comandos todavia)'
 
 /** Punto de entrada: devuelve el codigo de salida. */
 export function main(argv: readonly string[]): { code: number; output: string } {

@@ -16,7 +16,7 @@ import {
   type TypedRequest,
   type Workspace,
   WorkspaceId,
-} from '@atalaya/contracts'
+} from '@nexo/contracts'
 import * as fc from 'fast-check'
 
 const arbIdString = fc.stringMatching(/^[A-Za-z0-9_-]{1,32}$/)

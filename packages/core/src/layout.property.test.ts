@@ -1,5 +1,5 @@
-import { type Layout, LayoutSchema, PaneId } from '@atalaya/contracts'
-import { arbLayout } from '@atalaya/testkit'
+import { type Layout, LayoutSchema, PaneId } from '@nexo/contracts'
+import { arbLayout } from '@nexo/testkit'
 import * as fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { close, focusNeighbor, leaves, MIN_RATIO, resize, split, swap } from './layout.ts'

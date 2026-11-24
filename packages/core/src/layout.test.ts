@@ -1,4 +1,4 @@
-import { type Layout, LayoutSchema, PaneId } from '@atalaya/contracts'
+import { type Layout, LayoutSchema, PaneId } from '@nexo/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   close,

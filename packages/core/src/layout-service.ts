@@ -8,7 +8,7 @@ import type {
   TabId,
   Workspace,
   WorkspaceId,
-} from '@atalaya/contracts'
+} from '@nexo/contracts'
 import { close, LayoutError, leaf, leaves, resize, split, swap } from './layout.ts'
 import type { EventBusPort, IdPort } from './ports/misc.ts'
 

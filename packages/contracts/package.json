@@ -1,5 +1,5 @@
 {
-  "name": "@atalaya/contracts",
+  "name": "@nexo/contracts",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -13,6 +13,6 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@atalaya/testkit": "workspace:*"
+    "@nexo/testkit": "workspace:*"
   }
 }

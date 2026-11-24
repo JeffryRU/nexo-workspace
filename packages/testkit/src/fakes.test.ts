@@ -1,4 +1,4 @@
-import { PaneId } from '@atalaya/contracts'
+import { PaneId } from '@nexo/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   FakeAgentProvider,

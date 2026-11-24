@@ -1,4 +1,4 @@
-# Atalaya
+# Nexo Workspace
 
 App de escritorio (Linux y Windows) para trabajar con varios agentes de programación (Claude Code,
 Codex, Gemini, Antigravity, modelos locales) y terminales reales en pestañas y paneles, al estilo de un
@@ -49,5 +49,5 @@ apps/cli, apps/mcp   clientes (esqueletos)
 
 La idea de leer cada conversación como un documento, con permisos en línea y varios agentes a la vista,
 viene de [MegaloIV/lyra-agentes](https://github.com/MegaloIV/lyra-agentes) (MIT). La organización en
-espacios, pestañas y paneles controlables por CLI está inspirada en herdr. Atalaya no copia código de
+espacios, pestañas y paneles controlables por CLI está inspirada en herdr. Nexo no copia código de
 ninguno de los dos.

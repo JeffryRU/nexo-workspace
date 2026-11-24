@@ -1,4 +1,4 @@
-import { LayoutSchema, parseRequestValue, parseServerMessageValue } from '@atalaya/contracts'
+import { LayoutSchema, parseRequestValue, parseServerMessageValue } from '@nexo/contracts'
 import * as fc from 'fast-check'
 import { describe, it } from 'vitest'
 import { arbEvent, arbLayout, arbRequest, arbServerMessage, arbWorkspace } from './arbitraries.ts'

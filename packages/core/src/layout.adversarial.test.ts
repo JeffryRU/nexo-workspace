@@ -1,5 +1,5 @@
-import { type Layout, LayoutSchema, LIMITS, PaneId } from '@atalaya/contracts'
-import { arbHostileString } from '@atalaya/testkit'
+import { type Layout, LayoutSchema, LIMITS, PaneId } from '@nexo/contracts'
+import { arbHostileString } from '@nexo/testkit'
 import * as fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { close, focusNeighbor, LayoutError, leaf, leaves, resize, split, swap } from './layout.ts'

@@ -6,7 +6,7 @@ import type {
   TerminalId,
   Workspace,
   WorkspaceId,
-} from '@atalaya/contracts'
+} from '@nexo/contracts'
 import type { Unsubscribe } from './pty.ts'
 
 /** Publicación y suscripción de eventos del dominio (los nombres vienen de contracts). */

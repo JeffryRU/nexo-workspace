@@ -1,5 +1,5 @@
-import { LayoutSchema, PaneId, Tab, TabId, WorkspaceId } from '@atalaya/contracts'
-import { RecordingEventBus, SequentialIds } from '@atalaya/testkit'
+import { LayoutSchema, PaneId, Tab, TabId, WorkspaceId } from '@nexo/contracts'
+import { RecordingEventBus, SequentialIds } from '@nexo/testkit'
 import { describe, expect, it } from 'vitest'
 import { LayoutError } from './layout.ts'
 import { LayoutService } from './layout-service.ts'

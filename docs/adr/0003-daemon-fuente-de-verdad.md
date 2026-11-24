@@ -11,7 +11,7 @@ mascota por MCP), como hace herdr, y que cerrar la ventana no mate el trabajo en
 ## Decisión
 
 - Un proceso **daemon** por usuario guarda todo el estado y los procesos hijos.
-- La ventana, la CLI `atalaya` y el servidor MCP hablan el **mismo protocolo** (WebSocket local + token)
+- La ventana, la CLI `nexo` y el servidor MCP hablan el **mismo protocolo** (WebSocket local + token)
   por medio de `packages/client`.
 - El daemon escucha solo en `127.0.0.1` y publica su puerto en `daemon.json` en el directorio de estado.
 
