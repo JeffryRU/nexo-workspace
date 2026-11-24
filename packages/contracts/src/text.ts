@@ -27,7 +27,7 @@ export function boundedBytes(maxBytes: number) {
     .refine((s) => utf8ByteLength(s) <= maxBytes, { message: `máximo ${maxBytes} bytes` })
 }
 
-const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f  ]/
+const CONTROL_CHARS = new RegExp('[\u0000-\u001f\u007f-\u009f\u2028\u2029]')
 
 /** Texto de una sola línea para mostrar (títulos, nombres): sin caracteres de control ni ESC. */
 export const DisplayText = z

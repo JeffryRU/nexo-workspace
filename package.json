@@ -11,7 +11,7 @@
     "format": "biome format --write .",
     "format:check": "biome format .",
     "test": "vitest run --coverage",
-    "depcruise": "depcruise apps packages --config .dependency-cruiser.cjs",
+    "depcruise": "depcruise apps packages --config .dependency-cruiser.mjs",
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm depcruise"
   },
   "devDependencies": {
@@ -20,7 +20,7 @@
     "@vitest/coverage-v8": "^5.1.1",
     "dependency-cruiser": "^18.9.0",
     "fast-check": "^4.11.0",
-    "typescript": "^7.0.2",
+    "typescript": "^6.0.3",
     "vite": "^8.3.8",
     "vitest": "^5.1.1"
   }
