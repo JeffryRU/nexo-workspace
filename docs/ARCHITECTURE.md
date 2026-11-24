@@ -76,7 +76,7 @@ apps/*               raíces de composición: daemon (une core + adaptadores), w
 | `Workspace`    | Grupo de pestañas, normalmente una carpeta de proyecto (`cwd`).                                                                                                      |
 | `Tab`          | Una pestaña: su contenido es un **árbol de distribución** de paneles.                                                                                                |
 | `Layout`       | Árbol inmutable: hoja = panel; nodo = división `row`/`column` con proporciones que suman 1.                                                                          |
-| `Pane`         | Panel. `kind: 'terminal'                                                                                                                                             | 'agent'`(más adelante`viewer`). |
+| `Pane`         | Panel. `kind`: `terminal` o `agent` (más adelante `viewer`).                                                                                                         |
 | `Terminal`     | Proceso en un PTY con un búfer circular de salida (para reconectar y para `terminal.read`).                                                                          |
 | `AgentSession` | Conversación con un proveedor; su contenido es una lista de `Block` (documento).                                                                                     |
 | `Block`        | Pieza del documento: mensaje del usuario, texto del agente (Markdown), acción plegable (leer, editar con diff, ejecutar con salida), permiso, pregunta, plan, error. |
@@ -119,6 +119,22 @@ Métodos de la fase 1 (terminal): `daemon.info`, `snapshot`, `events.subscribe`,
 `workspace.{list,create,rename,close}`, `tab.{create,close,focus,move,rename}`,
 `pane.{split,close,focus,resize,swap}`, `terminal.{spawn,write,resize,read,kill}`.
 Eventos: `layout.changed`, `terminal.output`, `terminal.exit`, `pane.title`, `pane.attention`.
+
+Detalles fijados en F0 (la fuente exacta es `packages/contracts`):
+
+- `Layout`: hoja `{ type: 'leaf', paneId }`; división `{ type: 'split', direction: 'row' | 'column',
+  children, ratios }` con 2 o más hijos. Se valida de forma iterativa (sin recursión de zod) para que
+  árboles muy profundos no desborden la pila; por eso `Layout` es uno de los pocos tipos escritos a mano.
+  Máximo 1024 paneles por pestaña.
+- Método o evento desconocido → `NOT_FOUND`. Cualquier clave `__proto__` en un mensaje → `INVALID_PARAMS`.
+- Peticiones estrictas (claves extra se rechazan); mensajes del servidor tolerantes (claves extra se
+  ignoran), para que un cliente viejo no se rompa con un daemon nuevo.
+- Títulos y nombres rechazan caracteres de control; `terminal.write` sí acepta ANSI/OSC.
+- `terminal.output` lleva `offset` (posición absoluta en el búfer) y `terminal.read` devuelve
+  `{ data, offset }`, para reconectar sin perder ni duplicar salida.
+
+Versiones fijadas: TypeScript 6.x (dependency-cruiser aún no soporta TS 7) y solid-js 1.9
+(`@tanstack/solid-query` y `vite-plugin-solid` piden Solid 1.x). Se revisan al subir esas dependencias.
 
 ## Rendimiento
 
