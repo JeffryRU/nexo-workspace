@@ -55,9 +55,14 @@ function readJson(text: unknown, options: ParseOptions | undefined): ParseResult
     return fail('PAYLOAD_TOO_LARGE', `el mensaje supera ${max} bytes`)
   }
   try {
-    return { ok: true, value: JSON.parse(text) as unknown }
+    // Defensa en profundidad: una clave `__proto__` propia nunca es legítima en el protocolo.
+    const value = JSON.parse(text, (key, v: unknown) => {
+      if (key === '__proto__') throw new SyntaxError('clave reservada')
+      return v
+    }) as unknown
+    return { ok: true, value }
   } catch {
-    return fail('INVALID_PARAMS', 'JSON inválido')
+    return fail('INVALID_PARAMS', 'JSON inválido o con claves reservadas')
   }
 }
 
