@@ -1,6 +1,6 @@
 import {
-  LIMITS,
   type Layout,
+  LIMITS,
   type PaneId,
   type SplitDirection,
   type SplitNode,

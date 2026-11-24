@@ -68,7 +68,12 @@ export class LayoutService {
     return tab
   }
 
-  split(paneId: PaneId, direction: SplitDirection, kind: PaneKind = 'terminal', ratio?: number): Pane {
+  split(
+    paneId: PaneId,
+    direction: SplitDirection,
+    kind: PaneKind = 'terminal',
+    ratio?: number,
+  ): Pane {
     const { workspace, tab } = this.#locate(paneId)
     const pane: Pane = {
       id: this.#deps.ids.pane(),
@@ -77,7 +82,12 @@ export class LayoutService {
       attention: 'idle',
     }
     const layout = split(tab.layout, paneId, direction, pane.id, ratio)
-    this.#update(workspace.id, { ...tab, layout, panes: [...tab.panes, pane], focusedPaneId: pane.id })
+    this.#update(workspace.id, {
+      ...tab,
+      layout,
+      panes: [...tab.panes, pane],
+      focusedPaneId: pane.id,
+    })
     return pane
   }
 
@@ -174,7 +184,13 @@ export class LayoutService {
     })
     this.#deps.bus.publish({
       event: 'layout.changed',
-      data: { workspaceId: workspace.id, tabId: tab.id, layout: null, focusedPaneId: null, panes: [] },
+      data: {
+        workspaceId: workspace.id,
+        tabId: tab.id,
+        layout: null,
+        focusedPaneId: null,
+        panes: [],
+      },
     })
   }
 

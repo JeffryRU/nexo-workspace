@@ -71,16 +71,16 @@ apps/*               raíces de composición: daemon (une core + adaptadores), w
 
 ### Dominio (core)
 
-| Concepto | Qué es |
-| --- | --- |
-| `Workspace` | Grupo de pestañas, normalmente una carpeta de proyecto (`cwd`). |
-| `Tab` | Una pestaña: su contenido es un **árbol de distribución** de paneles. |
-| `Layout` | Árbol inmutable: hoja = panel; nodo = división `row`/`column` con proporciones que suman 1. |
-| `Pane` | Panel. `kind: 'terminal' | 'agent'` (más adelante `viewer`). |
-| `Terminal` | Proceso en un PTY con un búfer circular de salida (para reconectar y para `terminal.read`). |
-| `AgentSession` | Conversación con un proveedor; su contenido es una lista de `Block` (documento). |
-| `Block` | Pieza del documento: mensaje del usuario, texto del agente (Markdown), acción plegable (leer, editar con diff, ejecutar con salida), permiso, pregunta, plan, error. |
-| `Attention` | Estado visible en la barra: `idle`, `working`, `needs-input`, `done`, `error`. |
+| Concepto       | Qué es                                                                                                                                                               |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Workspace`    | Grupo de pestañas, normalmente una carpeta de proyecto (`cwd`).                                                                                                      |
+| `Tab`          | Una pestaña: su contenido es un **árbol de distribución** de paneles.                                                                                                |
+| `Layout`       | Árbol inmutable: hoja = panel; nodo = división `row`/`column` con proporciones que suman 1.                                                                          |
+| `Pane`         | Panel. `kind: 'terminal'                                                                                                                                             | 'agent'`(más adelante`viewer`). |
+| `Terminal`     | Proceso en un PTY con un búfer circular de salida (para reconectar y para `terminal.read`).                                                                          |
+| `AgentSession` | Conversación con un proveedor; su contenido es una lista de `Block` (documento).                                                                                     |
+| `Block`        | Pieza del documento: mensaje del usuario, texto del agente (Markdown), acción plegable (leer, editar con diff, ejecutar con salida), permiso, pregunta, plan, error. |
+| `Attention`    | Estado visible en la barra: `idle`, `working`, `needs-input`, `done`, `error`.                                                                                       |
 
 ### Puertos (interfaces en `core/ports`)
 
@@ -158,14 +158,14 @@ Presupuestos (los mide una prueba de rendimiento en CI, con margen):
 
 ## Pruebas
 
-| Tipo | Dónde | Herramienta |
-| --- | --- | --- |
-| Unitarias | junto al código (`*.test.ts`) | Vitest |
-| Propiedades | parsers, árbol de distribución, protocolo | fast-check |
-| Conformidad de puertos | `packages/testkit/conformance` contra falso y adaptador real | Vitest |
-| Integración | daemon real + node-pty real, Linux y Windows | Vitest |
-| Extremo a extremo | web servida por el daemon, en navegador | Playwright |
-| Rust | `apps/desktop` | `cargo test`, `clippy` |
+| Tipo                   | Dónde                                                        | Herramienta            |
+| ---------------------- | ------------------------------------------------------------ | ---------------------- |
+| Unitarias              | junto al código (`*.test.ts`)                                | Vitest                 |
+| Propiedades            | parsers, árbol de distribución, protocolo                    | fast-check             |
+| Conformidad de puertos | `packages/testkit/conformance` contra falso y adaptador real | Vitest                 |
+| Integración            | daemon real + node-pty real, Linux y Windows                 | Vitest                 |
+| Extremo a extremo      | web servida por el daemon, en navegador                      | Playwright             |
+| Rust                   | `apps/desktop`                                               | `cargo test`, `clippy` |
 
 **Pruebas adversariales obligatorias** (`*.adversarial.test.ts`) en cada funcionalidad: entradas
 malformadas, enormes o binarias; tokens y orígenes incorrectos; carreras (cerrar un panel mientras

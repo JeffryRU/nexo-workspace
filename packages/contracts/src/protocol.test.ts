@@ -34,7 +34,9 @@ describe('códigos de error', () => {
       'PROVIDER_UNAVAILABLE',
     ])
     expect(ErrorCode.safeParse('NOPE').success).toBe(false)
-    expect(ErrorBody.safeParse({ code: 'CONFLICT', message: 'x', data: { a: 1 } }).success).toBe(true)
+    expect(ErrorBody.safeParse({ code: 'CONFLICT', message: 'x', data: { a: 1 } }).success).toBe(
+      true,
+    )
   })
 })
 
@@ -190,11 +192,20 @@ describe('límites de métodos', () => {
     const spawn = (env: unknown) =>
       parseRequest(req('terminal.spawn', { paneId: 'p1', cols: 80, rows: 24, env })).ok
     expect(spawn({ PATH: '/bin' })).toBe(true)
-    expect(parseRequest(req('terminal.spawn', JSON.parse('{"paneId":"p1","cols":80,"rows":24,"env":{"__proto__":"x"}}'))).ok).toBe(false)
+    expect(
+      parseRequest(
+        req(
+          'terminal.spawn',
+          JSON.parse('{"paneId":"p1","cols":80,"rows":24,"env":{"__proto__":"x"}}'),
+        ),
+      ).ok,
+    ).toBe(false)
     expect(spawn({ constructor: 'x' })).toBe(false)
     expect(spawn({ 'BAD NAME': 'x' })).toBe(false)
     expect(spawn({ A: 5 })).toBe(false)
-    const many = Object.fromEntries(Array.from({ length: LIMITS.maxEnvEntries + 1 }, (_, i) => [`V${i}`, 'x']))
+    const many = Object.fromEntries(
+      Array.from({ length: LIMITS.maxEnvEntries + 1 }, (_, i) => [`V${i}`, 'x']),
+    )
     expect(spawn(many)).toBe(false)
   })
 })

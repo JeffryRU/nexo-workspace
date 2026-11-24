@@ -1,4 +1,4 @@
-import { METHOD_NAMES } from '@atalaya/contracts'
+import type { METHOD_NAMES } from '@atalaya/contracts'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { type AtalayaClient, CLIENT_PROTOCOL_VERSION } from './index.ts'
 

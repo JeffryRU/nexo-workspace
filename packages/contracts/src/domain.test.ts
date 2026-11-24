@@ -44,12 +44,16 @@ describe('Layout', () => {
   })
 
   it('rechaza ids duplicados, nodos desconocidos y claves extra', () => {
-    expect(validateLayout(row([leaf('a'), leaf('a')], [0.5, 0.5]))[0]?.message).toContain('duplicado')
+    expect(validateLayout(row([leaf('a'), leaf('a')], [0.5, 0.5]))[0]?.message).toContain(
+      'duplicado',
+    )
     expect(validateLayout({ type: 'otro' })).not.toEqual([])
     expect(validateLayout(null)).not.toEqual([])
     expect(validateLayout({ ...leaf('a'), extra: 1 })).not.toEqual([])
     expect(validateLayout({ type: 'leaf', paneId: '' })).not.toEqual([])
-    expect(validateLayout({ type: 'split', direction: 'diag', children: [], ratios: [] })).not.toEqual([])
+    expect(
+      validateLayout({ type: 'split', direction: 'diag', children: [], ratios: [] }),
+    ).not.toEqual([])
   })
 
   it('valida árboles de 1000 niveles sin desbordar la pila y limita el número de paneles', () => {
@@ -92,7 +96,13 @@ describe('Pane, Tab, Workspace, Attention', () => {
   })
 
   it('Tab y Workspace anidan correctamente', () => {
-    const tab = { id: 't1', title: 'Pestaña 1', layout: leaf('p1'), panes: [pane], focusedPaneId: 'p1' }
+    const tab = {
+      id: 't1',
+      title: 'Pestaña 1',
+      layout: leaf('p1'),
+      panes: [pane],
+      focusedPaneId: 'p1',
+    }
     expect(Tab.safeParse(tab).success).toBe(true)
     expect(Tab.safeParse({ ...tab, panes: [] }).success).toBe(false)
     const ws = { id: 'w1', name: 'proyecto', cwd: '/home/x', tabs: [tab], activeTabId: 't1' }

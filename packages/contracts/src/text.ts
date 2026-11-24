@@ -27,14 +27,20 @@ export function boundedBytes(maxBytes: number) {
     .refine((s) => utf8ByteLength(s) <= maxBytes, { message: `máximo ${maxBytes} bytes` })
 }
 
-const CONTROL_CHARS = new RegExp('[\u0000-\u001f\u007f-\u009f\u2028\u2029]')
+function hasControlChars(value: string): boolean {
+  for (let i = 0; i < value.length; i++) {
+    const c = value.charCodeAt(i)
+    if (c < 0x20 || (c >= 0x7f && c <= 0x9f) || c === 0x2028 || c === 0x2029) return true
+  }
+  return false
+}
 
 /** Texto de una sola línea para mostrar (títulos, nombres): sin caracteres de control ni ESC. */
 export const DisplayText = z
   .string()
   .min(1)
   .max(LIMITS.maxTitleLength)
-  .refine((s) => !CONTROL_CHARS.test(s), { message: 'no admite caracteres de control' })
+  .refine((s) => !hasControlChars(s), { message: 'no admite caracteres de control' })
 
 /** Claves que nunca se aceptan como nombre de variable de entorno u otras claves libres. */
 export const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype'])

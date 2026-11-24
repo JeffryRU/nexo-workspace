@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import {
+  LayoutSchema,
   Pane,
   PaneId,
   PaneKind,
@@ -9,7 +10,6 @@ import {
   TerminalId,
   Workspace,
   WorkspaceId,
-  LayoutSchema,
 } from './domain.ts'
 import { EventNameSchema } from './events.ts'
 import { LIMITS } from './limits.ts'
@@ -132,7 +132,10 @@ export const methods = {
       terminalId: TerminalId,
       maxBytes: z.int().min(1).max(LIMITS.maxReadBytes).optional(),
     }),
-    result: z.strictObject({ data: z.string().max(LIMITS.maxMessageBytes), offset: z.int().nonnegative() }),
+    result: z.strictObject({
+      data: z.string().max(LIMITS.maxMessageBytes),
+      offset: z.int().nonnegative(),
+    }),
   },
   'terminal.kill': {
     params: z.strictObject({ terminalId: TerminalId, signal: Signal.optional() }),

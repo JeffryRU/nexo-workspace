@@ -1,10 +1,5 @@
 import type { z } from 'zod'
-import {
-  ErrorResponse,
-  EventEnvelope,
-  OkResponse,
-  RequestEnvelope,
-} from './envelope.ts'
+import { ErrorResponse, EventEnvelope, OkResponse, RequestEnvelope } from './envelope.ts'
 import type { ErrorBody, ErrorCode } from './errors.ts'
 import { type EventName, events, type TypedEvent } from './events.ts'
 import { LIMITS } from './limits.ts'
@@ -80,7 +75,8 @@ export function parseRequestValue(value: unknown): ParseResult<TypedRequest> {
     const env = RequestEnvelope.safeParse(value)
     if (!env.success) return fail('INVALID_PARAMS', describe(env.error), safeId(value))
     const { id, method } = env.data
-    if (!isMethod(method)) return fail('NOT_FOUND', `método desconocido: ${method.slice(0, 64)}`, id)
+    if (!isMethod(method))
+      return fail('NOT_FOUND', `método desconocido: ${method.slice(0, 64)}`, id)
     const params = methods[method].params.safeParse(env.data.params ?? {})
     if (!params.success) return fail('INVALID_PARAMS', describe(params.error), id)
     // Unión discriminada: la correlación method/params la garantiza el registro.

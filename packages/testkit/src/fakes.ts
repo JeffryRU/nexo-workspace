@@ -1,10 +1,10 @@
 import {
   type EventData,
+  type EventName,
   PaneId,
   TabId,
   TerminalId,
   WorkspaceId,
-  type EventName,
 } from '@atalaya/contracts'
 import type {
   AgentProviderPort,
@@ -29,6 +29,7 @@ import type {
   SessionStorePort,
   Unsubscribe,
 } from '@atalaya/core'
+import { schedule } from './timers.ts'
 
 /** Reloj controlable: el tiempo solo avanza con `advance`. */
 export class FakeClock implements ClockPort {
@@ -218,7 +219,7 @@ export class FakePtyPort implements PtyPort {
     const proc = new FakePtyProcess(++this.#pid, options)
     this.processes.push(proc)
     const script = this.#script
-    if (script !== undefined) setTimeout(() => script(proc), 0)
+    if (script !== undefined) schedule(() => script(proc), 0)
     return proc
   }
 }
@@ -270,7 +271,8 @@ export class FakeFileSystem implements FileSystemPort {
     const prefix = path.endsWith('/') ? path : `${path}/`
     const names = new Set<string>()
     for (const p of [...this.files.keys(), ...this.dirs]) {
-      if (p.startsWith(prefix) && p !== prefix) names.add(p.slice(prefix.length).split('/')[0] ?? '')
+      if (p.startsWith(prefix) && p !== prefix)
+        names.add(p.slice(prefix.length).split('/')[0] ?? '')
     }
     return [...names].sort()
   }
@@ -283,7 +285,11 @@ export class FakeFileSystem implements FileSystemPort {
   }
 }
 
-export type LogEntry = { level: 'debug' | 'info' | 'warn' | 'error'; message: string; fields?: LogFields }
+export type LogEntry = {
+  level: 'debug' | 'info' | 'warn' | 'error'
+  message: string
+  fields?: LogFields
+}
 
 export class FakeLogger implements LoggerPort {
   readonly entries: LogEntry[] = []

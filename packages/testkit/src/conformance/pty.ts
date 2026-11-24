@@ -1,5 +1,6 @@
 import type { PtyExit, PtyPort, PtyProcess } from '@atalaya/core'
 import { afterEach, describe, expect, it } from 'vitest'
+import { sleep } from '../timers.ts'
 
 export type PtyConformanceSubject = {
   port: PtyPort
@@ -10,8 +11,6 @@ export type PtyConformanceSubject = {
   command: { cmd: string; args: string[]; marker: string }
   cleanup?: () => Promise<void> | void
 }
-
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
 async function waitFor(condition: () => boolean, timeoutMs = 5000): Promise<void> {
   const start = Date.now()

@@ -41,10 +41,7 @@ const SplitShape = z.strictObject({
   type: z.literal('split'),
   direction: SplitDirection,
   children: z.array(z.unknown()).min(2).max(LIMITS.maxPanesPerTab),
-  ratios: z
-    .array(z.number().gt(0).lte(1))
-    .min(2)
-    .max(LIMITS.maxPanesPerTab),
+  ratios: z.array(z.number().gt(0).lte(1)).min(2).max(LIMITS.maxPanesPerTab),
 })
 
 export type LayoutIssue = { path: (string | number)[]; message: string }

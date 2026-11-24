@@ -1,5 +1,7 @@
 import {
   type Attention,
+  EVENT_NAMES,
+  type EventName,
   type Layout,
   type MethodName,
   type MethodParams,
@@ -14,8 +16,6 @@ import {
   type TypedRequest,
   type Workspace,
   WorkspaceId,
-  EVENT_NAMES,
-  type EventName,
 } from '@atalaya/contracts'
 import * as fc from 'fast-check'
 
@@ -35,7 +35,9 @@ export const arbAttention: fc.Arbitrary<Attention> = fc.constantFrom(
 )
 
 /** Texto de una línea válido para títulos y nombres. */
-export const arbTitle = fc.stringMatching(/^[A-Za-z0-9 áéíóúñ._-]{1,60}$/).filter((s) => s.length > 0)
+export const arbTitle = fc
+  .stringMatching(/^[A-Za-z0-9 áéíóúñ._-]{1,60}$/)
+  .filter((s) => s.length > 0)
 
 /** Cadenas hostiles: escapes ANSI/OSC, NUL, bidi, sustitutos sueltos, enormes, claves de prototipo. */
 export const arbHostileString: fc.Arbitrary<string> = fc.oneof(
@@ -84,11 +86,16 @@ export const arbHostileJson: fc.Arbitrary<unknown> = fc.oneof(
     { v: 1, id: 1, ok: true, result: null },
     { v: 1, event: 'layout.changed', seq: -1, data: {} },
   ),
-  fc.dictionary(fc.constantFrom('__proto__', 'constructor', 'v', 'id', 'method', 'params'), fc.jsonValue({ maxDepth: 2 })),
+  fc.dictionary(
+    fc.constantFrom('__proto__', 'constructor', 'v', 'id', 'method', 'params'),
+    fc.jsonValue({ maxDepth: 2 }),
+  ),
 )
 
 /** Estructura de un árbol sin ids; se materializa con ids únicos en `arbLayout`. */
-type Shape = { leaf: true } | { leaf: false; direction: SplitDirection; weights: number[]; children: Shape[] }
+type Shape =
+  | { leaf: true }
+  | { leaf: false; direction: SplitDirection; weights: number[]; children: Shape[] }
 
 export type ArbLayoutOptions = { maxLeaves?: number }
 
@@ -102,7 +109,10 @@ export function arbLayout(options: ArbLayoutOptions = {}): fc.Arbitrary<Layout> 
       fc.record({
         leaf: fc.constant(false as const),
         direction: arbDirection,
-        weights: fc.array(fc.double({ min: 0.1, max: 1, noNaN: true }), { minLength: 2, maxLength: 4 }),
+        weights: fc.array(fc.double({ min: 0.1, max: 1, noNaN: true }), {
+          minLength: 2,
+          maxLength: 4,
+        }),
         children: fc.array(tie('node'), { minLength: 4, maxLength: 4 }),
       }),
     ),
@@ -155,7 +165,12 @@ export const arbTab: fc.Arbitrary<Tab> = fc
   .record({ id: arbTabId, title: arbTitle, layout: arbLayout(), attention: arbAttention })
   .map(({ id, title, layout, attention }) => {
     const ids = arbLayoutPaneIds(layout)
-    const panes: Pane[] = ids.map((paneId) => ({ id: paneId, kind: 'terminal', title: 'Terminal', attention }))
+    const panes: Pane[] = ids.map((paneId) => ({
+      id: paneId,
+      kind: 'terminal',
+      title: 'Terminal',
+      attention,
+    }))
     return { id, title, layout, panes, focusedPaneId: ids[0] as PaneId }
   })
 
@@ -178,7 +193,13 @@ function req<M extends MethodName>(
 export const arbRequest: fc.Arbitrary<TypedRequest> = fc.oneof(
   req('daemon.info', fc.constant({})),
   req('snapshot', fc.constant({})),
-  req('events.subscribe', fc.record({ events: fc.array(fc.constantFrom(...EVENT_NAMES), { maxLength: 5 }) }, { requiredKeys: [] })),
+  req(
+    'events.subscribe',
+    fc.record(
+      { events: fc.array(fc.constantFrom(...EVENT_NAMES), { maxLength: 5 }) },
+      { requiredKeys: [] },
+    ),
+  ),
   req('workspace.list', fc.constant({})),
   req('workspace.create', fc.record({ name: arbTitle }, { requiredKeys: ['name'] })),
   req('workspace.rename', fc.record({ workspaceId: arbWorkspaceId, name: arbTitle })),
@@ -191,13 +212,20 @@ export const arbRequest: fc.Arbitrary<TypedRequest> = fc.oneof(
   req(
     'pane.split',
     fc.record(
-      { paneId: arbPaneId, direction: arbDirection, ratio: fc.double({ min: 0.01, max: 0.99, noNaN: true }) },
+      {
+        paneId: arbPaneId,
+        direction: arbDirection,
+        ratio: fc.double({ min: 0.01, max: 0.99, noNaN: true }),
+      },
       { requiredKeys: ['paneId', 'direction'] },
     ),
   ),
   req('pane.close', fc.record({ paneId: arbPaneId })),
   req('pane.focus', fc.record({ paneId: arbPaneId })),
-  req('pane.resize', fc.record({ paneId: arbPaneId, delta: fc.double({ min: -1, max: 1, noNaN: true }) })),
+  req(
+    'pane.resize',
+    fc.record({ paneId: arbPaneId, delta: fc.double({ min: -1, max: 1, noNaN: true }) }),
+  ),
   req('pane.swap', fc.record({ paneId: arbPaneId, otherPaneId: arbPaneId })),
   req(
     'terminal.spawn',
@@ -212,13 +240,19 @@ export const arbRequest: fc.Arbitrary<TypedRequest> = fc.oneof(
       { requiredKeys: ['paneId', 'cols', 'rows'] },
     ),
   ),
-  req('terminal.write', fc.record({ terminalId: arbTerminalId, data: fc.string({ maxLength: 2000 }) })),
+  req(
+    'terminal.write',
+    fc.record({ terminalId: arbTerminalId, data: fc.string({ maxLength: 2000 }) }),
+  ),
   req('terminal.resize', fc.record({ terminalId: arbTerminalId, cols, rows: cols })),
   req('terminal.read', fc.record({ terminalId: arbTerminalId }, { requiredKeys: ['terminalId'] })),
   req('terminal.kill', fc.record({ terminalId: arbTerminalId }, { requiredKeys: ['terminalId'] })),
 )
 
-function ev<E extends EventName>(event: E, data: fc.Arbitrary<TypedEvent['data']>): fc.Arbitrary<TypedEvent> {
+function ev<E extends EventName>(
+  event: E,
+  data: fc.Arbitrary<TypedEvent['data']>,
+): fc.Arbitrary<TypedEvent> {
   return fc
     .record({ seq: fc.nat({ max: 2 ** 31 }), data })
     .map(({ seq, data: d }) => ({ v: 1, event, seq, data: d }) as TypedEvent)
@@ -227,15 +261,13 @@ function ev<E extends EventName>(event: E, data: fc.Arbitrary<TypedEvent['data']
 export const arbEvent: fc.Arbitrary<TypedEvent> = fc.oneof(
   ev(
     'layout.changed',
-    fc
-      .record({ workspaceId: arbWorkspaceId, tab: arbTab })
-      .map(({ workspaceId, tab }) => ({
-        workspaceId,
-        tabId: tab.id,
-        layout: tab.layout,
-        focusedPaneId: tab.focusedPaneId,
-        panes: tab.panes,
-      })),
+    fc.record({ workspaceId: arbWorkspaceId, tab: arbTab }).map(({ workspaceId, tab }) => ({
+      workspaceId,
+      tabId: tab.id,
+      layout: tab.layout,
+      focusedPaneId: tab.focusedPaneId,
+      panes: tab.panes,
+    })),
   ),
   ev(
     'terminal.output',
@@ -297,4 +329,3 @@ export function arbMutated(text: string): fc.Arbitrary<string> {
       }
     })
 }
-

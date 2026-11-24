@@ -4,7 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "packageManager": "pnpm@12.4.1",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "typecheck": "pnpm -r --workspace-concurrency=4 run typecheck",
     "lint": "biome check .",

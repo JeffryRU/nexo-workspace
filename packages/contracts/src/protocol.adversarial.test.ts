@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LIMITS, LayoutSchema, parseRequest, parseServerMessage } from './index.ts'
+import { LayoutSchema, LIMITS, parseRequest, parseServerMessage } from './index.ts'
 
 const polluted = () => ({}) as Record<string, unknown>
 
@@ -7,7 +7,10 @@ describe('adversarial: tamaño y anidamiento', () => {
   it('JSON gigante -> PAYLOAD_TOO_LARGE sin parsear', () => {
     const big = `{"v":1,"id":"a","method":"snapshot","params":{"x":"${'a'.repeat(LIMITS.maxMessageBytes)}"}}`
     expect(parseRequest(big)).toMatchObject({ ok: false, error: { code: 'PAYLOAD_TOO_LARGE' } })
-    expect(parseServerMessage(big)).toMatchObject({ ok: false, error: { code: 'PAYLOAD_TOO_LARGE' } })
+    expect(parseServerMessage(big)).toMatchObject({
+      ok: false,
+      error: { code: 'PAYLOAD_TOO_LARGE' },
+    })
   })
 
   it('anidamiento profundo (dentro del tope de tamaño) no lanza ni cuelga', () => {
@@ -69,39 +72,61 @@ describe('adversarial: prototipos', () => {
       const r = parseRequest(JSON.stringify({ v: 1, id: 'a', method, params: {} }))
       expect(r).toMatchObject({ ok: false, error: { code: 'NOT_FOUND' } })
     }
-    const ev = parseServerMessage(
-      JSON.stringify({ v: 1, event: 'constructor', seq: 0, data: {} }),
-    )
+    const ev = parseServerMessage(JSON.stringify({ v: 1, event: 'constructor', seq: 0, data: {} }))
     expect(ev).toMatchObject({ ok: false, error: { code: 'NOT_FOUND' } })
   })
 })
 
 describe('adversarial: valores y tipos', () => {
   const base = { v: 1, id: 'a' }
-  const call = (method: string, params: unknown) => parseRequest(JSON.stringify({ ...base, method, params }))
+  const call = (method: string, params: unknown) =>
+    parseRequest(JSON.stringify({ ...base, method, params }))
 
   it('NaN, Infinity y negativos (JSON los vuelve null o los rechaza)', () => {
     // JSON.stringify convierte NaN/Infinity en null.
     expect(call('pane.resize', { paneId: 'p1', delta: Number.NaN }).ok).toBe(false)
     expect(call('pane.resize', { paneId: 'p1', delta: Number.POSITIVE_INFINITY }).ok).toBe(false)
-    expect(call('pane.resize', { paneId: 'p1', delta: 1e999 }).ok).toBe(false)
-    expect(parseRequest('{"v":1,"id":"a","method":"pane.resize","params":{"paneId":"p1","delta":NaN}}').ok).toBe(false)
+    expect(
+      parseRequest('{"v":1,"id":"a","method":"pane.resize","params":{"paneId":"p1","delta":1e999}}')
+        .ok,
+    ).toBe(false)
+    expect(
+      parseRequest('{"v":1,"id":"a","method":"pane.resize","params":{"paneId":"p1","delta":NaN}}')
+        .ok,
+    ).toBe(false)
     expect(call('tab.move', { tabId: 't1', index: -1 }).ok).toBe(false)
     expect(call('terminal.spawn', { paneId: 'p1', cols: -80, rows: 24 }).ok).toBe(false)
     expect(call('terminal.read', { terminalId: 't1', maxBytes: 0 }).ok).toBe(false)
-    expect(call('terminal.read', { terminalId: 't1', maxBytes: LIMITS.maxReadBytes + 1 }).ok).toBe(false)
-    expect(parseServerMessage('{"v":1,"event":"terminal.output","seq":-5,"data":{}}').ok).toBe(false)
+    expect(call('terminal.read', { terminalId: 't1', maxBytes: LIMITS.maxReadBytes + 1 }).ok).toBe(
+      false,
+    )
+    expect(parseServerMessage('{"v":1,"event":"terminal.output","seq":-5,"data":{}}').ok).toBe(
+      false,
+    )
     expect(
-      parseServerMessage('{"v":1,"event":"terminal.output","seq":1.5,"data":{"terminalId":"t","offset":0,"data":""}}').ok,
+      parseServerMessage(
+        '{"v":1,"event":"terminal.output","seq":1.5,"data":{"terminalId":"t","offset":0,"data":""}}',
+      ).ok,
     ).toBe(false)
   })
 
   it('ids vacíos o con caracteres peligrosos', () => {
-    for (const id of ['', ' ', '../../x', 'a/b', 'a\u0000b', '\u001b[31m', 'a'.repeat(65), '__proto__ ']) {
+    for (const id of [
+      '',
+      ' ',
+      '../../x',
+      'a/b',
+      'a\u0000b',
+      '\u001b[31m',
+      'a'.repeat(65),
+      '__proto__ ',
+    ]) {
       expect(call('pane.close', { paneId: id }).ok, JSON.stringify(id)).toBe(false)
     }
     expect(parseRequest(JSON.stringify({ v: 1, id: '', method: 'snapshot' })).ok).toBe(false)
-    expect(parseRequest(JSON.stringify({ v: 1, id: 'x'.repeat(129), method: 'snapshot' })).ok).toBe(false)
+    expect(parseRequest(JSON.stringify({ v: 1, id: 'x'.repeat(129), method: 'snapshot' })).ok).toBe(
+      false,
+    )
   })
 
   it('tipos equivocados en cada nivel', () => {
@@ -144,7 +169,9 @@ describe('adversarial: valores y tipos', () => {
   })
 
   it('el id de una petición inválida se devuelve cuando es seguro para poder responder', () => {
-    const r = parseRequest(JSON.stringify({ v: 1, id: 'seguro', method: 'snapshot', params: { x: 1 } }))
+    const r = parseRequest(
+      JSON.stringify({ v: 1, id: 'seguro', method: 'snapshot', params: { x: 1 } }),
+    )
     expect(r).toMatchObject({ ok: false, id: 'seguro' })
     const noId = parseRequest(JSON.stringify({ v: 1, id: { evil: true }, method: 'snapshot' }))
     expect(noId.ok).toBe(false)

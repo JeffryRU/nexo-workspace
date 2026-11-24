@@ -1,7 +1,7 @@
 export * from './layout.ts'
 export * from './layout-service.ts'
-export type { AgentProviderPort } from './ports/misc.ts'
 export type {
+  AgentProviderPort,
   BusEvent,
   ClockPort,
   EventBusPort,

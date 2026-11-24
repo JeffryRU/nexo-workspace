@@ -1,9 +1,4 @@
-import {
-  arbHostileJson,
-  arbMutated,
-  arbRequest,
-  arbServerMessage,
-} from '@atalaya/testkit'
+import { arbHostileJson, arbMutated, arbRequest, arbServerMessage } from '@atalaya/testkit'
 import * as fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { ERROR_CODES, parseRequest, parseServerMessage } from './index.ts'
@@ -61,7 +56,10 @@ describe('propiedades del protocolo', () => {
   it('JSON arbitrario nunca lanza y los fallos llevan código conocido', () => {
     fc.assert(
       fc.property(arbHostileJson, (value) => {
-        for (const r of [parseRequest(JSON.stringify(value)), parseServerMessage(JSON.stringify(value))]) {
+        for (const r of [
+          parseRequest(JSON.stringify(value)),
+          parseServerMessage(JSON.stringify(value)),
+        ]) {
           if (!r.ok) expect(KNOWN.has(r.error.code)).toBe(true)
         }
       }),

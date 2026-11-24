@@ -4,7 +4,11 @@ import { LayoutService } from '@atalaya/core'
 
 export const DAEMON_VERSION = '0.0.0'
 
-export type DaemonInfo = { name: 'atalaya-daemon'; version: string; layoutService: typeof LayoutService }
+export type DaemonInfo = {
+  name: 'atalaya-daemon'
+  version: string
+  layoutService: typeof LayoutService
+}
 
 export function describeDaemon(): DaemonInfo {
   return { name: 'atalaya-daemon', version: DAEMON_VERSION, layoutService: LayoutService }
