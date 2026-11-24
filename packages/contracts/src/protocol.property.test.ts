@@ -30,6 +30,12 @@ describe('propiedades del protocolo', () => {
     )
   })
 
+  it('regresión: un resultado con clave __proto__ se rechaza con INVALID_PARAMS', () => {
+    const r = parseServerMessage('{"v":1,"id":"-","ok":true,"result":{"__proto__":""}}')
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error.code).toBe('INVALID_PARAMS')
+  })
+
   it('un mensaje mutado o falla con un código conocido o es válido; nunca lanza', () => {
     fc.assert(
       fc.property(

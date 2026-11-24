@@ -285,6 +285,22 @@ export const arbEvent: fc.Arbitrary<TypedEvent> = fc.oneof(
   ev('pane.attention', fc.record({ paneId: arbPaneId, attention: arbAttention })),
 )
 
+/** true si algún objeto anidado tiene una clave propia `__proto__` (el protocolo la rechaza). */
+function hasProtoKey(value: unknown): boolean {
+  const stack: unknown[] = [value]
+  while (stack.length > 0) {
+    const current = stack.pop()
+    if (current === null || typeof current !== 'object') continue
+    if (Object.hasOwn(current, '__proto__')) return true
+    stack.push(...Object.values(current))
+  }
+  return false
+}
+
+/** JSON arbitrario que el protocolo acepta: sin claves `__proto__`. */
+export const arbProtocolJson = (maxDepth: number): fc.Arbitrary<fc.JsonValue> =>
+  fc.jsonValue({ maxDepth }).filter((v) => !hasProtoKey(v))
+
 /** Mensajes daemon -> cliente válidos: respuestas ok, errores y eventos. */
 export const arbServerMessage: fc.Arbitrary<ServerMessage> = fc.oneof(
   arbEvent,
@@ -292,7 +308,7 @@ export const arbServerMessage: fc.Arbitrary<ServerMessage> = fc.oneof(
     v: fc.constant(1 as const),
     id: fc.stringMatching(/^[A-Za-z0-9-]{1,40}$/),
     ok: fc.constant(true as const),
-    result: fc.jsonValue({ maxDepth: 3 }),
+    result: arbProtocolJson(3),
   }),
   fc.record({
     v: fc.constant(1 as const),
