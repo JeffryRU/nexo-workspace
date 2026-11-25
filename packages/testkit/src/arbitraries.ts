@@ -192,6 +192,7 @@ function req<M extends MethodName>(
 /** Peticiones válidas de cualquier método del registro. */
 export const arbRequest: fc.Arbitrary<TypedRequest> = fc.oneof(
   req('daemon.info', fc.constant({})),
+  req('daemon.shutdown', fc.constant({})),
   req('snapshot', fc.constant({})),
   req(
     'events.subscribe',

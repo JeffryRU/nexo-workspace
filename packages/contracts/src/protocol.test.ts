@@ -63,6 +63,7 @@ describe('parseRequest', () => {
     const samples: Record<string, unknown> = {
       auth: { token: 'abc' },
       'daemon.info': {},
+      'daemon.shutdown': {},
       snapshot: {},
       'events.subscribe': {},
       'workspace.list': {},

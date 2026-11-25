@@ -52,6 +52,8 @@ export const methods = {
       startedAt: z.string().max(40),
     }),
   },
+  /** Apagado limpio: responde y luego el daemon se detiene. Solo clientes autenticados llegan al despachador. */
+  'daemon.shutdown': { params: Empty, result: Ok },
   snapshot: {
     params: Empty,
     result: z.strictObject({

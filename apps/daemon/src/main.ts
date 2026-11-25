@@ -10,18 +10,21 @@ async function main(): Promise<number> {
     console.error(`nexo-daemon: ${(error as Error).message}`)
     return 1
   }
+  let running: Awaited<ReturnType<typeof startDaemon>> | undefined
+  const shutdown = (signal: string) => {
+    running?.logger.info('apagando', { signal })
+    void (running?.stop() ?? Promise.resolve()).finally(() => process.exit(0))
+  }
   try {
     const daemon = await startDaemon({
       port: env.port,
       dev: env.dev,
       logLevel: env.logLevel,
+      onShutdownRequested: () => shutdown('daemon.shutdown'),
       server: { maxConnections: env.maxConnections, authTimeoutMs: env.authTimeoutMs },
       ...(env.stateDir === undefined ? {} : { stateDir: env.stateDir }),
     })
-    const shutdown = (signal: string) => {
-      daemon.logger.info('apagando', { signal })
-      void daemon.stop().finally(() => process.exit(0))
-    }
+    running = daemon
     // SIGHUP/SIGBREAK cubren el cierre de la consola en Windows.
     for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK'] as const) {
       process.on(signal, () => shutdown(signal))
