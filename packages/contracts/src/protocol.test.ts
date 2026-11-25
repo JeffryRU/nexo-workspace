@@ -61,6 +61,7 @@ describe('parseRequest', () => {
 
   it('acepta cada método con params mínimos válidos', () => {
     const samples: Record<string, unknown> = {
+      auth: { token: 'abc' },
       'daemon.info': {},
       snapshot: {},
       'events.subscribe': {},
@@ -93,7 +94,15 @@ describe('parseRequest', () => {
 
   it('el registro de eventos tiene los nombres de la F1', () => {
     expect([...EVENT_NAMES].sort()).toEqual(
-      ['layout.changed', 'pane.attention', 'pane.title', 'terminal.exit', 'terminal.output'].sort(),
+      [
+        'client.resync',
+        'layout.changed',
+        'pane.attention',
+        'pane.title',
+        'terminal.exit',
+        'terminal.output',
+        'workspace.changed',
+      ].sort(),
     )
   })
 

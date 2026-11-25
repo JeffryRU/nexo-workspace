@@ -38,6 +38,8 @@ type Handlers = {
 /** Tabla exhaustiva: si falta un método del registro, no compila. */
 export function createHandlers(s: DispatcherServices): Handlers {
   return {
+    // La autenticación la resuelve quien despacha (daemon) antes de llegar aquí; ya autenticado es un no-op.
+    auth: () => ({}),
     'daemon.info': () => s.snapshot.daemonInfo(),
     snapshot: () => s.snapshot.snapshot(),
     'events.subscribe': (p) => s.subscribe(p),

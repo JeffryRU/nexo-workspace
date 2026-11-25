@@ -1,4 +1,4 @@
-import { LayoutSchema, PaneId, Tab, TabId, WorkspaceId } from '@nexo/contracts'
+import { events, LayoutSchema, PaneId, Tab, TabId, WorkspaceId } from '@nexo/contracts'
 import { RecordingEventBus, SequentialIds } from '@nexo/testkit'
 import { describe, expect, it } from 'vitest'
 import { LayoutError } from './layout.ts'
@@ -145,7 +145,33 @@ describe('LayoutService', () => {
     bus.subscribe((e) => seen.push(e.event))
     const tab = service.createTab(ws.id)
     service.split(tab.focusedPaneId, 'column')
-    expect(seen).toEqual(['layout.changed', 'layout.changed'])
+    expect(seen).toEqual(['layout.changed', 'workspace.changed', 'layout.changed'])
+  })
+
+  it('workspace.changed cubre alta, renombres, movimiento y cierre', () => {
+    const { bus, service, ws } = setup()
+    const changes = () => bus.ofType('workspace.changed')
+    const t1 = service.createTab(ws.id, 'uno')
+    service.renameTab(t1.id, 'dos')
+    service.renameWorkspace(ws.id, 'nuevo')
+    const other = service.createWorkspace('otro')
+    service.moveTab(t1.id, 0, other.id)
+    service.closeTab(t1.id)
+    service.closeWorkspace(other.id)
+    const all = changes()
+    const summaries = all.flatMap((d) => ('workspace' in d ? [d.workspace] : []))
+    expect(summaries.some((w) => w.tabs.some((t) => t.title === 'dos'))).toBe(true)
+    expect(summaries.some((w) => w.name === 'nuevo')).toBe(true)
+    expect(summaries.some((w) => w.id === other.id && w.tabs.length === 1)).toBe(true)
+    expect(all.at(-1)).toEqual({ workspaceId: other.id, removed: true })
+    for (const d of all) expect(events['workspace.changed'].safeParse(d).success).toBe(true)
+  })
+
+  it('el evento de espacio no trae distribución ni paneles', () => {
+    const { bus, service, ws } = setup()
+    service.createTab(ws.id)
+    const last = bus.ofType('workspace.changed').at(-1)
+    expect(JSON.stringify(last)).not.toContain('layout')
   })
 })
 

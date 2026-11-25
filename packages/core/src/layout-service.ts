@@ -55,12 +55,14 @@ export class LayoutService implements PaneDirectory {
     if (this.#workspaces.has(id)) throw new DomainError('CONFLICT', `id de espacio repetido: ${id}`)
     const workspace: Workspace = { id, name, ...(cwd === undefined ? {} : { cwd }), tabs: [] }
     this.#workspaces.set(workspace.id, workspace)
+    this.#emitWorkspace(workspace.id)
     return workspace
   }
 
   renameWorkspace(workspaceId: WorkspaceId, name: string): void {
     const workspace = this.#workspace(workspaceId)
     this.#workspaces.set(workspaceId, { ...workspace, name })
+    this.#emitWorkspace(workspaceId)
   }
 
   /** Cierra el espacio y devuelve los paneles que tenía. Emite `layout.changed` (nulo) por pestaña. */
@@ -72,6 +74,10 @@ export class LayoutService implements PaneDirectory {
       for (const pane of tab.panes) paneIds.push(pane.id)
       this.#emitClosed(workspaceId, tab.id)
     }
+    this.#deps.bus.publish({
+      event: 'workspace.changed',
+      data: { workspaceId, removed: true },
+    })
     return paneIds
   }
 
@@ -107,6 +113,7 @@ export class LayoutService implements PaneDirectory {
       activeTabId: tab.id,
     })
     this.#emit(workspaceId, tab)
+    this.#emitWorkspace(workspaceId)
     return tab
   }
 
@@ -116,6 +123,7 @@ export class LayoutService implements PaneDirectory {
       ...workspace,
       tabs: workspace.tabs.map((t) => (t.id === tab.id ? { ...t, title } : t)),
     })
+    this.#emitWorkspace(workspace.id)
   }
 
   /** Mueve la pestaña a `index` (acotado) del espacio indicado o del suyo, y la deja activa. */
@@ -131,6 +139,7 @@ export class LayoutService implements PaneDirectory {
       others.splice(at, 0, tab)
       this.#workspaces.set(source.id, { ...source, tabs: others })
       this.#emit(source.id, tab)
+      this.#emitWorkspace(source.id)
       return
     }
     this.#setWithoutTab(source, tab)
@@ -139,6 +148,8 @@ export class LayoutService implements PaneDirectory {
     tabs.splice(Math.min(Math.max(0, index), tabs.length), 0, tab)
     this.#workspaces.set(moved.id, { ...moved, tabs, activeTabId: tab.id })
     this.#emit(moved.id, tab)
+    this.#emitWorkspace(source.id)
+    this.#emitWorkspace(moved.id)
   }
 
   split(
@@ -335,6 +346,24 @@ export class LayoutService implements PaneDirectory {
   #removeTab(workspace: Workspace, tab: Tab): void {
     this.#setWithoutTab(workspace, tab)
     this.#emitClosed(workspace.id, tab.id)
+    this.#emitWorkspace(workspace.id)
+  }
+
+  #emitWorkspace(workspaceId: WorkspaceId): void {
+    const w = this.#workspaces.get(workspaceId)
+    if (w === undefined) return
+    this.#deps.bus.publish({
+      event: 'workspace.changed',
+      data: {
+        workspace: {
+          id: w.id,
+          name: w.name,
+          ...(w.cwd === undefined ? {} : { cwd: w.cwd }),
+          ...(w.activeTabId === undefined ? {} : { activeTabId: w.activeTabId }),
+          tabs: w.tabs.map((t) => ({ id: t.id, title: t.title })),
+        },
+      },
+    })
   }
 
   #emitClosed(workspaceId: WorkspaceId, tabId: TabId): void {

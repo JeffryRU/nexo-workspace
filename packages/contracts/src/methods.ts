@@ -38,6 +38,11 @@ const Signal = z.enum(['SIGINT', 'SIGTERM', 'SIGKILL', 'SIGHUP'])
  * El servidor y el cliente se derivan de este registro.
  */
 export const methods = {
+  /** Primer mensaje de una conexión sin token en el subprotocolo; el daemon lo resuelve antes de despachar. */
+  auth: {
+    params: z.strictObject({ token: z.string().max(4096) }),
+    result: Ok,
+  },
   'daemon.info': {
     params: Empty,
     result: z.strictObject({
