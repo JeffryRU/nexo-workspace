@@ -16,3 +16,6 @@ minimumReleaseAgeExclude:
   - "@biomejs/cli-win32-x64@2.6.9"
 
 ignoreWorkspaceCycles: true
+
+allowBuilds:
+  node-pty: true
