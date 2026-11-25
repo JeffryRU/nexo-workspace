@@ -29,6 +29,24 @@ describe('ScriptedAgentProvider', () => {
     })
   })
 
+  it('editar emite una acción edit con diff unificado', async () => {
+    const { events } = await collect('editar')
+    const end = events.find((e) => e.type === 'block-end' && e.block.type === 'action')
+    expect(end).toMatchObject({
+      block: { kind: 'edit', status: 'ok', diff: { path: 'src/app.ts' } },
+    })
+    const patch = (end as { block: { diff: { patch: string } } }).block.diff.patch
+    expect(patch).toContain('@@ -1,4 +1,4 @@')
+    expect(patch).toContain('+const port = 4317')
+  })
+
+  it('ansi emite una acción exec con salida coloreada', async () => {
+    const { events } = await collect('ansi')
+    const end = events.find((e) => e.type === 'block-end' && e.block.type === 'action')
+    expect(end).toMatchObject({ block: { kind: 'exec', status: 'ok', exitCode: 0 } })
+    expect((end as { block: { output: string } }).block.output).toContain('[31m')
+  })
+
   it('lento n emite n trozos', async () => {
     const { events } = await collect('lento 7')
     expect(events.filter((e) => e.type === 'block-delta')).toHaveLength(7)

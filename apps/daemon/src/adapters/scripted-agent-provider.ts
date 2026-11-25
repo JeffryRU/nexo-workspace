@@ -17,6 +17,8 @@ import {
  * - `lento [n]`: n trozos (30 por omisión) de "palabra " cada `chunkMs`; sirve para cortar a mitad de respuesta.
  * - `permiso`: pide permiso para una acción; sigue según la respuesta.
  * - `pregunta`: pregunta A o B; responde con la elección.
+ * - `editar`: una acción `edit` con un diff unificado (sin pedir permiso).
+ * - `ansi`: una acción `exec` cuya salida lleva colores ANSI (SGR) y otras secuencias.
  * - cualquier otro: `Eco: <texto>`.
  */
 export type ScriptedProviderOptions = {
@@ -33,6 +35,25 @@ const CAPABILITIES: ProviderCapabilities = {
   warmup: true,
   streaming: true,
 }
+
+const EDIT_PATCH = [
+  '--- a/src/app.ts',
+  '+++ b/src/app.ts',
+  '@@ -1,4 +1,4 @@',
+  ' import { start } from "./start"',
+  '-const port = 3000',
+  '+const port = 4317',
+  ' start(port)',
+  '',
+].join('
+')
+
+/** Rojo, verde en negrita, amarillo tenue y una secuencia de cursor que la interfaz debe descartar. */
+const ANSI_OUTPUT =
+  '[31merror[0m: falló
+[1;32mok[0m: pasó
+[2;33maviso[0m[2K fin
+'
 
 const PERMISSION_OPTIONS: PermissionOption[] = [
   { id: 'allow', label: 'Permitir', kind: 'allow-once' },
@@ -176,6 +197,31 @@ export class ScriptedSession implements AgentProviderSession {
           : { ...draft, status: 'error', output: 'rechazado', exitCode: 1 },
       })
       await this.#text([allowed ? 'Permiso concedido' : 'Permiso rechazado'], epoch)
+      return
+    }
+    if (word === 'editar' || word === 'ansi') {
+      const ref = `call-${++this.#n}`
+      const draft =
+        word === 'editar'
+          ? ({
+              type: 'action',
+              kind: 'edit',
+              tool: 'Edit',
+              title: 'Editar src/app.ts',
+              path: 'src/app.ts',
+            } as const)
+          : ({ type: 'action', kind: 'exec', tool: 'Bash', title: 'npm test' } as const)
+      this.#emit({ type: 'block-start', ref, block: { ...draft, status: 'running' } })
+      await this.#delay(this.#chunkMs, epoch)
+      this.#emit({
+        type: 'block-end',
+        ref,
+        block:
+          word === 'editar'
+            ? { ...draft, status: 'ok', diff: { path: 'src/app.ts', patch: EDIT_PATCH } }
+            : { ...draft, status: 'ok', output: ANSI_OUTPUT, exitCode: 0 },
+      })
+      await this.#text([word === 'editar' ? 'Edición aplicada' : 'Salida con colores'], epoch)
       return
     }
     if (word === 'pregunta') {
