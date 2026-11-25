@@ -26,6 +26,29 @@ pnpm format
 pnpm depcruise   # reglas de dependencias entre paquetes
 ```
 
+## CLI `nexo`
+
+```
+pnpm --filter @nexo/cli start -- ls        # o: node apps/cli/src/main.ts ls
+```
+
+Si el daemon no corre, la CLI lo arranca desacoplado (registro en `daemon.log` del directorio de estado);
+`--no-start` lo evita. Los paneles, pestañas y espacios se indican con su id, un prefijo único o su nombre.
+
+| Comando | Qué hace |
+| --- | --- |
+| `nexo ls` | árbol de espacios, pestañas y paneles |
+| `nexo new [--workspace X] [--cwd R] [--name T] [-- cmd args]` | pestaña y terminal nuevas (shell por omisión si no hay comando) |
+| `nexo split <panel> --right|--down [-- cmd]` | divide un panel |
+| `nexo send <panel> [--enter] [--stdin] [--] texto` | escribe en la terminal (trocea en mensajes de 64 KiB) |
+| `nexo read <panel> [-n N] [-f] [--raw]` | últimas N líneas sin ANSI; `-f` sigue la salida |
+| `nexo focus|kill|close <ref>`, `nexo rename <pestaña|espacio> <nombre>` | gestión |
+| `nexo daemon status|stop|log` | estado, apagado limpio y registro |
+
+Globales: `--json` (salida estable), `--no-start`, `--help`, `--version`. Salida: 0 ok, 1 uso, 2 no
+encontrado, 3 daemon no disponible, 4 error del daemon. Entorno: `NEXO_STATE_DIR`, `NEXO_SHELL`,
+`NEXO_DAEMON_ENTRY`, `NEXO_START_TIMEOUT_MS`, `NEXO_DEBUG=1` (trazas).
+
 ## Estructura
 
 ```
@@ -35,7 +58,8 @@ packages/testkit     falsos de los puertos, generadores fast-check y suites de c
 packages/client      SDK tipado del protocolo (esqueleto)
 apps/daemon          raíz de composición (esqueleto)
 apps/web             interfaz SolidJS + Vite (esqueleto)
-apps/cli, apps/mcp   clientes (esqueletos)
+apps/cli            CLI `nexo`
+apps/mcp            cliente MCP (esqueleto)
 ```
 
 ## Documentación
