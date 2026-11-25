@@ -156,4 +156,36 @@ test.describe('CLI y ventana sobre el mismo daemon', () => {
     expect(text).toContain('fila-299')
     await sleep(50)
   })
+
+  test('arrastrar el divisor central de una cuadrícula 2x2 redimensiona los dos subárboles', async ({
+    stack,
+    app,
+  }) => {
+    const a = await stack.newTab('rejilla', ECHO_SCRIPT)
+    await app.goto(stack.url())
+    const splitArgs = ['--', process.execPath, '-e', ECHO_SCRIPT]
+    const b = await stack.json<{ paneId: string }>(['split', a.paneId, '--right', ...splitArgs])
+    await stack.json(['split', a.paneId, '--down', ...splitArgs])
+    await stack.json(['split', b.paneId, '--down', ...splitArgs])
+    await expect(app.locator('section.pane')).toHaveCount(4)
+
+    const width = async (id: string) =>
+      (await app.locator(`[data-pane-id="${id}"]`).boundingBox())?.width ?? 0
+    const before = await width(a.paneId)
+    const central = app.locator('hr.divider.vertical').first()
+    const box = await central.boundingBox()
+    if (box === null) throw new Error('sin divisor central')
+    const y = box.y + box.height / 2
+    await app.mouse.move(box.x + box.width / 2, y)
+    await app.mouse.down()
+    await app.mouse.move(box.x + box.width / 2 + 150, y, { steps: 10 })
+    await app.mouse.up()
+
+    await expect.poll(() => width(a.paneId)).toBeGreaterThan(before + 100)
+    // Ambos subárboles se movieron juntos: el panel de la derecha se achicó lo mismo.
+    const wa = await width(a.paneId)
+    const wb = await width(b.paneId)
+    expect(wa).toBeGreaterThan(wb)
+    expect(Math.abs(wa + wb - 2 * before)).toBeLessThan(8)
+  })
 })

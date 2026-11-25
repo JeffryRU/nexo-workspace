@@ -193,7 +193,7 @@ Transporte: WebSocket con mensajes JSON de texto. Tamaño máximo de mensaje: 1 
 
 Métodos de la fase 1 (terminal): `auth` (solo como primer mensaje; el daemon lo resuelve antes de despachar), `daemon.info`, `daemon.shutdown` (apagado limpio; solo clientes autenticados), `snapshot`, `events.subscribe`,
 `workspace.{list,create,rename,close}`, `tab.{create,close,focus,move,rename}`,
-`pane.{split,close,focus,resize,swap}`, `terminal.{spawn,write,resize,read,kill}`.
+`pane.{split,close,focus,resize,swap}` (`pane.resize` admite dos formas: `{ paneId, delta }`, la frontera de un panel con su hermano directo, y `{ tabId, path, index, delta }`, la frontera entre los hijos `index` e `index+1` del split al que lleva `path`; camino ≤ 64 niveles, delta en [-1, 1], mínimo 5 % por panel; camino inexistente o que no apunta a un split → `NOT_FOUND`), `terminal.{spawn,write,resize,read,kill}`.
 Eventos: `layout.changed`, `workspace.changed`, `terminal.output`, `terminal.exit`, `pane.title`, `pane.attention`,
 `client.resync` (contrapresión, ver "Servidor del daemon").
 
@@ -303,8 +303,11 @@ Implementación de la F1.6 (`apps/web/src`):
   `Alt+Shift+D` / `Alt+Shift+S` dividir a la derecha / abajo, `Alt+flechas` mover el foco, `Ctrl+RePág/AvPág` (o
   `Alt+RePág/AvPág`) cambiar de pestaña, `Alt+1..9`, `Ctrl+Shift+F` buscar, `Ctrl+Shift+P` o `?` ayuda. Una
   `Ctrl+<letra>` sin más modificadores siempre va a la terminal.
-- **Limitación del protocolo:** `pane.resize` solo mueve la frontera de un panel con su hermano directo, así que un
-  divisor entre dos subárboles (p. ej. una cuadrícula 2×2) no se puede arrastrar todavía y se muestra deshabilitado.
+- **Divisores:** todos son arrastrables (también el central de una 2×2 y los de subárboles anidados) y manejables con
+  las flechas (Mayús = paso grande). Cada uno envía `pane.resize` por camino de nodo (`{ tabId, path, index, delta }`);
+  `aria-valuenow` es la posición del divisor dentro de su split. No hay estado optimista: el árbol que se pinta es
+  siempre el del daemon, así que si se pierde la conexión a mitad de un arrastre se suelta y, al reconectar, el
+  resync restaura el estado del daemon.
 - **Desarrollo:** `pnpm dev:web` arranca el daemon (`NEXO_DEV=1`, puerto efímero, estado en un directorio temporal)
   y Vite en 5173, e imprime la URL con el token.
 
