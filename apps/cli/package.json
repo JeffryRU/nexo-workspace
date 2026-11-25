@@ -7,10 +7,15 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "start": "node src/main.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@nexo/contracts": "workspace:*",
-    "@nexo/client": "workspace:*"
+    "@nexo/client": "workspace:*",
+    "zod": "^4.6.7"
+  },
+  "bin": {
+    "nexo": "./src/main.ts"
   }
 }
