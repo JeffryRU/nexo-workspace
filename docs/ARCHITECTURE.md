@@ -111,8 +111,49 @@ Todo en `packages/core`, sin I/O; el daemon (F1.3) solo los conecta con adaptado
   `{ code, message }`. La tabla es exhaustiva sobre `METHOD_NAMES` (si falta un método no compila). Un error que
   no es de dominio sale como `INTERNAL` sin su mensaje. `events.subscribe` depende de la conexión, por eso lo
   aporta quien despacha.
-- Los renombres de espacio y de pestaña no emiten evento (el registro de eventos no tiene uno): los clientes los
-  ven en el siguiente `snapshot`.
+- `workspace.changed` cubre lo que `layout.changed` no dice: alta, renombre y cierre de espacios y alta, cierre,
+  renombre y movimiento de pestañas. Lleva el espacio con sus pestañas resumidas (`{ id, title }`, sin distribución
+  ni paneles) o `{ workspaceId, removed: true }` al cerrar el espacio. Un movimiento entre espacios emite uno por
+  cada espacio afectado.
+
+### Servidor del daemon (F1.3)
+
+`apps/daemon` (`pnpm --filter @nexo/daemon start`, Node 24 ejecuta el TS directamente) compone core con
+`@nexo/adapter-pty-node` y adaptadores propios en `apps/daemon/src/adapters/` (reloj real, `UuidIds` con
+`crypto.randomUUID`, bus en memoria, logger JSON con redactor de secretos).
+
+- **Entorno** (validado con zod al arrancar): `NEXO_PORT` (4317; 0 = efímero), `NEXO_DEV`, `NEXO_STATE_DIR`,
+  `NEXO_LOG_LEVEL`, `NEXO_MAX_CONNECTIONS` (128), `NEXO_AUTH_TIMEOUT_MS` (5000).
+- **Puerto ocupado:** si responde un daemon de Nexo (`GET /health` con la cabecera `X-Nexo-Daemon: 1`), el proceso
+  sale con el mensaje "Nexo ya está corriendo" (código 0); si no, error claro (`PortInUseError`, código 1).
+  Un cerrojo `daemon.lock` (`pid:nonce`, creado con `wx`) impide dos daemons sobre el mismo directorio de estado
+  aunque arranquen a la vez; un cerrojo o un `daemon.json` de un pid muerto (o corrupto) se reemplaza.
+- **Autenticación:** token de 32 bytes (base64url) por arranque. Va en `Sec-WebSocket-Protocol: nexo.v1,
+  nexo.token.<token>` (un token incorrecto es 401 en el upgrade) o en el primer mensaje
+  `{ v:1, id, method:'auth', params:{ token } }`. Sin autenticar en 5 s, o con cualquier otro primer mensaje, la
+  conexión se cierra (1008). Comparación en tiempo constante.
+- **Origin y Host:** permitidos `tauri://localhost`, `http://tauri.localhost`, `https://tauri.localhost`, sin
+  `Origin` (CLI/MCP) y, con `NEXO_DEV=1`, `http://localhost:5173` y `http://127.0.0.1:5173`; el resto (incluido
+  `null`) es 403 en el upgrade. El `Host` debe ser el loopback del puerto (contra DNS rebinding).
+- **Límites por conexión:** `ws` corta con 1009 los frames de más de 2 MiB; entre 1 MiB y 2 MiB se responde
+  `PAYLOAD_TOO_LARGE` (a la tercera vez, cierre 1009). Los frames binarios reciben `INVALID_PARAMS` (a la tercera,
+  cierre 1003). Máximo 1000 mensajes por segundo: el exceso recibe `RATE_LIMITED`, y 4 veces el máximo cierra (1008).
+  Máximo de conexiones: 503 en el upgrade. Las respuestas a mensajes sin `id` legible usan el `id` `"0"`.
+- **Eventos y contrapresión:** `events.subscribe` fija el filtro de la conexión; cada evento enviado lleva el `seq`
+  de la conexión y `snapshot` devuelve el `seq` actual. Si el `bufferedAmount` del cliente supera 1 MiB se
+  descartan sus `terminal.output` (el `seq` sigue avanzando, así que el hueco es visible) y, cuando el búfer se
+  vacía, el daemon le envía `client.resync { reason: 'backpressure', dropped }`: el cliente debe pedir `snapshot` y
+  `terminal.read` con `fromOffset`. Pasados 16 MiB el cliente se desconecta. La memoria por cliente queda acotada.
+- **HTTP:** `GET /health` → `{ ok, version }` sin token. Sirve `apps/web/dist` si existe, solo GET/HEAD, con CSP
+  restrictiva, `X-Content-Type-Options`, `X-Frame-Options`, sin listar directorios y rechazando `..`, `%2e%2e`,
+  `\`, `:` (rutas de Windows), NUL, archivos ocultos, nombres de dispositivo y enlaces simbólicos que salgan de
+  la raíz.
+- **Descubrimiento:** directorio de estado (Linux `$XDG_STATE_HOME/nexo` o `~/.local/state/nexo`, permisos 700;
+  Windows `%LOCALAPPDATA%\Nexo`) con `token` (600) y `daemon.json`, ambos escritos de forma atómica (temporal +
+  `rename`). Al salir (SIGINT, SIGTERM, SIGHUP y SIGBREAK, que en Windows cubren el cierre de la consola, y
+  `beforeExit`) mata todas las terminales, cierra las conexiones y borra `daemon.json`, `token` y el cerrojo.
+- **Logs:** pasan por el redactor (`Authorization`/`Bearer`, `sk-…`, `?t=`/`token=`, el subprotocolo
+  `nexo.token.…`, campos con nombre sensible y el token del daemon, literal y codificado). Nunca se registra el token.
 
 ## Protocolo (v1)
 
@@ -140,10 +181,11 @@ Transporte: WebSocket con mensajes JSON de texto. Tamaño máximo de mensaje: 1 
 - Autenticación: el token va en el primer mensaje (`auth`) o en la cabecera `Sec-WebSocket-Protocol`,
   nunca en logs. Comparación en tiempo constante.
 
-Métodos de la fase 1 (terminal): `daemon.info`, `snapshot`, `events.subscribe`,
+Métodos de la fase 1 (terminal): `auth` (solo como primer mensaje; el daemon lo resuelve antes de despachar), `daemon.info`, `snapshot`, `events.subscribe`,
 `workspace.{list,create,rename,close}`, `tab.{create,close,focus,move,rename}`,
 `pane.{split,close,focus,resize,swap}`, `terminal.{spawn,write,resize,read,kill}`.
-Eventos: `layout.changed`, `terminal.output`, `terminal.exit`, `pane.title`, `pane.attention`.
+Eventos: `layout.changed`, `workspace.changed`, `terminal.output`, `terminal.exit`, `pane.title`, `pane.attention`,
+`client.resync` (contrapresión, ver "Servidor del daemon").
 
 Detalles fijados en F0 (la fuente exacta es `packages/contracts`):
 
@@ -207,7 +249,7 @@ Nexo funciona al 100 % sin mascota. Una mascota es un **paquete intercambiable**
 ## Seguridad
 
 - Solo `127.0.0.1`; token aleatorio de 32 bytes; `Origin` permitido: `tauri://localhost`,
-  `http://tauri.localhost` (Windows), y el origen de Vite solo con `NEXO_DEV=1`.
+  `http://tauri.localhost` (Windows), y el origen de Vite solo con `NEXO_DEV=1` (detalle en "Servidor del daemon").
 - Procesos siempre con `spawn(cmd, args[])`, **nunca** con una cadena de shell.
 - Rutas: el visor y cualquier lectura de archivos pasan por `fs-sandbox` (resuelve enlaces simbólicos,
   bloquea carpetas ocultas sensibles, rutas UNC, `\\?\`, nombres de dispositivo de Windows).

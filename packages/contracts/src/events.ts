@@ -3,6 +3,20 @@ import { Attention, LayoutSchema, Pane, PaneId, TabId, TerminalId, WorkspaceId }
 import { LIMITS } from './limits.ts'
 import { DisplayText } from './text.ts'
 
+/** Pestaña resumida (sin distribución ni paneles) para `workspace.changed`. */
+export const TabSummary = z.strictObject({ id: TabId, title: DisplayText })
+export type TabSummary = z.infer<typeof TabSummary>
+
+/** Espacio con sus pestañas resumidas. */
+export const WorkspaceSummary = z.strictObject({
+  id: WorkspaceId,
+  name: DisplayText,
+  cwd: z.string().min(1).max(LIMITS.maxPathLength).optional(),
+  activeTabId: TabId.optional(),
+  tabs: z.array(TabSummary).max(1024),
+})
+export type WorkspaceSummary = z.infer<typeof WorkspaceSummary>
+
 /** Registro de eventos de la F1: nombre -> esquema de `data`. */
 export const events = {
   'layout.changed': z.strictObject({
@@ -26,6 +40,22 @@ export const events = {
   }),
   'pane.title': z.strictObject({ paneId: PaneId, title: DisplayText }),
   'pane.attention': z.strictObject({ paneId: PaneId, attention: Attention }),
+  /**
+   * Alta, renombre o cambio de pestañas de un espacio (o su cierre, con `removed: true`).
+   * Cubre lo que `layout.changed` no dice: nombres de espacio y de pestaña, y espacios nuevos o cerrados.
+   */
+  'workspace.changed': z.union([
+    z.strictObject({ workspace: WorkspaceSummary }),
+    z.strictObject({ workspaceId: WorkspaceId, removed: z.literal(true) }),
+  ]),
+  /**
+   * El daemon descartó eventos `terminal.output` de este cliente porque no leía a tiempo (contrapresión).
+   * El cliente debe pedir `snapshot` y `terminal.read` con `fromOffset` para recuperar lo perdido.
+   */
+  'client.resync': z.strictObject({
+    reason: z.literal('backpressure'),
+    dropped: z.int().positive(),
+  }),
 } as const
 
 export type EventName = keyof typeof events

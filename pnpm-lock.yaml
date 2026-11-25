@@ -202,12 +202,28 @@ importers:
 
   apps/daemon:
     dependencies:
+      '@nexo/adapter-pty-node':
+        specifier: workspace:*
+        version: link:../../packages/adapters/pty-node
       '@nexo/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
       '@nexo/core':
         specifier: workspace:*
         version: link:../../packages/core
+      ws:
+        specifier: 8.23.0
+        version: 8.23.0
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@nexo/testkit':
+        specifier: workspace:*
+        version: link:../../packages/testkit
+      '@types/ws':
+        specifier: 8.18.2
+        version: 8.18.2
 
   apps/mcp:
     dependencies:
@@ -617,6 +633,9 @@ packages:
 
   '@types/node@24.19.2':
     resolution: {integrity: sha512-93d49wCWJkCyN87MxLpNN6KXPCwFw7bVUg79mGUV1OS40JGWwVCr8n61DXCSqz7CV6/VfPkb7xec7uP2M+QHWQ==}
+
+  '@types/ws@8.18.2':
+    resolution: {integrity: sha512-67MQl+fpWKVTT1NYdnmo3U4sc/xPo/zQBncVnI74qmQa0z/b+1g6iYqNmGCPbxO+zz2aklb08a0oHfegiVd0/w==}
 
   '@vitest/coverage-v8@5.1.1':
     resolution: {integrity: sha512-xL4NkbVx/UqqDHaXSOyvB8qsSoLQ+dVNGR9H2Bh/4ggQtmaPFNPUC9gZQwKZePLOQ6WDcgwXVnPulFW9eCHt0w==}
@@ -1234,6 +1253,18 @@ packages:
     engines: {node: '>=20.11'}
     hasBin: true
 
+  ws@8.23.0:
+    resolution: {integrity: sha512-wCkmX8QMOrKjgO8HW2WyDbTSGeqkocxgDzS9iR79rEAexty6/2qzilx3Ag8Tqf9ykop3irLKle0MtVn5qjVnoQ==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
   yallist@3.1.1:
     resolution: {integrity: sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==}
 
@@ -1541,6 +1572,10 @@ snapshots:
   '@types/node@24.19.2':
     dependencies:
       undici-types: 7.24.6
+
+  '@types/ws@8.18.2':
+    dependencies:
+      '@types/node': 24.19.2
 
   '@vitest/coverage-v8@5.1.1(vitest@5.1.1)':
     dependencies:
@@ -2030,6 +2065,8 @@ snapshots:
   watskeburt@6.0.0: {}
 
   why-is-node-running@3.2.1: {}
+
+  ws@8.23.0: {}
 
   yallist@3.1.1: {}
 

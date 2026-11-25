@@ -1,15 +1,12 @@
-import { LayoutService } from '@nexo/core'
-
-// TODO(F1): raiz de composicion: servidor HTTP/WS en 127.0.0.1, token, adaptadores reales.
-
-export const DAEMON_VERSION = '0.0.0'
-
-export type DaemonInfo = {
-  name: 'nexo-daemon'
-  version: string
-  layoutService: typeof LayoutService
-}
-
-export function describeDaemon(): DaemonInfo {
-  return { name: 'nexo-daemon', version: DAEMON_VERSION, layoutService: LayoutService }
-}
+export { JsonLogger, type LogLevel } from './adapters/logger.ts'
+export { generateToken, tokensEqual } from './auth.ts'
+export { type DaemonEnv, parseEnv } from './config.ts'
+export {
+  DaemonAlreadyRunningError,
+  type DaemonOptions,
+  PortInUseError,
+  type RunningDaemon,
+  startDaemon,
+} from './daemon.ts'
+export { createRedactor, type Redactor } from './redact.ts'
+export { DAEMON_VERSION } from './version.ts'

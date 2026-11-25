@@ -19,7 +19,7 @@ export default defineConfig({
       project('testkit', './packages/testkit'),
       project('adapter-pty-node', './packages/adapters/pty-node', 30000),
       project('client', './packages/client'),
-      project('daemon', './apps/daemon'),
+      project('daemon', './apps/daemon', 30000),
       project('cli', './apps/cli'),
       project('mcp', './apps/mcp'),
       project('web', './apps/web'),
