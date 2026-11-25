@@ -169,7 +169,7 @@ describe('turnos', () => {
   })
 
   it('el historial tiene un tope en bytes: descarta lo más antiguo y conserva lo último', async () => {
-    const { session, events } = await open({ limits: { maxHistoryBytes: 40 } })
+    const { session, events } = await open({ limits: { maxHistoryBytes: 25 } })
     let n = 0
     for (const text of ['aaaaaaaaaa', 'bbbbbbbbbb', 'cccccccccc']) {
       await session.send(text)
@@ -181,7 +181,7 @@ describe('turnos', () => {
     expect(last.some((m) => m.content === 'aaaaaaaaaa')).toBe(false)
     expect(last[0]?.role).toBe('user')
     const bytes = last.reduce((n, m) => n + new TextEncoder().encode(m.content).length, 0)
-    expect(bytes).toBeLessThanOrEqual(40)
+    expect(bytes).toBeLessThanOrEqual(25)
   })
 
   it('un mensaje que no cabe en el tope se rechaza', async () => {
