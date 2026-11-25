@@ -75,7 +75,10 @@ describe('FakePtyPort', () => {
     expect(fake?.size).toEqual({ cols: 100, rows: 30 })
     port.failNextSpawn(new Error('boom'))
     await expect(port.spawn({ cmd: 'sh', args: [], cols: 80, rows: 24 })).rejects.toThrow('boom')
-    await expect(port.spawn({ cmd: 'sh', args: [], cols: 0, rows: 24 })).rejects.toThrow(RangeError)
+    await expect(port.spawn({ cmd: 'sh', args: [], cols: 0, rows: 24 })).rejects.toMatchObject({
+      name: 'PtySpawnError',
+      code: 'INVALID_OPTIONS',
+    })
   })
 })
 

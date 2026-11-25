@@ -1,4 +1,4 @@
-import type { PtyExit, PtyPort, PtyProcess } from '@nexo/core'
+import { type PtyExit, type PtyPort, type PtyProcess, PtySpawnError } from '@nexo/core'
 import { afterEach, describe, expect, it } from 'vitest'
 import { sleep } from '../timers.ts'
 
@@ -9,6 +9,8 @@ export type PtyConformanceSubject = {
    * un comando real (p. ej. `node -e`); el falso lo simula con su script.
    */
   command: { cmd: string; args: string[]; marker: string }
+  /** Un ejecutable que no existe y un directorio que no existe (para los rechazos tipados). */
+  missing: { cmd: string; cwd: string }
   cleanup?: () => Promise<void> | void
 }
 
@@ -135,6 +137,33 @@ export function runPtyConformance(name: string, create: () => PtyConformanceSubj
       ] as const) {
         await expect(subject.port.spawn({ ...subject.command, cols, rows })).rejects.toThrow()
       }
+    })
+
+    it('spawn rechaza con PtySpawnError EXECUTABLE_NOT_FOUND si el ejecutable no existe', async () => {
+      subject = create()
+      const error = await subject.port
+        .spawn({ cmd: subject.missing.cmd, args: [], cols: 80, rows: 24 })
+        .catch((e: unknown) => e)
+      expect(error).toBeInstanceOf(PtySpawnError)
+      expect((error as PtySpawnError).code).toBe('EXECUTABLE_NOT_FOUND')
+    })
+
+    it('spawn rechaza con PtySpawnError CWD_NOT_FOUND si el directorio no existe', async () => {
+      subject = create()
+      const error = await subject.port
+        .spawn({ ...subject.command, cwd: subject.missing.cwd, cols: 80, rows: 24 })
+        .catch((e: unknown) => e)
+      expect(error).toBeInstanceOf(PtySpawnError)
+      expect((error as PtySpawnError).code).toBe('CWD_NOT_FOUND')
+    })
+
+    it('spawn con dimensiones inválidas rechaza con INVALID_OPTIONS', async () => {
+      subject = create()
+      const error = await subject.port
+        .spawn({ ...subject.command, cols: 0, rows: 24 })
+        .catch((e: unknown) => e)
+      expect(error).toBeInstanceOf(PtySpawnError)
+      expect((error as PtySpawnError).code).toBe('INVALID_OPTIONS')
     })
 
     it('write con datos hostiles (NUL, ESC, enorme) no lanza', async () => {
