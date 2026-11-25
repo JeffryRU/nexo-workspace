@@ -119,6 +119,7 @@ describe('createDaemonSession', () => {
       },
       reset: () => {},
     })
+    session.hub.setVisible('x1', true)
     history = 'hola'
     client.emit('terminal.output', { terminalId: xid('x1'), offset: 4, data: 'hola' }, 2)
     frames.flush()
@@ -136,6 +137,37 @@ describe('createDaemonSession', () => {
     expect(session.store.state.workspaces.map((w) => w.id)).toEqual(['w1', 'w9'])
     expect(written.join('')).toBe('hola mundo')
   })
+  it('un resync relee las terminales sin esperar al snapshot (que puede perderse en plena ráfaga)', async () => {
+    const { session, client, frames } = setup()
+    client.snapshot = snapshotOf([withTerminal()], 1)
+    let history = ''
+    client.handlers.set('terminal.read', (p) => {
+      const from = (p as { fromOffset?: number }).fromOffset ?? 0
+      return { data: history.slice(from), offset: history.length }
+    })
+    await session.start()
+    await tick()
+    const written: string[] = []
+    session.hub.attach('x1', {
+      write: (d, done) => {
+        written.push(d)
+        done()
+      },
+      reset: () => {},
+    })
+    session.hub.setVisible('x1', true)
+    const reads = client.callsOf('terminal.read').length
+    // El snapshot no responde jamás: la relectura no depende de él.
+    client.handlers.set('snapshot', () => new Promise(() => {}) as never)
+    history = 'ultima linea'
+    client.emit('resync', { reason: 'backpressure', dropped: 9 })
+    await tick()
+    await tick()
+    frames.flush()
+    expect(client.callsOf('terminal.read').length).toBeGreaterThan(reads)
+    expect(written.join('')).toBe('ultima linea')
+  })
+
   it('el estado de la conexión sigue al cliente y el cierre definitivo deja sin conexión', async () => {
     const { session, client } = setup()
     await session.start()

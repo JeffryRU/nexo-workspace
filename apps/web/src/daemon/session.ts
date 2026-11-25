@@ -123,6 +123,11 @@ export function createDaemonSession(deps: SessionDeps) {
         }) as never,
       )
     }
+    // La relectura de terminales no espera al `snapshot` (que puede tardar o perderse en plena ráfaga): se
+    // dispara en cuanto el cliente avisa de que hay que ponerse al día.
+    c.on('resync', () => {
+      if (mine === generation) void hub.resync()
+    })
     c.on('terminal.output', (data: EventData<'terminal.output'>) => {
       if (mine === generation) hub.onOutput(data.terminalId, data.offset, data.data)
     })

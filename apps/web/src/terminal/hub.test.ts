@@ -68,6 +68,7 @@ describe('TerminalHub', () => {
     hub.sync(['x1'])
     await tick()
     hub.attach('x1', sink)
+    hub.setVisible('x1', true)
     hub.onOutput('x1', 3, 'abc')
     hub.onOutput('x1', 6, 'def')
     expect(sink.out).toBe('')
@@ -82,6 +83,7 @@ describe('TerminalHub', () => {
     hub.sync(['x1'])
     await tick()
     hub.attach('x1', sink)
+    hub.setVisible('x1', true)
     hub.onOutput('x1', 3, 'abc')
     hub.onOutput('x1', 3, 'abc')
     hub.onOutput('x1', 5, 'bcde') // solapa un byte con lo anterior
@@ -104,6 +106,7 @@ describe('TerminalHub', () => {
     const sink = new Sink()
     hub.sync(['x1'])
     hub.attach('x1', sink)
+    hub.setVisible('x1', true)
     await tick()
     frames.flush()
     expect(sink.out).toBe('historial')
@@ -126,6 +129,7 @@ describe('TerminalHub', () => {
     hub.sync(['x1'])
     await tick()
     hub.attach('x1', sink)
+    hub.setVisible('x1', true)
     hub.onOutput('x1', 4, 'AAAA')
     // se pierde BBBB: llega CCCC (fin 12)
     hub.onOutput('x1', 12, 'CCCC')
@@ -147,6 +151,7 @@ describe('TerminalHub', () => {
     const sink = new Sink()
     hub.sync(['x1'])
     hub.attach('x1', sink)
+    hub.setVisible('x1', true)
     hub.onOutput('x1', 8, 'HISTORIA') // retenido (se está leyendo)
     hub.onOutput('x1', 11, 'fin')
     release({ data: 'HISTORIA', offset: 8 })
@@ -165,6 +170,7 @@ describe('TerminalHub', () => {
     sink.out = 'viejo'
     hub.sync(['x1'])
     hub.attach('x1', sink)
+    hub.setVisible('x1', true)
     await tick()
     frames.flush()
     expect(sink.resets).toBe(1)
@@ -189,6 +195,7 @@ describe('TerminalHub', () => {
     const sink = new Sink()
     hub.sync(['x1'])
     hub.attach('x1', sink)
+    hub.setVisible('x1', true)
     await tick()
     fail = false
     await hub.resync()
@@ -211,6 +218,7 @@ describe('TerminalHub', () => {
     hub.sync(['x1'])
     await tick()
     hub.attach('x1', sink)
+    hub.setVisible('x1', true)
     hub.onOutput('x1', 1, 'a')
     frames.flush()
     hub.onOutput('x1', 2, 'b')
@@ -244,5 +252,101 @@ describe('TerminalHub', () => {
     hub.dispose()
     hub.onOutput('x', 1, 'a')
     expect(hub.has('x')).toBe(false)
+  })
+
+  describe('puesta al día tras una ráfaga', () => {
+    /** Historial simulado: el daemon conserva solo los últimos `keep` bytes. */
+    function ring(total: () => number, keep = Number.POSITIVE_INFINITY) {
+      return async (_id: string, from: number): Promise<ReadResult> => {
+        const end = total()
+        const oldest = Math.max(0, end - keep)
+        const start = Math.max(from, oldest)
+        const len = Math.min(end - start, 1000)
+        return {
+          data: 'x'.repeat(len),
+          offset: start + len,
+          ...(from < oldest ? { truncated: true } : {}),
+        }
+      }
+    }
+
+    it('muchos resync seguidos comparten una sola cadena de lecturas', async () => {
+      const { hub, reader } = setup(ring(() => 5000))
+      hub.sync(['x1'])
+      await tick()
+      const base = reader.mock.calls.length
+      await Promise.all(Array.from({ length: 30 }, () => hub.resync()))
+      // 5 lecturas con datos + 1 vacía como mucho, no 30 cadenas.
+      expect(reader.mock.calls.length - base).toBeLessThanOrEqual(1)
+      expect(hub.offsetOf('x1')).toBe(5000)
+    })
+
+    it('si el daemon ya descartó lo pedido (truncated) salta a lo más antiguo disponible y reinicia', async () => {
+      const { hub, frames, reader } = setup(ring(() => 100_000, 3000))
+      const sink = new Sink()
+      hub.sync(['x1'])
+      hub.attach('x1', sink)
+      hub.setVisible('x1', true)
+      await tick()
+      frames.flush(50)
+      expect(sink.resets).toBeGreaterThanOrEqual(1)
+      expect(hub.offsetOf('x1')).toBe(100_000)
+      expect(sink.out.length).toBe(3000)
+      // Una sola relectura truncada y tres de cola: no reintenta desde el mismo offset.
+      const froms = reader.mock.calls.map((c) => c[1])
+      expect(new Set(froms.slice(0, 4)).size).toBe(Math.min(4, froms.length))
+    })
+
+    it('más de 64 rondas: sigue en otra tarea hasta alcanzar el offset actual', async () => {
+      const { hub, reader } = setup(ring(() => 70_000))
+      hub.sync(['x1'])
+      await new Promise((r) => setTimeout(r, 50))
+      expect(hub.offsetOf('x1')).toBe(70_000)
+      expect(reader.mock.calls.length).toBeGreaterThan(64)
+    })
+
+    it('una terminal oculta con xterm no relee hasta que se muestra', async () => {
+      let end = 10
+      const { hub, frames, reader } = setup(ring(() => end))
+      const sink = new Sink()
+      hub.sync(['x1'])
+      await tick()
+      hub.attach('x1', sink)
+      hub.setVisible('x1', false)
+      const base = reader.mock.calls.length
+      end = 3000
+      await hub.resync()
+      hub.onOutput('x1', 4000, 'y'.repeat(10)) // hueco: tampoco relee
+      await tick()
+      expect(reader.mock.calls.length).toBe(base)
+      hub.setVisible('x1', true)
+      await tick()
+      frames.flush(50)
+      expect(reader.mock.calls.length).toBeGreaterThan(base)
+      expect(hub.offsetOf('x1')).toBe(3000)
+      expect(sink.out.length).toBe(3000)
+    })
+
+    it('la conexión se cae a mitad de la puesta al día: el siguiente resync continúa sin duplicar', async () => {
+      let fail = false
+      const inner = ring(() => 4000)
+      const { hub, frames } = setup(async (id, from) => {
+        if (fail && from >= 2000) throw new Error('sin conexión')
+        return inner(id, from)
+      })
+      const sink = new Sink()
+      hub.sync(['x1'])
+      hub.attach('x1', sink)
+      hub.setVisible('x1', true)
+      fail = true
+      await tick()
+      await tick()
+      expect(hub.offsetOf('x1')).toBe(2000)
+      fail = false
+      await hub.resync()
+      frames.flush(50)
+      expect(hub.offsetOf('x1')).toBe(4000)
+      expect(sink.out).toBe('x'.repeat(4000))
+    })
   })
 })
