@@ -122,7 +122,8 @@ export const es = {
     },
     permissionFor: 'Permiso: {title}',
     permissionOptions: 'Opciones del permiso',
-    permissionHint: 'Pulsa 1-4 para elegir; las flechas mueven el foco.',
+    permissionHint: 'Pulsa {keys} para elegir; las flechas mueven el foco.',
+    permissionAlways: { accepted: 'Permitido siempre', rejected: 'Rechazado siempre' },
     permissionState: {
       pending: 'Pendiente',
       accepted: 'Permitido',

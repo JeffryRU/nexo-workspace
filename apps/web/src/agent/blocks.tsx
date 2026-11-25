@@ -265,6 +265,11 @@ const OPTION_KIND_CLASS = {
   'reject-always': 'reject',
 } as const
 
+/** «1» con una opción, «1-N» con varias: el número real de opciones. */
+export function permissionKeys(count: number): string {
+  return count <= 1 ? '1' : `1-${count}`
+}
+
 function PermissionView(props: { block: Of<'permission'> }) {
   const model = useAgentModel()
   const [sending, setSending] = createSignal(false)
@@ -304,7 +309,12 @@ function PermissionView(props: { block: Of<'permission'> }) {
       list[next]?.focus()
     }
   }
-  const resolved = () => props.block.options.find((o) => o.id === props.block.selectedOptionId)
+  const resolvedLabel = () => {
+    const kind = props.block.options.find((o) => o.id === props.block.selectedOptionId)?.kind
+    if (kind === 'allow-always') return es.agent.permissionAlways.accepted
+    if (kind === 'reject-always') return es.agent.permissionAlways.rejected
+    return es.agent.permissionState[props.block.state]
+  }
 
   return (
     <section
@@ -322,8 +332,7 @@ function PermissionView(props: { block: Of<'permission'> }) {
         when={pending()}
         fallback={
           <p class="perm-result" data-state={props.block.state}>
-            {es.agent.permissionState[props.block.state]}
-            <Show when={resolved()}>{(o) => <>: {o().label}</>}</Show>
+            {resolvedLabel()}
           </p>
         }
       >
@@ -345,7 +354,11 @@ function PermissionView(props: { block: Of<'permission'> }) {
             )}
           </For>
         </fieldset>
-        <p class="hint">{es.agent.permissionHint}</p>
+        <p class="hint">
+          {format(es.agent.permissionHint, {
+            keys: permissionKeys(Math.min(props.block.options.length, 9)),
+          })}
+        </p>
       </Show>
     </section>
   )
