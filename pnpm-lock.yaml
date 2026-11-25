@@ -208,6 +208,9 @@ importers:
       '@nexo/adapter-provider-claude':
         specifier: workspace:*
         version: link:../../packages/adapters/provider-claude
+      '@nexo/adapter-provider-ollama':
+        specifier: workspace:*
+        version: link:../../packages/adapters/provider-ollama
       '@nexo/adapter-pty-host':
         specifier: workspace:*
         version: link:../../packages/adapters/pty-host
@@ -312,6 +315,22 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: 0.3.331
         version: 0.3.331(@anthropic-ai/sdk@1.13.0(zod@4.6.7))(@modelcontextprotocol/sdk@1.32.2(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)
+      '@nexo/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@nexo/core':
+        specifier: workspace:*
+        version: link:../../core
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@nexo/testkit':
+        specifier: workspace:*
+        version: link:../../testkit
+
+  packages/adapters/provider-ollama:
+    dependencies:
       '@nexo/contracts':
         specifier: workspace:*
         version: link:../../contracts
