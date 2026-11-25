@@ -65,3 +65,72 @@ jobs:
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
       - run: cargo build
+
+  e2e:
+    name: e2e y rendimiento (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows queda fuera de la matriz: con ConPTY cada terminal tarda ~3 s en arrancar y la suite
+        # (con 10 + 30 terminales) pasaría de 15 minutos; la CLI, el daemon y la web ya se prueban allí en `check`.
+        os: [ubuntu-latest]
+    env:
+      # Los runners compartidos son más lentos y variables: margen del doble sobre el presupuesto local (16 ms).
+      NEXO_PERF_TAB_P95_MS: "32"
+      NEXO_PERF_LONGTASK_MAX_MS: "300"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Versión de Playwright
+        id: playwright
+        run: echo "version=$(pnpm --filter @nexo/e2e exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: browsers
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Instala Chromium y sus dependencias del sistema
+        if: steps.browsers.outputs.cache-hit != 'true'
+        run: pnpm --filter @nexo/e2e exec playwright install --with-deps chromium
+      - name: Dependencias del sistema (con Chromium en caché)
+        if: steps.browsers.outputs.cache-hit == 'true'
+        run: pnpm --filter @nexo/e2e exec playwright install-deps chromium
+      - run: pnpm e2e
+        env:
+          CI: "true"
+      - run: pnpm perf
+        env:
+          CI: "true"
+      - name: Resumen de rendimiento
+        if: always()
+        run: |
+          for f in e2e/results/*.json; do
+            [ -f "$f" ] || continue
+            echo "### $(basename "$f")" >> "$GITHUB_STEP_SUMMARY"
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            cat "$f" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          done
+      - name: Resultados de rendimiento
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-results-${{ matrix.os }}
+          path: e2e/results
+          if-no-files-found: ignore
+      - name: Trazas, capturas e informe si algo falla
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure-${{ matrix.os }}
+          path: |
+            e2e/test-results
+            e2e/report
+          if-no-files-found: ignore
+          retention-days: 7
