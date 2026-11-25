@@ -6,3 +6,4 @@ target
 .tgrep
 .tgrep-agent
 *.tsbuildinfo
+/apps/desktop/src-tauri/gen
