@@ -38,7 +38,7 @@ describe('daemon.json hostil', () => {
     expect(await code(found())).toBe('CORRUPT')
   })
 
-  it('rechaza un host no loopback y cualquier campo extra', async () => {
+  it('ignora campos desconocidos (incluido host) y sigue usando 127.0.0.1', async () => {
     const port = await fx.health()
     for (const extra of [
       { host: 'evil.example.com' },
@@ -46,9 +46,12 @@ describe('daemon.json hostil', () => {
       { host: '127.0.0.1' },
       { url: 'ws://evil.example.com:80/' },
       { __proto__x: 1, extra: true },
+      { campoNuevo: { anidado: [1, 2, 3] } },
     ]) {
       await fx.write(port, extra)
-      expect(await code(found()), JSON.stringify(extra)).toBe('CORRUPT')
+      const where = await found()
+      expect(where.url, JSON.stringify(extra)).toBe(`ws://127.0.0.1:${port}/`)
+      expect(where.port).toBe(port)
     }
   })
 

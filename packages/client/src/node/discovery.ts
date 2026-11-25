@@ -14,8 +14,8 @@ export class DiscoveryError extends Error {
   }
 }
 
-/** Misma forma que escribe el daemon; strict rechaza campos extra (p. ej. un host ajeno). */
-export const DaemonFile = z.strictObject({
+/** Forma que escribe el daemon. Los campos desconocidos se ignoran (compatibilidad hacia adelante); la URL siempre usa 127.0.0.1. */
+export const DaemonFile = z.object({
   version: z.string().min(1).max(64),
   port: z.int().min(1).max(65535),
   pid: z.int().positive(),
