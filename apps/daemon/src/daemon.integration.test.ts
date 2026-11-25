@@ -75,6 +75,43 @@ describe('daemon real', () => {
     expect(await waitDead(pid)).toBe(true)
   })
 
+  it('con el pty host, un crash nativo (host muerto) no tumba al daemon: la terminal sale con HOST_CRASH y las nuevas funcionan', async () => {
+    const d = await boot({ ptyMode: 'host' })
+    const c = await client(d)
+    await c.call('events.subscribe', {})
+    const { workspace } = await c.call<{ workspace: { id: string } }>('workspace.create', {
+      name: 'crash',
+    })
+    const { tab } = await c.call<{ tab: { panes: { id: string }[] } }>('tab.create', {
+      workspaceId: workspace.id,
+    })
+    const spawn = async (script: string) => {
+      const { tab: t2 } = await c.call<{ tab: { panes: { id: string }[] } }>('tab.create', {
+        workspaceId: workspace.id,
+      })
+      return c.call<{ terminalId: string }>('terminal.spawn', {
+        paneId: t2.panes[0]?.id as string,
+        cmd: process.execPath,
+        args: ['-e', script],
+        cols: 80,
+        rows: 24,
+      })
+    }
+    void tab
+    const live = 'console.log("vivo"); setInterval(()=>{},1000)'
+    const victim = await spawn(live)
+    await c.waitEvent('terminal.output', (data) => String(data.data).includes('vivo'))
+    const hostPid = d.ptyHostPid()
+    expect(hostPid).toBeDefined()
+    process.kill(hostPid as number, 'SIGKILL')
+    const exit = await c.waitEvent('terminal.exit', (data) => data.terminalId === victim.terminalId)
+    expect((exit.data as { signal: string }).signal).toBe('HOST_CRASH')
+    const next = await spawn('console.log("renacida"); setInterval(()=>{},1000)')
+    await c.waitEvent('terminal.output', (data) => String(data.data).includes('renacida'))
+    expect(next.terminalId).not.toBe(victim.terminalId)
+    expect(d.ptyHostPid()).not.toBe(hostPid)
+  })
+
   it('emite workspace.changed al renombrar y con seq creciente de uno en uno', async () => {
     const d = await boot()
     const c = await client(d)

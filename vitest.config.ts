@@ -6,6 +6,7 @@ import { defineConfig } from 'vitest/config'
 // reales a la vez llegaron a tumbar un worker.
 const heavyFiles = [
   'packages/adapters/pty-node/test/**/*.test.ts',
+  'packages/adapters/pty-host/test/**/*.test.ts',
   'apps/cli/src/cli.integration.test.ts',
   'apps/cli/src/cli.adversarial.test.ts',
   'apps/daemon/src/daemon.integration.test.ts',
@@ -51,6 +52,7 @@ export default defineConfig({
       project('core', './packages/core'),
       project('testkit', './packages/testkit'),
       project('adapter-pty-node', './packages/adapters/pty-node', 30000),
+      project('adapter-pty-host', './packages/adapters/pty-host', 30000),
       project('client', './packages/client', 30000),
       project('daemon', './apps/daemon', 30000),
       project('cli', './apps/cli', 30000),
@@ -77,6 +79,8 @@ export default defineConfig({
         '**/ports/**',
         '**/test-helpers.ts',
         'apps/cli/src/main.ts',
+        // Composición del proceso pty host (corre en un hijo); su lógica está en host-handler.ts.
+        'packages/adapters/pty-host/src/host.ts',
         '**/*.test.tsx',
         'apps/web/src/main.tsx',
         'apps/web/src/vite-env.d.ts',

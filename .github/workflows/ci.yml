@@ -27,6 +27,21 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
 
+  # Issue #15: node-pty/ConPTY puede caerse con una violación de acceso nativa al salir varias terminales a la vez.
+  # Con el pty host el crash queda contenido: el proceso que hace de daemon debe terminar bien en todas las rondas.
+  pty-stress:
+    name: estrés de PTY con pty host (windows-latest)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node tools/stress/pty-stress.mjs --rounds 30 --variants host-mixed,host-output-exit,host-resize-exit
+
   desktop:
     name: desktop rust (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

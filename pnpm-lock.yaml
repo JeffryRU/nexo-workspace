@@ -205,6 +205,9 @@ importers:
 
   apps/daemon:
     dependencies:
+      '@nexo/adapter-pty-host':
+        specifier: workspace:*
+        version: link:../../packages/adapters/pty-host
       '@nexo/adapter-pty-node':
         specifier: workspace:*
         version: link:../../packages/adapters/pty-node
@@ -294,6 +297,25 @@ importers:
       '@playwright/test':
         specifier: ^1.65.1
         version: 1.65.1
+
+  packages/adapters/pty-host:
+    dependencies:
+      '@nexo/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@nexo/core':
+        specifier: workspace:*
+        version: link:../../core
+      node-pty:
+        specifier: 1.1.0
+        version: 1.1.0
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@nexo/testkit':
+        specifier: workspace:*
+        version: link:../../testkit
 
   packages/adapters/pty-node:
     dependencies:

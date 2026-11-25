@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { PtyHostPort } from '@nexo/adapter-pty-host'
 import { NodePtyPort } from '@nexo/adapter-pty-node'
 import {
   createDispatcher,
@@ -67,6 +68,11 @@ export type DaemonOptions = {
   /** `apps/web/dist` por omisión; `null` desactiva la web. */
   webRoot?: string | null
   pty?: PtyPort
+  /**
+   * Dónde viven los PTY cuando no se inyecta `pty`: `host` los aísla en un proceso hijo (un crash nativo de
+   * ConPTY no tumba el daemon); `direct` los crea en el propio daemon. Por omisión: `host` en Windows.
+   */
+  ptyMode?: 'host' | 'direct'
   /** Se llama (tras responder) cuando un cliente pide `daemon.shutdown`; por omisión detiene el daemon. */
   onShutdownRequested?: (stop: () => Promise<void>) => void
   terminal?: TerminalServiceConfig
@@ -92,6 +98,8 @@ export type RunningDaemon = {
   readonly bus: EventBusPort
   readonly logger: LoggerPort
   stats(): ServerStats
+  /** PID del proceso pty host (solo con `ptyMode: 'host'`); para diagnóstico y pruebas. */
+  ptyHostPid(): number | undefined
   /** Mata las terminales, cierra conexiones y borra el descubrimiento. Idempotente. */
   stop(): Promise<void>
 }
@@ -136,8 +144,15 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   const layout = new LayoutService({ ids, bus })
   const shell = resolveDefaultShell({ env: process.env, platform: process.platform })
   if (shell.warning !== undefined) logger.warn(shell.warning)
+  const ptyMode = options.ptyMode ?? (process.platform === 'win32' ? 'host' : 'direct')
+  const hostPort =
+    options.pty === undefined && ptyMode === 'host'
+      ? new PtyHostPort({ baseEnv: childBaseEnv(), logger })
+      : undefined
+  const pty = options.pty ?? hostPort ?? new NodePtyPort({ baseEnv: childBaseEnv() })
+  logger.info('terminales (PTY)', { mode: options.pty === undefined ? ptyMode : 'inyectado' })
   const terminals = new TerminalService({
-    pty: options.pty ?? new NodePtyPort({ baseEnv: childBaseEnv() }),
+    pty,
     bus,
     clock,
     ids,
@@ -183,6 +198,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   const stop = (): Promise<void> => {
     stopped ??= (async () => {
       terminals.shutdown()
+      hostPort?.dispose()
       await server.close()
       await removeDiscovery(paths).catch(() => {})
       await lock.release().catch(() => {})
@@ -209,9 +225,19 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       startedAt,
     })
     logger.info('daemon escuchando', { port, stateDir: paths.dir })
-    return { port, token, paths, bus, logger, stats: () => server.stats(), stop }
+    return {
+      port,
+      token,
+      paths,
+      bus,
+      logger,
+      stats: () => server.stats(),
+      ptyHostPid: () => hostPort?.hostPid,
+      stop,
+    }
   } catch (error) {
     terminals.shutdown()
+    hostPort?.dispose()
     await server.close().catch(() => {})
     await lock.release().catch(() => {})
     throw error
