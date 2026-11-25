@@ -3,7 +3,7 @@ import { request } from 'node:http'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
 import { DaemonAlreadyRunningError, PortInUseError, startDaemon } from './daemon.ts'
 import {
@@ -430,6 +430,56 @@ describe('contrapresión', () => {
     expect(seqs.some((s, i) => i > 0 && s - (seqs[i - 1] as number) > 1)).toBe(true)
     // Y el cliente se recupera: ya puede pedir snapshot.
     expect((await slow.call<{ seq: number }>('snapshot')).seq).toBeGreaterThan(0)
+  })
+
+  it('no apila client.resync: uno por ráfaga hasta que el cliente relee (o pasa resyncAckMs)', async () => {
+    const d = await boot({
+      server: { softBufferBytes: 256 * 1024, hardBufferBytes: 64 * 1024 * 1024, resyncAckMs: 600 },
+    })
+    const slow = await authed(d)
+    await slow.call('events.subscribe', { events: ['terminal.output', 'client.resync'] })
+    const burst = async (from: number) => {
+      slow.ws.pause()
+      const before = d.stats().droppedOutputEvents
+      for (let i = 0; i < 4000 && d.stats().droppedOutputEvents - before < 20; i++) {
+        d.bus.publish(out(from + i))
+        if (i % 20 === 0) await new Promise((r) => setImmediate(r))
+      }
+      slow.ws.resume()
+    }
+    const resyncs = () => slow.messages.filter((m) => m.event === 'client.resync').length
+
+    await burst(0)
+    await slow.waitEvent('client.resync', () => true, 10000)
+    expect(resyncs()).toBe(1)
+    // Segunda ráfaga sin que el cliente haya releído: no se manda otro client.resync todavía...
+    await burst(10_000)
+    await new Promise((r) => setTimeout(r, 300))
+    expect(resyncs()).toBe(1)
+    // ...hasta que pasa el tope de espera (cliente que nunca confirma),
+    await vi.waitFor(() => expect(resyncs()).toBe(2), { timeout: 5000 })
+    // o hasta que confirma con un snapshot: entonces la siguiente ráfaga sí avisa enseguida.
+    await slow.call('snapshot')
+    await burst(20_000)
+    await vi.waitFor(() => expect(resyncs()).toBe(3), { timeout: 5000 })
+  })
+
+  it('tras confirmar con terminal.read y sin más pérdidas no se envía un client.resync vacío', async () => {
+    const d = await boot({
+      server: { softBufferBytes: 256 * 1024, hardBufferBytes: 64 * 1024 * 1024 },
+    })
+    const slow = await authed(d)
+    await slow.call('events.subscribe', { events: ['terminal.output', 'client.resync'] })
+    slow.ws.pause()
+    for (let i = 0; i < 4000 && d.stats().droppedOutputEvents < 20; i++) {
+      d.bus.publish(out(i))
+      if (i % 20 === 0) await new Promise((r) => setImmediate(r))
+    }
+    slow.ws.resume()
+    await slow.waitEvent('client.resync', () => true, 10000)
+    await slow.call('snapshot')
+    await new Promise((r) => setTimeout(r, 200))
+    expect(slow.messages.filter((m) => m.event === 'client.resync')).toHaveLength(1)
   })
 
   it('pasado el umbral duro se corta al cliente', async () => {

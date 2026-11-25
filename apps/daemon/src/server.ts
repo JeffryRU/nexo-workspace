@@ -46,6 +46,8 @@ export type ServerOptions = {
   hardBufferBytes?: number
   /** Tras tantos mensajes abusivos (binarios, demasiado grandes) se cierra la conexión. */
   maxStrikes?: number
+  /** Espera máxima de la confirmación de un `client.resync` antes de mandar otro (2 s). */
+  resyncAckMs?: number
 }
 
 type RuntimeLimits = {
@@ -55,6 +57,7 @@ type RuntimeLimits = {
   softBufferBytes: number
   hardBufferBytes: number
   maxStrikes: number
+  resyncAckMs: number
 }
 
 export type ServerStats = {
@@ -84,6 +87,8 @@ class Connection {
   readonly #dispatch: Dispatcher
   #authTimer: NodeJS.Timeout | undefined
   #resyncTimer: NodeJS.Timeout | undefined
+  /** Instante del último `client.resync` enviado sin que el cliente confirmara ponerse al día. */
+  #resyncSentAt: number | undefined
 
   constructor(server: DaemonServer, ws: WebSocket, authed: boolean) {
     this.#server = server
@@ -168,12 +173,22 @@ class Connection {
     this.#resyncTimer = setInterval(() => {
       if (this.ws.readyState !== this.ws.OPEN) return this.dispose()
       if (this.ws.bufferedAmount > this.#server.limits.softBufferBytes / 2) return
+      // Un solo `client.resync` en vuelo: hasta que el cliente relea (`snapshot`/`terminal.read`) no se manda
+      // otro, porque cada uno dispara trabajo de relectura en la interfaz y apilarlos la atrasa más. Los
+      // descartes siguen contándose y los huecos de `seq`/offset siguen a la vista del cliente. Si nunca
+      // confirma (cliente sin autoResync) se reenvía pasado `resyncAckMs`.
+      const sentAt = this.#resyncSentAt
+      if (sentAt !== undefined && Date.now() - sentAt < this.#server.limits.resyncAckMs) return
       clearInterval(this.#resyncTimer)
       this.#resyncTimer = undefined
       const dropped = this.dropped
       this.dropped = 0
+      if (dropped === 0) return
       const data: EventData<'client.resync'> = { reason: 'backpressure', dropped }
-      if (this.filter?.has('client.resync')) this.#sendEvent(++this.seq, 'client.resync', data)
+      if (this.filter?.has('client.resync')) {
+        this.#resyncSentAt = Date.now()
+        this.#sendEvent(++this.seq, 'client.resync', data)
+      }
     }, 25)
     this.#resyncTimer.unref()
   }
@@ -222,6 +237,10 @@ class Connection {
       this.close(1008, 'unauthorized')
       return
     }
+    // Relectura del cliente: confirma que atiende el último `client.resync`.
+    if (request.method === 'snapshot' || request.method === 'terminal.read') {
+      this.#resyncSentAt = undefined
+    }
     void this.#dispatch({ method: request.method, params: request.params } as never).then(
       (outcome) => this.reply(request.id, outcome),
       () => this.fail(request.id, 'INTERNAL', 'error interno'),
@@ -250,6 +269,7 @@ export class DaemonServer {
       softBufferBytes: options.softBufferBytes ?? 1024 * 1024,
       hardBufferBytes: options.hardBufferBytes ?? 16 * 1024 * 1024,
       maxStrikes: options.maxStrikes ?? 3,
+      resyncAckMs: options.resyncAckMs ?? 2000,
     }
     this.#maxConnections = options.maxConnections ?? 128
     this.#static = createStaticHandler(options.webRoot)
