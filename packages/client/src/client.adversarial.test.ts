@@ -275,6 +275,37 @@ describe('cliente frente a un servidor hostil', () => {
   })
 })
 
+describe('NexoClient: resyncs en ráfaga', () => {
+  it('con el snapshot perdido, cada resync se anuncia, solo hay uno en vuelo y tras vencer se puede otro', async () => {
+    const server = new FakeServer()
+    let answer = false
+    server.handler = (req) => (req.method === 'snapshot' && !answer ? 'silent' : undefined)
+    const client = new NexoClient({
+      transport: server.factory,
+      autoResync: true,
+      callTimeoutMs: 40,
+      reconnect: false,
+    })
+    await client.connect()
+    await client.subscribe()
+    const infos: string[] = []
+    client.on('resync', (i) => infos.push(i.reason))
+    for (let i = 0; i < 20; i++) {
+      server.last.pushEvent('client.resync', i + 1, { reason: 'backpressure', dropped: 1 })
+    }
+    await tick()
+    expect(infos).toHaveLength(20)
+    expect(server.last.sent.filter((r) => r.method === 'snapshot')).toHaveLength(1)
+    // Vence a los 40 ms sin respuesta y libera el candado.
+    await new Promise((r) => setTimeout(r, 80))
+    answer = true
+    server.last.pushEvent('client.resync', 21, { reason: 'backpressure', dropped: 1 })
+    await tick()
+    expect(server.last.sent.filter((r) => r.method === 'snapshot')).toHaveLength(2)
+    client.close()
+  })
+})
+
 describe('backoffDelay con entradas extremas', () => {
   it('siempre queda dentro de [base, tope]', () => {
     const o = { baseMs: 50, maxMs: 5000 }

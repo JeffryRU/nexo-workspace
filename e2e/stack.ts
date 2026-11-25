@@ -55,6 +55,11 @@ export class Stack {
     return stack
   }
 
+  /** `true` mientras el daemon lanzado por esta pila sigue vivo. */
+  get running(): boolean {
+    return this.#daemon !== undefined
+  }
+
   get token(): string {
     return readFileSync(join(this.dir, 'token'), 'utf8').trim()
   }

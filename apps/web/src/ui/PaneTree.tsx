@@ -1,15 +1,5 @@
 import type { Layout, PaneId, SplitDirection } from '@nexo/contracts'
-import {
-  type Accessor,
-  createContext,
-  createEffect,
-  For,
-  Match,
-  onCleanup,
-  Show,
-  Switch,
-  useContext,
-} from 'solid-js'
+import { createEffect, For, Match, onCleanup, Show, Switch } from 'solid-js'
 import { useModel } from '../app/model.tsx'
 import { es } from '../i18n/es.ts'
 import { type DividerTarget, dividerTarget } from '../layout/tree.ts'

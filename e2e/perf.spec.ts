@@ -11,6 +11,9 @@ const TAB_SWITCH_P95_MS = Number(process.env.NEXO_PERF_TAB_P95_MS ?? '16')
 const LONGTASK_MAX_MS = Number(process.env.NEXO_PERF_LONGTASK_MAX_MS ?? '150')
 const HEAP_GROWTH_MAX_MB = Number(process.env.NEXO_PERF_HEAP_GROWTH_MB ?? '100')
 
+// Tras una ráfaga de 20 MB, el xterm muestra la última línea a los pocos segundos de que el daemon la vea.
+const LAST_LINE_MAX_MS = Number(process.env.NEXO_PERF_LAST_LINE_MS ?? '10000')
+
 const TABS = 10
 const SWITCHES = 50
 const OUT_DIR = join(import.meta.dirname, 'results')
@@ -135,11 +138,22 @@ test('una terminal que escupe 20 MB no congela la interfaz ni deja crecer la mem
   await expect.poll(() => bufferText(app, paneId), { timeout: 20_000 }).not.toBeNull()
   const cdp = await app.context().newCDPSession(app)
   await cdp.send('Performance.enable')
+  // Para reproducir una máquina lenta en local: NEXO_PERF_CPU_THROTTLE=10 (también conviene subir los umbrales).
+  if (process.env.NEXO_PERF_CPU_THROTTLE !== undefined) {
+    await cdp.send('Emulation.setCPUThrottlingRate', {
+      rate: Number(process.env.NEXO_PERF_CPU_THROTTLE),
+    })
+  }
 
   const baselineMb = await heapMb(cdp)
   await sleep(500) // la pausa del GC forzado también cuenta como tarea larga: que no caiga en la ronda
-  const rounds: { heapAfterMb: number; peakMb: number; longestTaskMs: number; seconds: number }[] =
-    []
+  const rounds: {
+    heapAfterMb: number
+    peakMb: number
+    longestTaskMs: number
+    seconds: number
+    lastLineMs: number
+  }[] = []
   for (let round = 1; round <= 2; round++) {
     const before = (await longTasks(app)).length
     let peak = 0
@@ -155,7 +169,16 @@ test('una terminal que escupe 20 MB no congela la interfaz ni deja crecer la mem
       peak = Math.max(peak, used / 1048576)
       await sleep(250)
     }
-    await sleep(3000) // la interfaz sigue procesando lo recibido
+    // La última línea debe verse en el xterm (no solo en el daemon) en poco tiempo (issue #21).
+    const tDaemon = Date.now()
+    await expect
+      .poll(async () => (await bufferText(app, paneId))?.includes(`FIN-20MB-${round}`) ?? false, {
+        timeout: LAST_LINE_MAX_MS + 5000,
+        intervals: [100],
+      })
+      .toBe(true)
+    const lastLineMs = Date.now() - tDaemon
+    await sleep(2000) // la interfaz sigue procesando lo recibido
     const seconds = Math.round((Date.now() - t0) / 100) / 10
     const during = (await longTasks(app)).slice(before)
     const heapAfterMb = await heapMb(cdp)
@@ -165,10 +188,12 @@ test('una terminal que escupe 20 MB no congela la interfaz ni deja crecer la mem
       peakMb: Math.round(peak * 10) / 10,
       longestTaskMs: Math.round(Math.max(0, ...during)),
       seconds,
+      lastLineMs,
     })
   }
   const result = {
     limitLongTaskMs: LONGTASK_MAX_MS,
+    limitLastLineMs: LAST_LINE_MAX_MS,
     limitHeapGrowthMb: HEAP_GROWTH_MAX_MB,
     baselineMb,
     rounds,
@@ -183,6 +208,7 @@ test('una terminal que escupe 20 MB no congela la interfaz ni deja crecer la mem
   console.log(`salida de 20 MB: ${JSON.stringify(result)}`)
 
   for (const r of rounds) expect(r.longestTaskMs).toBeLessThan(LONGTASK_MAX_MS)
+  for (const r of rounds) expect(r.lastLineMs).toBeLessThan(LAST_LINE_MAX_MS)
   // Tras la salida la memoria no puede haber crecido sin límite (el scrollback de xterm está acotado)...
   expect(rounds[1]?.heapAfterMb ?? Number.POSITIVE_INFINITY).toBeLessThan(
     baselineMb + HEAP_GROWTH_MAX_MB,

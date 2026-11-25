@@ -17,6 +17,8 @@ export const es = {
     unreachable:
       'No se pudo abrir la conexión. Comprueba que el daemon esté en marcha y que el puerto y el token sean correctos.',
     closed: 'La conexión se cerró y no se pudo restablecer.',
+    restarted:
+      'El daemon se reinició y generó un token nuevo. Abre la nueva dirección que imprime «pnpm dev:web» (con ?port=…&t=…).',
   },
   sidebar: {
     label: 'Espacios de trabajo',

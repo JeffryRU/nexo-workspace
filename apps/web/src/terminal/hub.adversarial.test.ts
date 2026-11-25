@@ -164,7 +164,8 @@ describe('hub: ráfagas y datos hostiles', () => {
     hub.onOutput('x1', Number.MAX_SAFE_INTEGER, 'a')
     await tick()
     await new Promise((r) => setTimeout(r, 20))
-    expect(reads).toBeLessThanOrEqual(400) // tope de rondas por relectura × reintentos de hueco
+    // Tope de rondas por relectura × (1 + continuaciones) × reintentos de hueco.
+    expect(reads).toBeLessThanOrEqual(64 * 9 * 4)
     hub.onOutput('x1', -5, 'a')
     hub.onOutput('x1', 0, '')
   })

@@ -22,6 +22,7 @@ async function load(): Promise<void> {
   }
   const session = createDaemonSession({
     info: result.info,
+    source,
     queryClient,
     // El renderer DOM de xterm repinta todas las filas en cada desplazamiento, también con el panel oculto
     // (y midiendo sin layout), lo que satura el hilo principal: una terminal oculta no recibe salida hasta

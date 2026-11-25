@@ -36,6 +36,12 @@ type Entry = {
   writing: boolean
   visible: boolean
   catchingUp: boolean
+  /** Hay lo que releer pero no se pide hasta que el panel se muestre (terminal oculta con xterm). */
+  stale: boolean
+  /** Continuación programada de una relectura larga (cedida para no acaparar el hilo). */
+  continuation: ReturnType<typeof setTimeout> | undefined
+  /** Continuaciones seguidas (acotadas: un daemon que nunca termina no puede mantenernos leyendo siempre). */
+  continuations: number
   held: { end: number; data: string }[]
   needsReset: boolean
   /** Relecturas seguidas que no cerraron el hueco (evita bucles si el daemon no avanza). */
@@ -47,6 +53,7 @@ type Entry = {
 const MAX_HELD = 256
 const MAX_READ_ROUNDS = 64
 const MAX_GAP_RETRIES = 3
+const MAX_CONTINUATIONS = 8
 
 /** Corta el inicio de `data` hasta `skipBytes` bytes UTF-8 (por puntos de código, sin partir pares). */
 export function sliceFromByte(data: string, skipBytes: number): string {
@@ -89,6 +96,7 @@ export class TerminalHub {
       if (!live.has(id)) {
         const e = this.#entries.get(id) as Entry
         clearTimeout(e.recovery)
+        clearTimeout(e.continuation)
         this.#dirty.delete(e)
         this.#entries.delete(id)
       }
@@ -122,6 +130,10 @@ export class TerminalHub {
     const entry = this.#entries.get(id)
     if (entry === undefined) return
     entry.visible = visible
+    if (visible && entry.stale) {
+      entry.stale = false
+      void this.#catchUp(entry)
+    }
     if (entry.pendingChars > 0) this.#markDirty(entry)
   }
 
@@ -129,6 +141,8 @@ export class TerminalHub {
   onOutput(id: string, end: number, data: string): void {
     const entry = this.#entries.get(id)
     if (entry === undefined || this.#disposed) return
+    // Oculta y atrasada: lo perdido se relee al mostrarla; acumular eventos sueltos no sirve.
+    if (entry.stale) return
     if (entry.catchingUp) {
       if (entry.held.length < MAX_HELD) entry.held.push({ end, data })
       return
@@ -138,12 +152,15 @@ export class TerminalHub {
 
   /** Tras reconectar o perder eventos: relee de cada terminal lo que falta desde su último offset. */
   async resync(): Promise<void> {
-    await Promise.all([...this.#entries.values()].map((e) => this.#catchUp(e)))
+    await Promise.all([...this.#entries.values()].map((e) => this.#requestCatchUp(e)))
   }
 
   dispose(): void {
     this.#disposed = true
-    for (const e of this.#entries.values()) clearTimeout(e.recovery)
+    for (const e of this.#entries.values()) {
+      clearTimeout(e.recovery)
+      clearTimeout(e.continuation)
+    }
     this.#entries.clear()
     this.#dirty.clear()
   }
@@ -167,6 +184,9 @@ export class TerminalHub {
       writing: false,
       visible: false,
       catchingUp: false,
+      stale: false,
+      continuation: undefined,
+      continuations: 0,
       held: [],
       needsReset: false,
       gapRetries: 0,
@@ -179,6 +199,10 @@ export class TerminalHub {
     const start = end - bytes
     if (end <= entry.offset) return
     if (start > entry.offset) {
+      if (this.#deferred(entry)) {
+        entry.stale = true
+        return
+      }
       if (entry.gapRetries >= MAX_GAP_RETRIES) {
         // No se descarta para siempre: tras una ráfaga (el daemon descarta lo viejo más rápido de lo que se
         // relee) el hueco solo se cierra cuando la salida se calma, así que se reintenta más tarde.
@@ -201,8 +225,21 @@ export class TerminalHub {
       entry.recovery = undefined
       if (this.#disposed || this.#entries.get(entry.id) !== entry) return
       entry.gapRetries = 0
-      void this.#catchUp(entry)
+      void this.#requestCatchUp(entry)
     }, this.#deps.gapRecoveryMs ?? 500)
+  }
+
+  /** Terminal con xterm pero oculta: no se relee hasta que se muestre. */
+  #deferred(entry: Entry): boolean {
+    return entry.sink !== undefined && !entry.visible
+  }
+
+  #requestCatchUp(entry: Entry): Promise<void> {
+    if (this.#deferred(entry)) {
+      entry.stale = true
+      return Promise.resolve()
+    }
+    return this.#catchUp(entry)
   }
 
   #push(entry: Entry, data: string): void {
@@ -225,8 +262,10 @@ export class TerminalHub {
   async #catchUp(entry: Entry): Promise<void> {
     if (entry.catchingUp) return
     entry.catchingUp = true
+    let more = false
     try {
       for (let round = 0; round < MAX_READ_ROUNDS; round++) {
+        more = round === MAX_READ_ROUNDS - 1
         let result: ReadResult
         try {
           result = await this.#deps.read(entry.id, entry.offset)
@@ -241,6 +280,7 @@ export class TerminalHub {
         }
         if (result.data.length === 0 || result.offset <= entry.offset) {
           if (result.truncated === true) entry.offset = Math.max(entry.offset, result.offset)
+          more = false
           break
         }
         this.#push(entry, result.data)
@@ -250,8 +290,19 @@ export class TerminalHub {
       entry.catchingUp = false
       const held = entry.held
       entry.held = []
-      if (this.#entries.get(entry.id) === entry)
+      if (this.#entries.get(entry.id) === entry) {
         for (const h of held) this.#accept(entry, h.end, h.data)
+        // Tras el tope de rondas aún había más: se sigue en otra tarea (antes se quedaba a medias).
+        if (!more) entry.continuations = 0
+        if (more && entry.continuation === undefined && entry.continuations++ < MAX_CONTINUATIONS) {
+          entry.continuation = setTimeout(() => {
+            entry.continuation = undefined
+            if (!this.#disposed && this.#entries.get(entry.id) === entry) {
+              void this.#requestCatchUp(entry)
+            }
+          }, 0)
+        }
+      }
     }
   }
 
