@@ -22,7 +22,7 @@ export default defineConfig({
   projects: [
     {
       name: 'e2e',
-      testMatch: ['e2e.spec.ts', 'adversarial.spec.ts'],
+      testMatch: ['e2e.spec.ts', 'adversarial.spec.ts', 'agent.spec.ts'],
       use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } },
     },
     {

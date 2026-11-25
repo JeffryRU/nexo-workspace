@@ -65,8 +65,10 @@ export class AgentPaneModel {
   readonly #expanded = new Map<string, Signal<boolean>>()
   readonly #draft = signal('')
   readonly #pendingBlocks = new Map<string, Block>()
+  readonly #pending = signal<string[]>([])
   #known = new Set<string>()
   #structureDirty = false
+  #structureChanged = false
   #fullDirty = false
   #scheduled = false
   #doc: AgentDocument | undefined
@@ -154,15 +156,9 @@ export class AgentPaneModel {
     s.set(!s.get())
   }
 
-  /** Ids de los bloques `permission`/`question` que esperan respuesta, en orden. */
+  /** Ids de los bloques `permission`/`question` que esperan respuesta, en orden (reactivo). */
   pendingIds(): string[] {
-    const out: string[] = []
-    for (const id of this.#ids.get()) {
-      const b = this.#blocks.get(id)?.get()
-      if ((b?.type === 'permission' || b?.type === 'question') && b.state === 'pending')
-        out.push(id)
-    }
-    return out
+    return this.#pending.get()
   }
 
   /** ¿Se puede escribir? No con la sesión caída, cerrada o en error. */
@@ -240,6 +236,7 @@ export class AgentPaneModel {
     this.#doc = undefined
     this.#pendingBlocks.clear()
     this.#ids.set([])
+    this.#pending.set([])
     this.#known = new Set()
     for (const s of this.#blocks.values()) s.set(undefined)
     this.#blocks.clear()
@@ -305,6 +302,7 @@ export class AgentPaneModel {
     if (doc === undefined || this.#disposed) return
     if (this.#structureDirty) {
       this.#structureDirty = false
+      this.#structureChanged = true
       const blocks = doc.blocks()
       this.#ids.set(blocks.map((b) => b.id))
       this.#known = new Set(this.#ids.get())
@@ -313,8 +311,19 @@ export class AgentPaneModel {
         for (const b of blocks) this.#blockSignal(b.id).set(b)
       }
     }
-    for (const [id, b] of this.#pendingBlocks) this.#blockSignal(id).set(b)
+    let touchedPending = this.#structureChanged
+    for (const [id, b] of this.#pendingBlocks) {
+      this.#blockSignal(id).set(b)
+      if (b.type === 'permission' || b.type === 'question') touchedPending = true
+    }
     this.#pendingBlocks.clear()
+    if (touchedPending) {
+      const next = doc.pending().map((b) => b.id)
+      const prev = this.#pending.get()
+      if (next.length !== prev.length || next.some((id, i) => id !== prev[i]))
+        this.#pending.set(next)
+    }
+    this.#structureChanged = false
     this.#syncing.set(doc.syncing)
   }
 
@@ -416,5 +425,6 @@ export class AgentPaneModel {
     this.#disposed = true
     this.#opening++
     this.#closeDoc()
+    this.#docState.set('none')
   }
 }

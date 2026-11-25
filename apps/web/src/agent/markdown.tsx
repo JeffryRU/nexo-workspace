@@ -17,10 +17,69 @@ export const MAX_MARKDOWN_DEPTH = 24
 
 export type MarkdownTokens = { tokens: Token[]; failed: false } | { tokens: []; failed: true }
 
+/**
+ * Hasta este tamaño el texto se analiza entero (fidelidad total). Por encima se parte en trozos separados por
+ * líneas en blanco: el análisis de énfasis de `marked` es cuadrático con entradas patológicas (`*a*a*a…`), así que
+ * acotar el trozo acota el peor caso, y los trozos ya terminados se reutilizan mientras el texto sigue creciendo.
+ */
+export const FULL_PARSE_CHARS = 12_000
+/** Un trozo (sin código vallado) más largo que esto no se interpreta: se muestra como texto. */
+export const MAX_CHUNK_CHARS = 8_000
+
+const LF = String.fromCharCode(10)
+const FENCE = /^ {0,3}(`{3,}|~{3,})/
+
+/** Parte el texto en trozos de bloques por líneas en blanco, sin cortar los bloques de código vallados. */
+export function splitChunks(text: string): { text: string; fenced: boolean }[] {
+  const chunks: { text: string; fenced: boolean }[] = []
+  let current: string[] = []
+  let fence: string | undefined
+  let fenced = false
+  const push = () => {
+    if (current.length > 0) chunks.push({ text: current.join(LF), fenced })
+    current = []
+    fenced = false
+  }
+  for (const line of text.split(LF)) {
+    if (fence !== undefined) {
+      current.push(line)
+      const close = FENCE.exec(line)?.[1]
+      if (
+        close !== undefined &&
+        close[0] === fence[0] &&
+        close.length >= fence.length &&
+        line.trim() === close
+      ) {
+        fence = undefined
+      }
+      continue
+    }
+    const open = FENCE.exec(line)
+    if (open !== null) {
+      fence = open[1] as string
+      fenced = true
+      current.push(line)
+    } else if (line.trim() === '') {
+      push()
+    } else current.push(line)
+  }
+  push()
+  return chunks
+}
+
 export function parseMarkdown(text: string): MarkdownTokens {
   if (text.length > MAX_MARKDOWN_CHARS) return { tokens: [], failed: true }
   try {
-    return { tokens: Lexer.lex(text, { gfm: true, breaks: false }), failed: false }
+    if (text.length <= FULL_PARSE_CHARS) {
+      return { tokens: Lexer.lex(text, { gfm: true, breaks: false }), failed: false }
+    }
+    const tokens: Token[] = []
+    for (const chunk of splitChunks(text)) {
+      if (!chunk.fenced && chunk.text.length > MAX_CHUNK_CHARS) {
+        tokens.push({ type: 'plain', raw: chunk.text, text: chunk.text })
+      } else tokens.push(...Lexer.lex(chunk.text, { gfm: true, breaks: false }))
+    }
+    return { tokens, failed: false }
   } catch {
     // Anidamiento extremo (RangeError) u otro fallo: se muestra como texto plano.
     return { tokens: [], failed: true }
@@ -28,7 +87,20 @@ export function parseMarkdown(text: string): MarkdownTokens {
 }
 
 export function Markdown(props: { text: string }) {
-  const parsed = createMemo(() => parseMarkdown(props.text))
+  // Los bloques cuyo texto no cambió conservan su ficha (y por tanto su DOM): al llegar texto solo se repinta el final.
+  let known = new Map<string, Token>()
+  const parsed = createMemo((): MarkdownTokens => {
+    const p = parseMarkdown(props.text)
+    if (p.failed) return p
+    const next = new Map<string, Token>()
+    const tokens = p.tokens.map((t) => {
+      const kept = known.get(t.raw) ?? t
+      next.set(t.raw, kept)
+      return kept
+    })
+    known = next
+    return { tokens, failed: false }
+  })
   return (
     <div class="md">
       <Show
@@ -87,6 +159,9 @@ function BlockToken(props: { token: Token; depth: number }) {
         </Match>
         <Match when={t().type === 'table'}>
           <TableView table={t() as Tokens.Table} />
+        </Match>
+        <Match when={t().type === 'plain'}>
+          <pre class="md-plain">{(t() as { text: string }).text}</pre>
         </Match>
         <Match when={t().type === 'html'}>
           {/* HTML crudo: se muestra como texto, nunca se interpreta. */}
