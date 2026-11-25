@@ -558,7 +558,11 @@ Presupuestos (los mide una prueba de rendimiento en CI, con margen):
 - **Agente (F2.6), medido en `pnpm perf`:** latencia del primer delta en pantalla desde el Intro (p95 < 500 ms en local), recorrido
   completo de un documento de 5 000 bloques sin tareas largas por encima del umbral existente (150 ms en local, 500 en CI) ni
   más de 200 nodos dibujados, y cambio de pestaña con 4 agentes y 2 terminales emitiendo con el mismo presupuesto de p95
-  que antes. Mediciones del CI: {{MEDICIONES}}
+  que antes. Mediciones del CI: (ubuntu, job «e2e y rendimiento»; las pruebas de rendimiento exigen los umbrales por omisión, salvo el cambio de
+  pestaña, que usa el del CI) primer delta p50 45 ms y p95 55 ms (10 turnos); recorrido a 2 500 px/s y 20 saltos largos por
+  5 000 bloques: p95 de fotograma 16,8 ms, 0 tareas largas y 59 nodos como máximo; cambio de pestaña con 4 agentes y 2
+  terminales emitiendo: p95 7,5 ms (máximo 7,9 ms; presupuesto 16 ms, límite del CI 40 ms). Un panel de agente oculto no
+  recoloca su ventana de bloques al crecer, para no montarla entera al mostrarlo.
 - **Agentes rápidos:** el texto se transmite en parcial (deltas); el proceso del proveedor se precalienta
   al abrir una pestaña de agente o enfocar el redactor; Codex usa un solo `app-server` para todos los hilos.
 - **Reactividad fina:** SolidJS actualiza solo los nodos que cambian; el estado en vivo vive en stores de
