@@ -79,6 +79,7 @@ export type DaemonOptions = {
       | 'rate'
       | 'softBufferBytes'
       | 'hardBufferBytes'
+      | 'resyncAckMs'
       | 'maxStrikes'
     >
   >

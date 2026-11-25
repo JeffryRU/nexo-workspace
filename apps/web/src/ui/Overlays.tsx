@@ -26,6 +26,12 @@ export function NoDaemonScreen(props: { reason: InfoFailure; onRetry: () => void
   )
 }
 
+function offlineMessage(failure: string | undefined): string {
+  if (failure === 'closed') return es.status.closed
+  if (failure === 'restarted') return es.status.restarted
+  return es.status.unreachable
+}
+
 /** Pantalla de estado mientras se conecta o si no hay conexión; con reconexión automática. */
 export function ConnectionScreen() {
   const { status, failure, retry } = useModel()
@@ -40,7 +46,7 @@ export function ConnectionScreen() {
             : es.status.offline}
       </p>
       <Show when={status() === 'offline'}>
-        <p class="muted">{failure() === 'closed' ? es.status.closed : es.status.unreachable}</p>
+        <p class="muted">{offlineMessage(failure())}</p>
         <button type="button" class="text-button" onClick={() => void retry()}>
           {es.status.retry}
         </button>
@@ -51,11 +57,17 @@ export function ConnectionScreen() {
 
 /** Franja sobre la interfaz cuando se pierde la conexión pero ya había estado. */
 export function ReconnectBanner() {
-  const { status, retry } = useModel()
+  const { status, failure, retry } = useModel()
   return (
     <Show when={status() === 'reconnecting' || status() === 'offline'}>
       <div class="banner" role="status" aria-live="polite">
-        <span>{status() === 'reconnecting' ? es.status.reconnecting : es.status.offline}</span>
+        <span>
+          {status() === 'reconnecting'
+            ? es.status.reconnecting
+            : failure() === 'restarted'
+              ? es.status.restarted
+              : es.status.offline}
+        </span>
         <Show when={status() === 'offline'}>
           <button type="button" class="text-button" onClick={() => void retry()}>
             {es.status.retry}

@@ -146,6 +146,10 @@ Todo en `packages/core`, sin I/O; el daemon (F1.3) solo los conecta con adaptado
   descartan sus `terminal.output` (el `seq` sigue avanzando, así que el hueco es visible) y, cuando el búfer se
   vacía, el daemon le envía `client.resync { reason: 'backpressure', dropped }`: el cliente debe pedir `snapshot` y
   `terminal.read` con `fromOffset`. Pasados 16 MiB el cliente se desconecta. La memoria por cliente queda acotada.
+  Solo hay **un `client.resync` en vuelo por conexión**: no se manda otro hasta que el cliente relee (`snapshot` o
+  `terminal.read`) o pasan 2 s (cliente que nunca confirma); los descartes siguen contándose y los huecos de
+  `seq`/offset siguen a la vista. Las respuestas nunca se descartan (solo `terminal.output`), así que las lecturas
+  del catch-up no compiten con el presupuesto que dispara el resync.
 - **HTTP:** `GET /health` → `{ ok, version }` sin token. Sirve `apps/web/dist` si existe, solo GET/HEAD, con CSP
   restrictiva, `X-Content-Type-Options`, `X-Frame-Options`, sin listar directorios y rechazando `..`, `%2e%2e`,
   `\`, `:` (rutas de Windows), NUL, archivos ocultos, nombres de dispositivo y enlaces simbólicos que salgan de
@@ -269,14 +273,27 @@ Presupuestos (los mide una prueba de rendimiento en CI, con margen):
 Implementación de la F1.6 (`apps/web/src`):
 
 - **Conexión** (`daemon/`): `getDaemonInfo()` tiene dos fuentes que se eligen en tiempo de ejecución: navegador/dev
-  (lee `?port=&t=`, borra el token de la barra con `history.replaceState` y solo lo guarda en memoria, nunca en
-  localStorage) y Tauri (`window.__TAURI__` presente → `invoke('daemon_info')`, F1.7).
+  (lee `?port=&t=`, borra el token de la barra con `history.replaceState` y lo guarda en memoria y en el
+  `sessionStorage` de esa pestaña para sobrevivir a F5; nunca en localStorage ni en la URL) y Tauri
+  (`window.__TAURI__` presente → `invoke('daemon_info')`, F1.7). Lo guardado se valida de nuevo al leerlo (basura o
+  almacenamiento bloqueado = no hay nada).
+  **Reconexión:** la fábrica de transporte de `NexoClient` se evalúa en cada intento, así que `createDaemonSession`
+  vuelve a pedir los datos antes de cada reintento. En Tauri (`rediscovers`) eso es `daemon_info`, que redescubre
+  `daemon.json` y el token y arranca el daemon si no está: un reinicio se recupera solo (si `daemon_info` falla, el
+  intento falla y el backoff del cliente, con tope de 15 s, evita el bucle apretado). En el navegador no hay forma
+  segura de obtener el token nuevo (el token solo existe en la URL que imprime `pnpm dev:web`; exponerlo por HTTP o
+  guardarlo en localStorage lo haría accesible a otras páginas u orígenes): si el daemon responde pero rechaza la
+  conexión 3 veces seguidas tras haber estado abierta, la interfaz deja de reintentar y muestra «El daemon se
+  reinició… abre la nueva dirección que imprime `pnpm dev:web`».
   `createDaemonSession` conecta, se suscribe, pide `snapshot` (por `@tanstack/solid-query`) y, con `autoResync`,
   reconstruye el estado en cada `resync`.
 - **Estado** (`state/`): reductor puro `reduce(estado, evento)` + store de Solid con `reconcile`; ignora `seq` ya
   aplicados. La salida de terminales no pasa por el store: va al `TerminalHub` (`terminal/hub.ts`), que lleva el
   offset de cada terminal, relee con `terminal.read { fromOffset }` ante un hueco o un `resync` (sin perder ni
-  duplicar), agrupa las escrituras por fotograma con control de flujo y acota lo pendiente (4 M caracteres por
+  duplicar; la relectura se dispara con el evento `resync`, sin esperar al `snapshot`, que puede perderse en plena
+  ráfaga; encadena trozos de 256 KiB —tras 64 rondas sigue en otra tarea— y, si el búfer circular ya descartó lo
+  pedido, salta a lo más antiguo disponible y reinicia el xterm; una terminal con xterm pero oculta no relee hasta
+  que se muestra), agrupa las escrituras por fotograma con control de flujo y acota lo pendiente (4 M caracteres por
   terminal; si se pasa, se descarta lo más antiguo).
 - **Terminales:** una `PaneSession` por panel, creada al verlo por primera vez y liberada al cerrarlo; sobrevive a
   recolocaciones del árbol (solo se mueve su elemento). WebGL solo mientras es visible (si falla o pierde el
@@ -365,14 +382,14 @@ llegaron a tumbar un worker. El resto sigue en paralelo.
 fijo, `NEXO_STATE_DIR` temporal, `NEXO_DEV=1`) y usa la web compilada servida en 5173 (`tools/e2e-web.mjs`); la CLI
 se ejecuta como proceso hijo contra el mismo estado. El texto de las terminales se lee del búfer de xterm
 (`__NEXO_E2E_TERMS__`, que solo existe si la página se carga con `__NEXO_E2E__ = true`). Una recarga normal (F5)
-muestra «Falta el token»: el token se borra de la barra de direcciones y nunca se guarda, así que las pruebas
-recargan con la dirección completa. Si el daemon cae, la interfaz muestra «Conexión perdida. Reconectando…» y
-reintenta con espera creciente; como cada arranque del daemon genera un token nuevo, la página abierta no puede
-volver sola y hay que abrirla con el token nuevo (`pnpm dev:web` lo imprime; el shell de escritorio lo pide de
-nuevo con `daemon_info`). El daemon de la F1 no persiste el estado: tras reiniciarlo aparece vacío.
+conserva el token en el `sessionStorage` de la pestaña. Si el daemon cae, la interfaz muestra «Conexión perdida.
+Reconectando…» y reintenta con espera creciente. Como cada arranque genera un token nuevo, en el escritorio la página
+se recupera sola (`daemon_info`; el E2E lo simula con `window.__TAURI__`) y en el navegador pide abrir la nueva
+dirección (ver "Interfaz"). El daemon de la F1 no persiste el estado: tras reiniciarlo aparece vacío.
 Salida masiva: la salida de 20 MB no congela la interfaz (mayor tarea larga 70–105 ms, criterio < 150 ms; memoria de
 la página estable en ~6 MB tras recolectar) pero, al superar la capacidad de la conexión, el daemon descarta
-salida (`client.resync`) y la interfaz tarda en ponerse al día (ver el issue de seguimiento). Umbrales: local p95 < 16 ms; en CI (runners compartidos) p95 < 32 ms.
+salida (`client.resync`) y la interfaz se pone al día: el xterm muestra la última línea en < 10 s tras la ráfaga
+(aserción de `perf.spec.ts`; en local ~0,3–1 s). Umbrales: local p95 < 16 ms; en CI (runners compartidos) p95 < 32 ms.
 
 ## Convenciones
 

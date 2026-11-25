@@ -20,7 +20,7 @@ import { STORE_EVENTS, type StoreEvent, type StoreEventName } from '../state/mod
 import { createAppStore } from '../state/store.ts'
 import { createUiState } from '../state/ui.ts'
 import { TerminalHub } from '../terminal/hub.ts'
-import type { DaemonInfo } from './info.ts'
+import type { DaemonInfo, DaemonInfoSource } from './info.ts'
 
 /** Lo que la interfaz necesita de `NexoClient` (permite un cliente falso en pruebas). */
 export type ClientLike = Pick<NexoClient, 'call' | 'on' | 'subscribe' | 'connect' | 'close'> & {
@@ -29,8 +29,23 @@ export type ClientLike = Pick<NexoClient, 'call' | 'on' | 'subscribe' | 'connect
 
 export type SessionStatus = 'connecting' | 'open' | 'reconnecting' | 'offline'
 
+/** Por qué se quedó sin conexión: no se pudo abrir, se cerró, o el daemon se reinició (token nuevo). */
+export type SessionFailure = 'unreachable' | 'closed' | 'restarted'
+
+/** Intentos seguidos con el daemon respondiendo pero la conexión rechazada antes de dar el token por viejo. */
+const STALE_TOKEN_ATTEMPTS = 3
+
 export type SessionDeps = {
+  /** Datos de conexión de la primera vez (ya resueltos por `source`). */
   info: DaemonInfo
+  /**
+   * Fuente de los datos. Si `rediscovers` (Tauri) se vuelve a consultar antes de cada reintento, así que un
+   * daemon reiniciado (puerto y token nuevos, incluso arrancado por `daemon_info`) se recupera solo. En el
+   * navegador no hay token nuevo que descubrir: tras varios intentos con el daemon vivo se avisa del reinicio.
+   */
+  source?: DaemonInfoSource
+  /** ¿Responde algo en ese puerto? (inyectable; por omisión, abrir un WebSocket sin token). */
+  probe?: (port: number) => Promise<boolean>
   makeClient?: (options: ClientOptions) => ClientLike
   frame?: (cb: () => void) => void
   /** Si se da, el snapshot inicial pasa por la caché de solid-query. */
@@ -40,6 +55,34 @@ export type SessionDeps = {
 }
 
 const READ_CHUNK_BYTES = 256 * 1024
+
+/**
+ * ¿Hay un daemon escuchando? Abre un WebSocket sin token (el daemon lo acepta sin autenticar y lo corta a los
+ * pocos segundos) y lo cierra al conectar. Un `fetch` a `/health` chocaría con la CSP (`connect-src`).
+ */
+function defaultProbe(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    let ws: WebSocket | undefined
+    const done = (alive: boolean) => {
+      clearTimeout(timer)
+      try {
+        ws?.close()
+      } catch {
+        // ya cerrado
+      }
+      resolve(alive)
+    }
+    const timer = setTimeout(() => done(false), 1500)
+    try {
+      ws = new WebSocket(`ws://127.0.0.1:${port}`)
+      ws.onopen = () => done(true)
+      ws.onerror = () => done(false)
+      ws.onclose = () => done(false)
+    } catch {
+      done(false)
+    }
+  })
+}
 
 const defaultFrame = (cb: () => void) => {
   if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => cb())
@@ -54,9 +97,12 @@ export function createDaemonSession(deps: SessionDeps) {
   const store = createAppStore()
   const ui = createUiState()
   const [status, setStatus] = createSignal<SessionStatus>('connecting')
-  const [failure, setFailure] = createSignal<string | undefined>()
+  const [failure, setFailure] = createSignal<SessionFailure | undefined>()
   let client: ClientLike | undefined
   let generation = 0
+  let current = deps.info
+  /** La primera conexión usa `deps.info` tal cual (acaba de resolverse); las siguientes la redescubren. */
+  let firstAttempt = true
 
   const hub = new TerminalHub({
     frame: deps.frame ?? defaultFrame,
@@ -96,9 +142,36 @@ export function createDaemonSession(deps: SessionDeps) {
     client?.close()
     setStatus('connecting')
     setFailure(undefined)
+    let opened = false
+    let staleAttempts = 0
     const c = makeClient({
-      transport: () =>
-        webSocketTransport({ url: `ws://127.0.0.1:${deps.info.port}`, token: deps.info.token }),
+      transport: async () => {
+        if (mine !== generation) throw new Error('sesión reemplazada')
+        const source = deps.source
+        if (!firstAttempt && source?.rediscovers === true) {
+          // Antes de cada reintento: Tauri vuelve a pedir `daemon_info` (puerto, token y arranque del daemon).
+          const found = await source.getDaemonInfo()
+          if (!found.ok) throw new Error(`no se pudo redescubrir el daemon: ${found.reason}`)
+          current = found.info
+        } else if (opened && source?.rediscovers === false) {
+          // Navegador: el token no cambia solo; si el daemon está vivo y aun así rechaza, se reinició.
+          const alive = await (deps.probe ?? defaultProbe)(current.port)
+          staleAttempts = alive ? staleAttempts + 1 : 0
+          if (staleAttempts >= STALE_TOKEN_ATTEMPTS) {
+            if (mine === generation) {
+              setFailure('restarted')
+              c.close()
+              setStatus('offline')
+            }
+            throw new Error('el daemon se reinició: el token ya no vale')
+          }
+        }
+        firstAttempt = false
+        return webSocketTransport({
+          url: `ws://127.0.0.1:${current.port}`,
+          token: current.token,
+        })
+      },
       autoResync: true,
       onSnapshot,
     })
@@ -106,11 +179,15 @@ export function createDaemonSession(deps: SessionDeps) {
 
     c.on('state', (s) => {
       if (mine !== generation) return
-      if (s === 'open') setStatus('open')
-      else if (s === 'reconnecting') setStatus('reconnecting')
+      if (s === 'open') {
+        opened = true
+        staleAttempts = 0
+        setStatus('open')
+      } else if (s === 'reconnecting') setStatus('reconnecting')
       else if (s === 'closed') {
         setStatus('offline')
-        setFailure('closed')
+        // 'restarted' ya fijó su motivo antes de cerrar.
+        if (failure() !== 'restarted') setFailure('closed')
       }
     })
     for (const name of STORE_EVENTS) {

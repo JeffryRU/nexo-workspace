@@ -1,6 +1,6 @@
 import { setTimeout as sleep } from 'node:timers/promises'
 import type { Page } from '@playwright/test'
-import { bufferText, ECHO_SCRIPT, expect, type Stack, test } from './stack.ts'
+import { bufferText, ECHO_SCRIPT, expect, type Stack, test, WEB_ORIGIN } from './stack.ts'
 
 /** Espera a que el xterm del panel contenga el texto (lee el búfer de xterm, no capturas). */
 async function expectTerminal(page: Page, paneId: string, text: string): Promise<void> {
@@ -70,35 +70,66 @@ test.describe('CLI y ventana sobre el mismo daemon', () => {
     await expect(app.getByRole('tab')).toHaveCount(0)
   })
 
-  test('el daemon se cae: la interfaz muestra «Reconectando»; con el daemon nuevo hace falta abrirla con su token', async ({
+  test('escritorio (daemon_info simulado): al reiniciar el daemon con token nuevo la página se recupera sola', async ({
+    stack,
+    app,
+  }) => {
+    // Simula el shell de Tauri: `invoke('daemon_info')` lee el estado actual del daemon (puerto y token) y
+    // falla mientras no hay daemon, como `ensure_daemon` cuando no logra arrancarlo.
+    await app.exposeFunction('__nexoDaemonInfo', () => {
+      if (!stack.running) throw new Error('el daemon no está en marcha')
+      return { port: stack.port, token: stack.token }
+    })
+    await app.addInitScript(() => {
+      const w = globalThis as unknown as { __TAURI__: unknown; __nexoDaemonInfo: () => unknown }
+      w.__TAURI__ = { core: { invoke: () => w.__nexoDaemonInfo() } }
+    })
+    const created = await stack.newTab('antes', ECHO_SCRIPT)
+    await app.goto(WEB_ORIGIN)
+    await expectTerminal(app, created.paneId, 'LISTO')
+    const oldToken = stack.token
+
+    await stack.killDaemon()
+    await expect(app.getByRole('status').filter({ hasText: 'Reconectando' }).first()).toBeVisible()
+    await sleep(1500) // varios reintentos con `daemon_info` fallando: sin bucle apretado, sigue reintentando
+
+    await stack.startDaemon()
+    expect(stack.token).not.toBe(oldToken)
+    // Sin recargar ni abrir otra dirección: la página redescubre el token y vuelve sola.
+    await expect(
+      app.getByRole('status').filter({ hasText: /Reconectando|Sin conexión/ }),
+    ).toHaveCount(0, { timeout: 45_000 })
+    await expect(app.getByRole('tab')).toHaveCount(0)
+    const again = await stack.newTab('despues', ECHO_SCRIPT)
+    await expect(app.getByRole('tab', { name: 'despues' })).toBeVisible()
+    await expectTerminal(app, again.paneId, 'LISTO')
+  })
+
+  test('navegador: tras reiniciar el daemon avisa de que hay que abrir la nueva dirección, y esa dirección funciona', async ({
     stack,
     app,
   }) => {
     const created = await stack.newTab('antes', ECHO_SCRIPT)
     await app.goto(stack.url())
     await expectTerminal(app, created.paneId, 'LISTO')
+    // F5: el token ya no está en la dirección, pero la pestaña lo conserva en sessionStorage.
+    await app.reload()
+    await expect(app.getByRole('tab', { name: 'antes' })).toBeVisible()
+    expect(await app.evaluate(() => globalThis.localStorage.length)).toBe(0)
+    expect(new URL(app.url()).searchParams.has('t')).toBe(false)
     const oldToken = stack.token
 
     await stack.killDaemon()
-    const banner = app.getByRole('status').filter({ hasText: 'Reconectando' })
-    await expect(banner.first()).toBeVisible()
-
-    // Hoy: cada arranque del daemon genera un token nuevo, así que la página abierta (con el token viejo)
-    // sigue reintentando sin poder volver; no se recupera sola. Se recupera abriéndola con el token nuevo.
+    await expect(app.getByRole('status').filter({ hasText: 'Reconectando' }).first()).toBeVisible()
     await stack.startDaemon()
     expect(stack.token).not.toBe(oldToken)
-    await sleep(3000)
-    await expect(
-      app
-        .getByRole('status')
-        .filter({ hasText: /Reconectando|Sin conexión/ })
-        .first(),
-    ).toBeVisible()
+    // No hay forma segura de obtener el token nuevo: mensaje claro en vez de «Reconectando» eterno.
+    await expect(app.getByText(/El daemon se reinició/).first()).toBeVisible({ timeout: 45_000 })
 
     await app.goto(stack.url())
-    await expect(app.getByRole('status').filter({ hasText: 'Reconectando' })).toHaveCount(0)
-    // El daemon de la F1 no persiste el estado: el nuevo arranca vacío y vuelve a ser operable.
-    await expect(app.getByRole('tab')).toHaveCount(0)
+    await expect(
+      app.getByRole('status').filter({ hasText: /Reconectando|Sin conexión/ }),
+    ).toHaveCount(0)
     const again = await stack.newTab('despues', ECHO_SCRIPT)
     await expect(app.getByRole('tab', { name: 'despues' })).toBeVisible()
     await expectTerminal(app, again.paneId, 'LISTO')

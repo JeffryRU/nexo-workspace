@@ -12,6 +12,7 @@ import {
   workspaceEvent,
   xid,
 } from '../test-helpers.ts'
+import type { DaemonInfoResult, DaemonInfoSource } from './info.ts'
 import { createDaemonSession } from './session.ts'
 
 const info = { port: 4317, token: 'AbCdEfGhIjKlMnOpQrStUvWxYz012345' }
@@ -214,5 +215,119 @@ describe('createDaemonSession', () => {
     first.emit(w.event, w.data, w.seq)
     expect(session.store.state.workspaces).toHaveLength(0)
     expect(first.closed).toBe(true)
+  })
+})
+
+describe('reconexión tras reiniciar el daemon (issue #23)', () => {
+  const tokenB = 'ZyXwVuTsRqPoNmLkJiHgFeDcBa987654'
+
+  function sourceOf(
+    rediscovers: boolean,
+    next: () => DaemonInfoResult | Promise<DaemonInfoResult>,
+  ): DaemonInfoSource & { calls: number } {
+    const source = {
+      rediscovers,
+      calls: 0,
+      async getDaemonInfo() {
+        source.calls++
+        return next()
+      },
+    }
+    return source
+  }
+
+  function boot(source: DaemonInfoSource, probe?: (port: number) => Promise<boolean>) {
+    const client = new FakeClient()
+    const captured: { options?: ClientOptions } = {}
+    const session = createDaemonSession({
+      info,
+      source,
+      ...(probe === undefined ? {} : { probe }),
+      makeClient: (options) => {
+        captured.options = options
+        return client
+      },
+      frame: manualFrames().frame,
+    })
+    return { session, client, captured }
+  }
+
+  const tokenOf = async (captured: { options?: ClientOptions }) =>
+    (await captured.options?.transport())?.token
+
+  it('Tauri: antes de cada reintento vuelve a pedir los datos y usa el token nuevo', async () => {
+    let n = 0
+    const source = sourceOf(true, () => ({
+      ok: true,
+      info: { port: 4500 + ++n, token: n === 1 ? tokenB : `${tokenB.slice(0, -1)}${n}` },
+    }))
+    const { session, captured } = boot(source)
+    await session.start()
+    expect(source.calls).toBe(0) // la primera conexión usa lo ya resuelto
+    expect(await tokenOf(captured)).toBe(info.token) // intento 1 (aún sin redescubrir)
+    expect(await tokenOf(captured)).toBe(tokenB) // reintento: token nuevo
+    expect(await tokenOf(captured)).toBe(`${tokenB.slice(0, -1)}2`) // y otro más
+    expect(source.calls).toBe(2)
+  })
+
+  it('Tauri: si daemon_info falla varias veces el transporte falla (el cliente reintenta con backoff) y se recupera', async () => {
+    let failures = 3
+    const source = sourceOf(true, () =>
+      failures-- > 0
+        ? { ok: false, reason: 'tauri-error' }
+        : { ok: true, info: { port: 4600, token: tokenB } },
+    )
+    const { session, captured } = boot(source)
+    await session.start()
+    await tokenOf(captured)
+    for (let i = 0; i < 3; i++) await expect(tokenOf(captured)).rejects.toThrow(/redescubrir/)
+    expect(await tokenOf(captured)).toBe(tokenB)
+  })
+
+  it('Tauri: un daemon_info que lanza o devuelve basura tampoco rompe la sesión', async () => {
+    const source = sourceOf(true, () => {
+      throw new Error('boom')
+    })
+    const { session, captured } = boot(source)
+    await session.start()
+    await tokenOf(captured)
+    await expect(tokenOf(captured)).rejects.toThrow()
+    expect(session.status()).not.toBe('offline')
+  })
+
+  it('navegador: con el daemon vivo que rechaza el token, tras varios intentos avisa del reinicio', async () => {
+    const source = sourceOf(false, () => ({ ok: true, info }))
+    const { session, client, captured } = boot(source, async () => true)
+    await session.start()
+    expect(session.status()).toBe('open')
+    client.setState('reconnecting')
+    await tokenOf(captured)
+    await tokenOf(captured)
+    await expect(tokenOf(captured)).rejects.toThrow(/reinició/)
+    expect(session.status()).toBe('offline')
+    expect(session.failure()).toBe('restarted')
+    expect(client.closed).toBe(true)
+    expect(source.calls).toBe(0) // el navegador no redescubre
+  })
+
+  it('navegador: con el daemon caído (sin respuesta) sigue reintentando sin dar el token por viejo', async () => {
+    const source = sourceOf(false, () => ({ ok: true, info }))
+    const { session, captured } = boot(source, async () => false)
+    await session.start()
+    for (let i = 0; i < 10; i++) await tokenOf(captured)
+    expect(session.status()).toBe('open')
+    expect(session.failure()).toBeUndefined()
+  })
+
+  it('navegador: una conexión que se abre reinicia la cuenta de intentos', async () => {
+    const source = sourceOf(false, () => ({ ok: true, info }))
+    const { session, client, captured } = boot(source, async () => true)
+    await session.start()
+    await tokenOf(captured)
+    await tokenOf(captured) // 2 intentos con el daemon vivo
+    client.setState('open') // se reconectó: vuelve a empezar
+    await tokenOf(captured)
+    await tokenOf(captured)
+    expect(session.failure()).toBeUndefined()
   })
 })
