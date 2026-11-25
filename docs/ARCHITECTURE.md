@@ -126,7 +126,8 @@ Todo en `packages/core`, sin I/O; el daemon (F1.3) solo los conecta con adaptado
 
 - **Entorno** (validado con zod al arrancar): `NEXO_PORT` (4317; 0 = efímero), `NEXO_DEV`, `NEXO_STATE_DIR`,
   `NEXO_LOG_LEVEL`, `NEXO_MAX_CONNECTIONS` (128), `NEXO_AUTH_TIMEOUT_MS` (5000), `NEXO_PTY_MODE` (`host` | `direct`; por omisión
-  `host` en Windows y `direct` en Linux/macOS), `NEXO_AGENT_PROVIDERS` y `NEXO_CLAUDE_EXECUTABLE` (ver «Agentes en el daemon (F2.4)»).
+  `host` en Windows y `direct` en Linux/macOS), `NEXO_AGENT_PROVIDERS`, `NEXO_CLAUDE_EXECUTABLE` y `NEXO_OLLAMA_URL` (ver «Agentes en el daemon (F2.4)» y
+  «Proveedor Ollama (F3.1)»).
 - **PTY aislados (issue #15, ADR 0004).** En modo `host`, node-pty corre en un proceso hijo (`@nexo/adapter-pty-host`, `child_process.fork` + IPC con
   mensajes zod validados en ambos extremos). Si el código nativo de ConPTY se cae, muere solo el host: cada terminal afectada recibe
   `terminal.exit` con `signal: "HOST_CRASH"` (y `exitCode` null), el daemon sigue vivo y el host se relanza para las terminales nuevas con
@@ -221,8 +222,9 @@ ocupar hasta 768 KiB, así que el daemon comprueba el tamaño serializado de cad
 
 ### Métodos y eventos
 
-- `agent.providers` → `{ providers: [{ id, name, available, capabilities }] }` (modelos, esfuerzos, modos de
-  permiso, `resume`, `warmup`, `streaming`): con esto la interfaz arma los chips.
+- `agent.providers` → `{ providers: [{ id, name, available, reason?, capabilities }] }` (modelos, esfuerzos, modos de
+  permiso, `resume`, `warmup`, `streaming`): con esto la interfaz arma los chips. `reason` es el motivo de un proveedor no
+  disponible (lo da `AgentProviderPort.unavailableReason?()`; el servicio lo reduce a una línea de ≤ 512 caracteres).
 - `agent.create { paneId, provider, cwd?, model?, effort?, permissionMode?, resume? }` → `{ session }`.
 - `agent.send { sessionId, text }` → `{ blockId, index, turn }` (el bloque `user` ya añadido). Con un turno en
   curso, `CONFLICT`.
@@ -254,6 +256,7 @@ interface AgentProviderPort {
   capabilities(): Promise<ProviderCapabilities>
   open(options: AgentOpenOptions): Promise<AgentProviderSession> // nueva o, con `resume`, reanudada
   warmUp?(options: { cwd: string }): Promise<void> // si `capabilities.warmup`
+  unavailableReason?(): string | undefined // por qué `isAvailable()` dio false (se muestra en la interfaz)
 }
 interface AgentProviderSession {
   readonly providerSessionId: string
@@ -347,11 +350,11 @@ Ollama (solo texto, sin permisos).
 espacio cierra su sesión); al apagar (`stop()`) se llama `service.closeAll()` antes de cerrar las conexiones. Sin
 proveedores (`agentProviders: []`) no hay servicio y todo `agent.*` responde `PROVIDER_UNAVAILABLE`.
 
-**Proveedores.** `NEXO_AGENT_PROVIDERS` (zod; lista separada por comas de `claude` y `fake`; por omisión `claude`; el
+**Proveedores.** `NEXO_AGENT_PROVIDERS` (zod; lista separada por comas de `claude`, `ollama` y `fake`; por omisión `claude`; el
 primero es el que se precalienta) o, en código, `startDaemon({ agentProviders })`, que además acepta puertos ya
 construidos (así las pruebas inyectan el suyo). `claude` es `createClaudeProvider({ env, log })` con el entorno del
 daemon **sin las variables `NEXO_*`** y el log del daemon (redactado); `NEXO_CLAUDE_EXECUTABLE` fija el ejecutable de Claude
-Code. `fake` es `ScriptedAgentProvider` (`apps/daemon/src/adapters/scripted-agent-provider.ts`): determinista, sin red;
+Code. `ollama` es `createOllamaProvider({ baseUrl: NEXO_OLLAMA_URL, log })` (ver «Proveedor Ollama (F3.1)»). `fake` es `ScriptedAgentProvider` (`apps/daemon/src/adapters/scripted-agent-provider.ts`): determinista, sin red;
 responde `Eco: <texto>`, y según la primera palabra: `lento [n]` (n trozos con retardo), `largo` (no termina hasta
 interrumpir), `permiso` y `pregunta`. Vive en la app y no en `testkit` porque el daemon real lanzado como proceso (CLI,
 E2E) tiene que poder usarlo y producción no importa `testkit`. **No se activa por accidente**: solo existe si se pide
@@ -463,6 +466,81 @@ propio SDK según su valor por omisión.
 **Probar de verdad.** `NEXO_LIVE_CLAUDE=1 pnpm --filter @nexo/adapter-provider-claude test:live` ejecuta
 `test/provider.live.test.ts` (modelo `haiku`, un saludo; usa las credenciales del entorno). No corre en el CI ni en
 `pnpm check`.
+
+### Proveedor Ollama (F3.1)
+
+`packages/adapters/provider-ollama` (`createOllamaProvider({ baseUrl?, fetch?, log?, limits? })`) implementa
+`AgentProviderPort` sobre la API HTTP de Ollama (verificada contra su documentación: `POST /api/chat` en streaming
+NDJSON y `GET /api/tags`). Solo texto y razonamiento: sin herramientas, permisos ni preguntas. Sin dependencias nuevas
+(`fetch` nativo, inyectable). Importa solo `core` y `contracts`.
+
+**Capas.** (1) `ndjson.ts`: divisor de NDJSON sobre bytes (decodifica una línea solo cuando está completa, así que un
+carácter UTF-8 partido entre trozos no importa; una línea de más de `maxLineBytes` es un desbordamiento). (2)
+`translator.ts`: traducción pura de cada línea a `ProviderEvent` (zod laxo; lo roto se ignora y se cuenta, y tras 100
+líneas inválidas el turno se da por malo). (3) `client.ts`: `GET /api/tags` y `POST /api/chat` con `fetch` inyectable
+(`redirect: 'error'`, sin credenciales). (4) `session.ts`: historial, turnos, interrupción y plazos. (5) `provider.ts`:
+validación de opciones, capacidades y disponibilidad.
+
+| Ollama (`/api/chat`, una línea JSON por trozo)      | `ProviderEvent`                                                                            |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `message.thinking`                                  | bloque `reasoning` (`block-start` / `block-delta` / `block-end`)                           |
+| `message.content`                                   | bloque `text`; al cambiar de tipo se cierra el bloque anterior                             |
+| `done: true`, `done_reason`                         | `turn-end`: `stop` → `end-turn`, `length` → `max-tokens`, otro → `other`                   |
+| `prompt_eval_count`, `eval_count`, `total_duration` | `usage` del `turn-end`: tokens de entrada y salida, `durationMs`, `numTurns`               |
+| `{ "error": "..." }` (también a mitad del flujo)    | bloque `error` no fatal (`MODEL_NOT_FOUND`, `THINK_UNSUPPORTED`, `OLLAMA_ERROR`) y `turn-end` `error` |
+
+**Sesión sin estado en Ollama.** Ollama no tiene sesiones: el adaptador guarda el historial de la conversación
+(`user`/`assistant`, solo el texto, no el razonamiento) y lo reenvía entero en cada petición. El historial tiene un
+**tope en bytes UTF-8** (`limits.maxHistoryBytes`, 2 MiB por omisión): al pasarse se descartan los mensajes más antiguos
+(y nunca queda una respuesta suelta al principio); un solo mensaje mayor que el tope se rechaza con `INVALID_OPTIONS`. Un
+turno que acaba en error se retira del historial (reintentar no duplica la pregunta); uno interrumpido conserva lo
+respondido hasta entonces. El historial vive en la memoria del proceso: al cerrar la sesión (o el daemon) se pierde.
+`providerSessionId` es propio (`ollama-<uuid>`) y `resume` **no se soporta** (`capabilities.resume: false`; `open` con
+`resume` → `INVALID_OPTIONS`), porque fuera del historial en memoria no hay nada que reanudar.
+
+**Opciones.** El modelo se acepta tal cual (cualquier `Token`; si no existe llega un error `MODEL_NOT_FOUND` con la
+instrucción `ollama pull`); sin modelo se usa el primero de `/api/tags` (`defaultModel`), y sin modelos instalados
+`open` rechaza con `INVALID_OPTIONS`. El «esfuerzo» es `think` / `no-think` y se traduce al campo `think` de la
+petición (`true` / `false`); sin valor no se envía y decide el modelo (los niveles de texto de `think`, como los de
+gpt-oss, no se exponen porque varían por modelo). Un modelo que no razona da un error `THINK_UNSUPPORTED` no fatal con
+`think`. Único modo de permisos: `ask` (sin herramientas no hay nada que permitir); otro → `INVALID_OPTIONS`.
+`session-info` se emite en el primer `send`. `respond` siempre rechaza (`UNKNOWN_REQUEST`).
+
+**Disponibilidad y capacidades.** `isAvailable()` y `capabilities()` hacen `GET /api/tags` con un plazo corto (1,5 s) y
+reutilizan el resultado 2 s. **Nunca lanzan:** si Ollama no responde, `available: false` y las capacidades traen
+`models: []`; el motivo (`unavailableReason()`: «Ollama no responde en <origen>: ¿está en marcha?…», «no respondió en
+1,5 s», «respondió con el estado N», «no parece de Ollama») llega a la interfaz en `agent.providers[].reason`. Los
+modelos se filtran por `Token`, sin repetidos y como mucho 128. `open` con Ollama caído → `UNAVAILABLE`.
+
+**Turnos.** `send` vuelve en cuanto el turno está en marcha. Cada `send` produce exactamente un `turn-end`:
+`end-turn`/`max-tokens`/`other` con `done`; `interrupted` si se llamó a `interrupt()` (aborta la petición con
+`AbortController`, también si el `fetch` ignora la señal, y se corta la conexión con el servidor); `error`, con un bloque
+`error` no fatal (la sesión sigue usable), si la conexión se rechaza (`OLLAMA_UNREACHABLE`), hay 404 (`MODEL_NOT_FOUND`),
+5xx u otro estado (`OLLAMA_HTTP_ERROR`), la conexión se cierra a mitad o la respuesta acaba sin `done`
+(`STREAM_FAILED`, `STREAM_TRUNCATED`), una línea es demasiado larga o la respuesta pasa del tope (`INVALID_RESPONSE`,
+`RESPONSE_TOO_LARGE`) o no llegan datos durante `idleTimeoutMs` (5 min por omisión, porque cargar un modelo grande tarda;
+`TIMEOUT`). Topes: línea NDJSON 1 MiB, respuesta de un turno 8 MiB. El texto se sanea (`sanitizeBodyText`), los deltas se
+parten en ≤ 32 KiB sin cortar caracteres ni pares sustitutos (también si Ollama parte uno entre dos líneas) y el servicio
+aplica el tope de 128 KiB por bloque. Los mensajes de error de Ollama se reducen a una línea antes de mostrarse. `close()`
+aborta lo que haya en curso y emite solo `exit`.
+
+**Configuración.** `NEXO_OLLAMA_URL` (zod; por omisión `http://127.0.0.1:11434`; solo `http`/`https`, sin usuario ni
+contraseña, sin parámetros ni fragmento; se quita la barra final). Habilitar el proveedor:
+`NEXO_AGENT_PROVIDERS=claude,ollama` (o `ollama` solo) y `nexo agent new --provider ollama [--model <m>] [--effort
+think|no-think]`. Nexo no gestiona Ollama: hay que tenerlo instalado y en marcha, con los modelos descargados
+(`ollama pull`).
+
+**Interfaz.** El selector de proveedor del redactor lista todos los de `agent.providers`: el no disponible aparece
+deshabilitado («Ollama (no disponible)») y su motivo se muestra en una nota; modelo y esfuerzo salen de las capacidades
+del proveedor elegido. Con un proveedor caído la consulta caduca a los 10 s (en vez de 5 min), así que al volver a la
+ventana se ve que ya arrancó.
+
+**Probar de verdad.** `NEXO_LIVE_OLLAMA=1 pnpm --filter @nexo/adapter-provider-ollama test:live` (usa `NEXO_OLLAMA_URL` y
+el primer modelo instalado o `NEXO_LIVE_OLLAMA_MODEL`; comprueba que recuerda el turno anterior). No corre en el CI. Las
+pruebas normales usan un servidor HTTP falso local (`test/fake-ollama.ts`): conformidad (`runAgentProviderConformance`),
+traductor con propiedades (el NDJSON partido en trozos arbitrarios da los mismos eventos) y adversariales (NDJSON roto,
+líneas enormes, cierre a mitad, 404, 500, respuesta lenta e interrupción, servidor mudo, sin `done`, cuerpo vacío,
+redirecciones). Capturas: `docs/capturas/f3-1-*.png` (`NEXO_CAPTURAS=1 pnpm e2e -g capturas`).
 
 ## Protocolo (v1)
 

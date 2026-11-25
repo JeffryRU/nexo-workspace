@@ -100,6 +100,22 @@ apunta a otro ejecutable de Claude Code (por omisión se usa el que trae el SDK)
 daemon acepta `NEXO_AGENT_PROVIDERS=fake` (proveedor determinista de pruebas; `nexo agent new --provider fake`);
 no lo actives en uso normal. Una prueba opcional con Claude real: `NEXO_LIVE_CLAUDE=1 pnpm --filter @nexo/adapter-provider-claude test:live`.
 
+**Probarlo con Ollama (local, sin cuentas).** Instala [Ollama](https://ollama.com), arráncalo y descarga un modelo
+(`ollama pull llama3.2`). Habilita el proveedor al arrancar el daemon y úsalo desde la CLI o desde los chips del
+panel (proveedor, modelo y esfuerzo `think`/`no-think`; si Ollama no responde, el proveedor sale deshabilitado con su motivo):
+
+```
+export NEXO_AGENT_PROVIDERS=claude,ollama      # PowerShell: $env:NEXO_AGENT_PROVIDERS = 'claude,ollama'
+export NEXO_OLLAMA_URL=http://127.0.0.1:11434  # opcional: es el valor por omisión (solo http/https)
+nexo agent new --provider ollama --model llama3.2 --cwd .
+```
+
+Ollama no guarda conversaciones: Nexo guarda el historial en memoria (con un tope de 2 MiB) y no se puede reanudar una
+sesión; solo hay texto y razonamiento, sin herramientas ni permisos. Una prueba opcional con un Ollama real:
+`NEXO_LIVE_OLLAMA=1 pnpm --filter @nexo/adapter-provider-ollama test:live`.
+
+![Selector de proveedor, modelo y esfuerzo con Ollama](docs/capturas/f3-1-selector.png)
+
 ## Estructura
 
 ```
