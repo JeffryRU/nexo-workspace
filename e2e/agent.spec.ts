@@ -153,6 +153,14 @@ const OUT = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'capt
 test.describe('capturas', () => {
   test.skip(process.env.NEXO_CAPTURAS === undefined, 'solo con NEXO_CAPTURAS=1')
   const shot = async (app: Page, name: string) => {
+    // La carpeta real es la del entorno donde corre la prueba: se sustituye por una neutra en la captura.
+    await app.evaluate(() => {
+      for (const el of document.querySelectorAll('.chip.fixed.ellipsis'))
+        el.textContent = '~/proyecto'
+      for (const el of document.querySelectorAll<HTMLInputElement>('.chip-cwd')) {
+        el.placeholder = '~/proyecto'
+      }
+    })
     mkdirSync(OUT, { recursive: true })
     await app.screenshot({ path: join(OUT, `f2-5-${name}.png`) })
   }
