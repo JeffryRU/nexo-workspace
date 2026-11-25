@@ -44,11 +44,41 @@ Si el daemon no corre, la CLI lo arranca desacoplado (registro en `daemon.log` d
 - `nexo send <panel> [--enter] [--stdin] [--] texto`: escribe en la terminal (mensajes de 64 KiB como máximo).
 - `nexo read <panel> [-n N] [-f] [--raw]`: últimas N líneas sin ANSI; `-f` sigue la salida.
 - `nexo focus <ref>`, `nexo kill <ref>`, `nexo close <ref>`, `nexo rename <pestaña|espacio> <nombre>`.
+- `nexo agent new | send | ls | attach | interrupt | close | respond`: sesiones de agente (ver abajo).
 - `nexo daemon status | stop | log`: estado, apagado limpio y registro.
 
 Globales: `--json` (salida estable), `--no-start`, `--help`, `--version`. Salida: 0 ok, 1 uso, 2 no
 encontrado, 3 daemon no disponible, 4 error del daemon. Entorno: `NEXO_STATE_DIR`, `NEXO_SHELL`,
 `NEXO_DAEMON_ENTRY`, `NEXO_START_TIMEOUT_MS`, `NEXO_DEBUG=1` (trazas).
+
+## Agentes (Claude Code)
+
+```
+nexo agent new --cwd ~/proyecto [--model sonnet] [--effort high] [--permissions ask]
+nexo agent send <id> "explícame este repo"     # o --stdin
+nexo agent attach <id>                         # documento en vivo; responde permisos y preguntas con el teclado
+nexo agent respond <id> 1                      # lo mismo desde otra terminal (número u opción)
+nexo agent ls | interrupt <id> | close <id>    # todos aceptan --json
+```
+
+**Probarlo con Claude real.** Nexo no tiene inicio de sesión ni lee credenciales de claude.ai: el daemon usa el
+entorno con el que arranca. Exporta una de estas dos variables **antes de arrancar el daemon** (si ya corre,
+detenlo con `nexo daemon stop`):
+
+- `ANTHROPIC_API_KEY`: una clave de API de Anthropic, o
+- `CLAUDE_CODE_OAUTH_TOKEN`: el token propio que genera `claude setup-token` con tu suscripción.
+
+```
+export CLAUDE_CODE_OAUTH_TOKEN=...   # PowerShell: $env:CLAUDE_CODE_OAUTH_TOKEN = '...'
+nexo agent new --cwd .               # arranca el daemon (si hace falta) y abre la sesión
+nexo agent send <id> "hola"
+nexo agent attach <id>
+```
+
+Sin credenciales el agente responde con un bloque de error que explica las dos opciones. `NEXO_CLAUDE_EXECUTABLE`
+apunta a otro ejecutable de Claude Code (por omisión se usa el que trae el SDK). Para probar sin gastar nada, el
+daemon acepta `NEXO_AGENT_PROVIDERS=fake` (proveedor determinista de pruebas; `nexo agent new --provider fake`);
+no lo actives en uso normal. Una prueba opcional con Claude real: `NEXO_LIVE_CLAUDE=1 pnpm --filter @nexo/adapter-provider-claude test:live`.
 
 ## Estructura
 

@@ -126,7 +126,7 @@ Todo en `packages/core`, sin I/O; el daemon (F1.3) solo los conecta con adaptado
 
 - **Entorno** (validado con zod al arrancar): `NEXO_PORT` (4317; 0 = efímero), `NEXO_DEV`, `NEXO_STATE_DIR`,
   `NEXO_LOG_LEVEL`, `NEXO_MAX_CONNECTIONS` (128), `NEXO_AUTH_TIMEOUT_MS` (5000), `NEXO_PTY_MODE` (`host` | `direct`; por omisión
-  `host` en Windows y `direct` en Linux/macOS).
+  `host` en Windows y `direct` en Linux/macOS), `NEXO_AGENT_PROVIDERS` y `NEXO_CLAUDE_EXECUTABLE` (ver «Agentes en el daemon (F2.4)»).
 - **PTY aislados (issue #15, ADR 0004).** En modo `host`, node-pty corre en un proceso hijo (`@nexo/adapter-pty-host`, `child_process.fork` + IPC con
   mensajes zod validados en ambos extremos). Si el código nativo de ConPTY se cae, muere solo el host: cada terminal afectada recibe
   `terminal.exit` con `signal: "HOST_CRASH"` (y `exitCode` null), el daemon sigue vivo y el host se relanza para las terminales nuevas con
@@ -340,10 +340,51 @@ Codex (`app-server`: items y aprobaciones), ACP/Gemini (`session/update`, `sessi
 `allow_once`/`allow_always`/`reject_once`/`reject_always` son las de `PermissionOptionKind`), Antigravity (`stream-json`) y
 Ollama (solo texto, sin permisos).
 
+### Agentes en el daemon (F2.4)
+
+**Composición** (`apps/daemon/src/daemon.ts`): `new AgentService({ providers, bus, clock, ids, panes: layout, logger })`;
+`agents: service.handlers` va a `createDispatcher` y `agents: service` a `WorkspaceService` (cerrar un panel, pestaña o
+espacio cierra su sesión); al apagar (`stop()`) se llama `service.closeAll()` antes de cerrar las conexiones. Sin
+proveedores (`agentProviders: []`) no hay servicio y todo `agent.*` responde `PROVIDER_UNAVAILABLE`.
+
+**Proveedores.** `NEXO_AGENT_PROVIDERS` (zod; lista separada por comas de `claude` y `fake`; por omisión `claude`; el
+primero es el que se precalienta) o, en código, `startDaemon({ agentProviders })`, que además acepta puertos ya
+construidos (así las pruebas inyectan el suyo). `claude` es `createClaudeProvider({ env, log })` con el entorno del
+daemon **sin las variables `NEXO_*`** y el log del daemon (redactado); `NEXO_CLAUDE_EXECUTABLE` fija el ejecutable de Claude
+Code. `fake` es `ScriptedAgentProvider` (`apps/daemon/src/adapters/scripted-agent-provider.ts`): determinista, sin red;
+responde `Eco: <texto>`, y según la primera palabra: `lento [n]` (n trozos con retardo), `largo` (no termina hasta
+interrumpir), `permiso` y `pregunta`. Vive en la app y no en `testkit` porque el daemon real lanzado como proceso (CLI,
+E2E) tiene que poder usarlo y producción no importa `testkit`. **No se activa por accidente**: solo existe si se pide
+por nombre y el daemon avisa en el log (`proveedor de agente de prueba activo`). Cumple `runAgentProviderConformance`.
+
+**Precalentamiento.** Sin método nuevo en el protocolo: `watchAgentPanes` (`agent-warmup.ts`) escucha `layout.changed` y,
+la primera vez que ve un panel `agent` sin sesión y con carpeta, llama `provider.warmUp?.({ cwd })` del proveedor por
+omisión (el primero), en segundo plano; un fallo solo se registra. Así `agent.create` y el primer mensaje reclaman un
+proceso ya listo. Otros proveedores no se precalientan.
+
+**Cliente** (`@nexo/client`). `agentApi(client)` da los `agent.*` con nombre y tipos (`call` ya los tipa). `AgentDocument`
+(`AgentDocument.open(client, sessionId)`) mantiene el documento de una sesión siguiendo `AgentMirror`: `agent.block` es un
+upsert por `block.id`; `agent.delta` pasa por `applyBlockDelta` (repetidos ignorados); un hueco de `seq`, un delta
+inválido, un bloque desconocido o un hueco de `index` piden `agent.snapshot` desde el `index` del bloque y se recorren las
+páginas con `nextIndex` hasta `null` (páginas cortas admitidas; un `nextIndex` que no avanza o más de `maxPages` es un
+error); tras cualquier `resync` del cliente (reconexión incluida) se vuelve a sincronizar todo. Cada página del snapshot se
+aplica de forma síncrona al llegar su respuesta (`CallOptions.onResult`), de modo que los eventos anteriores quedan
+reemplazados y los posteriores se aplican encima. El llamador debe haber hecho `client.subscribe()` antes. API:
+`blocks()`, `pending()`, `session`, `subscribe(listener)` (eventos `block`, `delta`, `session`, `status`, `removed`, `synced`,
+`error`), `resync()`, `settled()`, `dispose()`.
+
+**CLI** (`nexo agent ...`, todos con `--json`): `new [--provider --model --effort --permissions --cwd --name]` crea
+una pestaña, divide su panel con `kind: 'agent'`, cierra el panel inicial y abre la sesión (`tab.create` no admite
+`kind`); `send <id> [--stdin] texto` (acotado a `maxBlockTextBytes`); `ls`; `attach <id> [--no-follow]` pinta el
+documento de forma legible (sin repetir lo ya mostrado tras reconectar, con el texto saneado de secuencias de escape) y
+pide por teclado la respuesta de permisos y preguntas (número de opción, etiqueta o texto libre); con `--json` emite una
+línea por evento; `interrupt <id>`, `close <id>`; `respond <id> [--block b] <respuesta>` responde desde otro proceso.
+`<id>` es el id de la sesión o un prefijo único.
+
 ### Proveedor Claude (F2.3)
 
 `packages/adapters/provider-claude` (`createClaudeProvider(options)`) implementa `AgentProviderPort` sobre
-`@anthropic-ai/claude-agent-sdk` (0.3.331). No compone nada: el daemon lo registra en F2.4. Importa solo `core`
+`@anthropic-ai/claude-agent-sdk` (0.3.331). No compone nada: el daemon lo registra (ver «Agentes en el daemon (F2.4)»). Importa solo `core`
 y `contracts`.
 
 **Capas.** (1) `translator.ts`: traducción pura de `SDKMessage` a `ProviderEvent`, una máquina de estados sin E/S
