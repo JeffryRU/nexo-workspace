@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, lstatSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -109,4 +109,29 @@ describe('resolveExecutable / readEnv / isDirectory', () => {
       resolveExecutable('noexec', { cwd: d, env: { PATH: d }, platform: 'linux' }),
     ).toBeUndefined()
   })
+})
+
+// Alias de ejecución de la Tienda (p. ej. pwsh.exe instalado desde Microsoft Store): statSync falla con EACCES.
+const STORE_ALIAS_DIR = join(process.env.LOCALAPPDATA ?? '', 'Microsoft', 'WindowsApps')
+const hasStoreAlias = (() => {
+  if (!IS_WINDOWS) return false
+  try {
+    return lstatSync(join(STORE_ALIAS_DIR, 'pwsh.exe')).isFile() === false
+  } catch {
+    return false
+  }
+})()
+
+describe('alias de ejecución de Windows', () => {
+  it.skipIf(!hasStoreAlias)(
+    'resolveExecutable encuentra pwsh.exe aunque sea un punto de reanálisis',
+    () => {
+      const found = resolveExecutable('pwsh.exe', {
+        cwd: tmp(),
+        env: { PATH: STORE_ALIAS_DIR },
+        platform: 'win32',
+      })
+      expect(found?.toLowerCase()).toBe(join(STORE_ALIAS_DIR, 'pwsh.exe').toLowerCase())
+    },
+  )
 })

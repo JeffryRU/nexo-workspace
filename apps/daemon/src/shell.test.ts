@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { findOnPath, resolveDefaultShell } from './shell.ts'
 
@@ -64,5 +67,21 @@ describe('resolveDefaultShell', () => {
         isFile: files('C:\\tools\\fish.exe'),
       }),
     ).toEqual({ cmd: 'C:\\tools\\fish.exe' })
+  })
+})
+
+describe('findOnPath con el sistema de archivos real', () => {
+  it('encuentra archivos, no directorios ni inexistentes', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'nexo-shell-'))
+    try {
+      writeFileSync(join(dir, 'mi-shell'), '')
+      const env = { PATH: dir, Path: dir }
+      const platform = process.platform
+      expect(findOnPath('mi-shell', env, platform)).toBe(true)
+      expect(findOnPath('no-existe', env, platform)).toBe(false)
+      expect(findOnPath('.', env, platform)).toBe(false)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

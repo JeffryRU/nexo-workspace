@@ -1,4 +1,4 @@
-import { statSync } from 'node:fs'
+import { lstatSync, statSync } from 'node:fs'
 import { isAbsolute, posix, win32 } from 'node:path'
 
 type Env = Readonly<Record<string, string | undefined>>
@@ -16,11 +16,19 @@ export type ShellProbe = {
   isFile?: (path: string) => boolean
 }
 
+/**
+ * Existe y no es un directorio. Los alias de ejecución de Windows (`WindowsAppspwsh.exe`) son puntos de
+ * reanálisis que `statSync` no puede seguir (EACCES) pero `lstatSync` sí ve, por eso el respaldo.
+ */
 function defaultIsFile(path: string): boolean {
   try {
-    return statSync(path).isFile()
+    return !statSync(path).isDirectory()
   } catch {
-    return false
+    try {
+      return !lstatSync(path).isDirectory()
+    } catch {
+      return false
+    }
   }
 }
 
