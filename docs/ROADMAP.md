@@ -21,7 +21,7 @@ al día. Una fase no empieza hasta revisar la anterior.
 - Adaptador `pty-node` con su suite de conformidad.
 - Web: pestañas y paneles divididos (arrastrar para redimensionar), xterm.js con WebGL solo en visibles,
   atajos de teclado, barra lateral con espacios y atención.
-- CLI: `atalaya ls`, `atalaya new`, `atalaya split`, `atalaya send`, `atalaya read`, `atalaya focus`.
+- CLI: `nexo ls`, `nexo new`, `nexo split`, `nexo send`, `nexo read`, `nexo focus`.
 - Desktop: Tauri 2 que arranca el daemon y carga la web.
 
 **Hecho cuando:** cambiar de pestaña con 10 terminales activas tarda < 16 ms (medido) y la CLI puede
@@ -47,7 +47,9 @@ leer y escribir en un panel abierto en la ventana.
 ## F5 — MCP y mascota
 
 - `apps/mcp`: herramientas para listar/leer/escribir paneles y agentes, y suscribirse a estados.
-- Canal de eventos para la mascota (proyecto aparte).
+- Sistema de compañeros (mascotas) intercambiables, ver ADR 0006: puerto `CompanionPort`, formato de
+  paquete de mascota (manifiesto zod + recursos), selector en la configuración y la opción «sin mascota».
+- La primera mascota es un proyecto aparte; Nexo funciona al 100 % sin ninguna.
 
 ## F6 — Empaquetado
 

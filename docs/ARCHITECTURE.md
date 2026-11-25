@@ -1,6 +1,6 @@
-# Arquitectura de Atalaya
+# Arquitectura de Nexo Workspace
 
-Atalaya es una app de escritorio (Linux y Windows) para trabajar con varios agentes de programación
+Nexo Workspace (`nexo`) es una app de escritorio (Linux y Windows) para trabajar con varios agentes de programación
 (Claude Code, Codex, Gemini, Antigravity, modelos locales) y terminales reales en pestañas y paneles,
 al estilo de un multiplexor. Este documento es el **contrato** del proyecto: si el código y este
 documento no coinciden, se corrige uno de los dos en el mismo PR.
@@ -31,7 +31,7 @@ Las decisiones con su porqué están en [`docs/adr/`](adr/). El plan por fases, 
                              │ apps/web (SolidJS) │                │            │
                              └────────────────────┘      ┌─────────┴──┐   ┌─────┴───────┐
                                                          │ apps/cli   │   │ apps/mcp    │
-                                                         │ `atalaya`  │   │ stdio MCP   │
+                                                         │ `nexo`  │   │ stdio MCP   │
                                                          └────────────┘   └─────────────┘
                                          daemon ─ spawn ─▶ PTYs (shells) y CLIs de agentes
 ```
@@ -41,12 +41,12 @@ Las decisiones con su porqué están en [`docs/adr/`](adr/). El plan por fases, 
   los clientes lo reutilizan.
 - **Descubrimiento:** el daemon escribe `daemon.json` (`{ version, port, pid, startedAt }`) y `token`
   (permisos 600) en el directorio de estado:
-  Linux `$XDG_STATE_HOME/atalaya` (o `~/.local/state/atalaya`), Windows `%LOCALAPPDATA%\Atalaya`.
+  Linux `$XDG_STATE_HOME/nexo` (o `~/.local/state/nexo`), Windows `%LOCALAPPDATA%\Nexo`.
 - **Shell de escritorio** (`apps/desktop`): solo ventana, bandeja, atajo global, instancia única y arrancar
   el daemon si no está vivo. Le pasa a la página el puerto y el token por un comando de Tauri.
   No contiene lógica de negocio: se compila pocas veces.
 - **Web** (`apps/web`): la misma interfaz sirve dentro de Tauri y en un navegador (modo desarrollo o
-  `atalaya open --browser`).
+  `nexo open --browser`).
 
 ## Capas (hexagonal)
 
@@ -71,16 +71,16 @@ apps/*               raíces de composición: daemon (une core + adaptadores), w
 
 ### Dominio (core)
 
-| Concepto | Qué es |
-| --- | --- |
-| `Workspace` | Grupo de pestañas, normalmente una carpeta de proyecto (`cwd`). |
-| `Tab` | Una pestaña: su contenido es un **árbol de distribución** de paneles. |
-| `Layout` | Árbol inmutable: hoja = panel; nodo = división `row`/`column` con proporciones que suman 1. |
-| `Pane` | Panel. `kind: 'terminal' | 'agent'` (más adelante `viewer`). |
-| `Terminal` | Proceso en un PTY con un búfer circular de salida (para reconectar y para `terminal.read`). |
-| `AgentSession` | Conversación con un proveedor; su contenido es una lista de `Block` (documento). |
-| `Block` | Pieza del documento: mensaje del usuario, texto del agente (Markdown), acción plegable (leer, editar con diff, ejecutar con salida), permiso, pregunta, plan, error. |
-| `Attention` | Estado visible en la barra: `idle`, `working`, `needs-input`, `done`, `error`. |
+| Concepto       | Qué es                                                                                                                                                               |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Workspace`    | Grupo de pestañas, normalmente una carpeta de proyecto (`cwd`).                                                                                                      |
+| `Tab`          | Una pestaña: su contenido es un **árbol de distribución** de paneles.                                                                                                |
+| `Layout`       | Árbol inmutable: hoja = panel; nodo = división `row`/`column` con proporciones que suman 1.                                                                          |
+| `Pane`         | Panel. `kind`: `terminal` o `agent` (más adelante `viewer`).                                                                                                         |
+| `Terminal`     | Proceso en un PTY con un búfer circular de salida (para reconectar y para `terminal.read`).                                                                          |
+| `AgentSession` | Conversación con un proveedor; su contenido es una lista de `Block` (documento).                                                                                     |
+| `Block`        | Pieza del documento: mensaje del usuario, texto del agente (Markdown), acción plegable (leer, editar con diff, ejecutar con salida), permiso, pregunta, plan, error. |
+| `Attention`    | Estado visible en la barra: `idle`, `working`, `needs-input`, `done`, `error`.                                                                                       |
 
 ### Puertos (interfaces en `core/ports`)
 
@@ -120,6 +120,22 @@ Métodos de la fase 1 (terminal): `daemon.info`, `snapshot`, `events.subscribe`,
 `pane.{split,close,focus,resize,swap}`, `terminal.{spawn,write,resize,read,kill}`.
 Eventos: `layout.changed`, `terminal.output`, `terminal.exit`, `pane.title`, `pane.attention`.
 
+Detalles fijados en F0 (la fuente exacta es `packages/contracts`):
+
+- `Layout`: hoja `{ type: 'leaf', paneId }`; división `{ type: 'split', direction: 'row' | 'column',
+  children, ratios }` con 2 o más hijos. Se valida de forma iterativa (sin recursión de zod) para que
+  árboles muy profundos no desborden la pila; por eso `Layout` es uno de los pocos tipos escritos a mano.
+  Máximo 1024 paneles por pestaña.
+- Método o evento desconocido → `NOT_FOUND`. Cualquier clave `__proto__` en un mensaje → `INVALID_PARAMS`.
+- Peticiones estrictas (claves extra se rechazan); mensajes del servidor tolerantes (claves extra se
+  ignoran), para que un cliente viejo no se rompa con un daemon nuevo.
+- Títulos y nombres rechazan caracteres de control; `terminal.write` sí acepta ANSI/OSC.
+- `terminal.output` lleva `offset` (posición absoluta en el búfer) y `terminal.read` devuelve
+  `{ data, offset }`, para reconectar sin perder ni duplicar salida.
+
+Versiones fijadas: TypeScript 6.x (dependency-cruiser aún no soporta TS 7) y solid-js 1.9
+(`@tanstack/solid-query` y `vite-plugin-solid` piden Solid 1.x). Se revisan al subir esas dependencias.
+
 ## Rendimiento
 
 Presupuestos (los mide una prueba de rendimiento en CI, con margen):
@@ -146,10 +162,24 @@ Presupuestos (los mide una prueba de rendimiento en CI, con margen):
 - Terminal: `@xterm/xterm` + addons `fit`, `webgl`, `web-links`, `unicode11`, `search`.
 - Textos de la interfaz en español, desde un diccionario (`i18n/es.ts`) para poder traducir.
 
+## Compañeros (mascotas)
+
+Nexo funciona al 100 % sin mascota. Una mascota es un **paquete intercambiable** (ver ADR 0006):
+
+- Un manifiesto validado con zod (`companion.json`: id, nombre, versión, autor, licencia) y un mapa de
+  **estados** a recursos: `idle`, `thinking`, `working`, `needs-input`, `done`, `error`, `dizzy`, …
+  Cada estado apunta a imágenes, sprites animados o una animación; los estados que falten caen a `idle`.
+- El núcleo **no** sabe de mascotas: publica eventos (`pane.attention`, estados de agente) y un
+  `CompanionPort` los traduce a estados de mascota. Se puede escribir otro traductor sin tocar el núcleo.
+- Las mascotas se instalan en el directorio de datos (`companions/<id>/`) y se eligen en la
+  configuración; una mascota externa también puede conectarse como cliente por MCP o WebSocket.
+- Los paquetes de mascota son datos, no código: no ejecutan scripts. Rutas y tamaños se validan al
+  cargarlos (sin recorridos de ruta, límites de tamaño por recurso y por paquete).
+
 ## Seguridad
 
 - Solo `127.0.0.1`; token aleatorio de 32 bytes; `Origin` permitido: `tauri://localhost`,
-  `http://tauri.localhost` (Windows), y el origen de Vite solo con `ATALAYA_DEV=1`.
+  `http://tauri.localhost` (Windows), y el origen de Vite solo con `NEXO_DEV=1`.
 - Procesos siempre con `spawn(cmd, args[])`, **nunca** con una cadena de shell.
 - Rutas: el visor y cualquier lectura de archivos pasan por `fs-sandbox` (resuelve enlaces simbólicos,
   bloquea carpetas ocultas sensibles, rutas UNC, `\\?\`, nombres de dispositivo de Windows).
@@ -158,14 +188,14 @@ Presupuestos (los mide una prueba de rendimiento en CI, con margen):
 
 ## Pruebas
 
-| Tipo | Dónde | Herramienta |
-| --- | --- | --- |
-| Unitarias | junto al código (`*.test.ts`) | Vitest |
-| Propiedades | parsers, árbol de distribución, protocolo | fast-check |
-| Conformidad de puertos | `packages/testkit/conformance` contra falso y adaptador real | Vitest |
-| Integración | daemon real + node-pty real, Linux y Windows | Vitest |
-| Extremo a extremo | web servida por el daemon, en navegador | Playwright |
-| Rust | `apps/desktop` | `cargo test`, `clippy` |
+| Tipo                   | Dónde                                                        | Herramienta            |
+| ---------------------- | ------------------------------------------------------------ | ---------------------- |
+| Unitarias              | junto al código (`*.test.ts`)                                | Vitest                 |
+| Propiedades            | parsers, árbol de distribución, protocolo                    | fast-check             |
+| Conformidad de puertos | `packages/testkit/conformance` contra falso y adaptador real | Vitest                 |
+| Integración            | daemon real + node-pty real, Linux y Windows                 | Vitest                 |
+| Extremo a extremo      | web servida por el daemon, en navegador                      | Playwright             |
+| Rust                   | `apps/desktop`                                               | `cargo test`, `clippy` |
 
 **Pruebas adversariales obligatorias** (`*.adversarial.test.ts`) en cada funcionalidad: entradas
 malformadas, enormes o binarias; tokens y orígenes incorrectos; carreras (cerrar un panel mientras
@@ -188,4 +218,4 @@ Cobertura mínima: `core` y `contracts` 90 %; adaptadores 80 %.
 
 La idea de leer cada conversación como un documento, con permisos en línea y varios agentes a la vista,
 viene de [MegaloIV/lyra-agentes](https://github.com/MegaloIV/lyra-agentes) (MIT). La organización en
-espacios, pestañas y paneles controlables por CLI viene de herdr. Atalaya no copia código de ninguno.
+espacios, pestañas y paneles controlables por CLI viene de herdr. Nexo no copia código de ninguno.

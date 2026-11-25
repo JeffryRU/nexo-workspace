@@ -1,0 +1,18 @@
+{
+  "name": "@nexo/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@nexo/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@nexo/testkit": "workspace:*"
+  }
+}

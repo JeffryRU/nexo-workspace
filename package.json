@@ -1,0 +1,29 @@
+{
+  "name": "nexo",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "packageManager": "pnpm@12.4.1",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "pnpm -r --workspace-concurrency=4 run typecheck",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "test": "vitest run --coverage",
+    "depcruise": "depcruise apps packages --config .dependency-cruiser.mjs",
+    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm depcruise"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.9",
+    "@types/node": "^24.0.0",
+    "@vitest/coverage-v8": "^5.1.1",
+    "dependency-cruiser": "^18.9.0",
+    "fast-check": "^4.11.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1"
+  }
+}
