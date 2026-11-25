@@ -277,6 +277,62 @@ exacto por `send` (también tras `interrupt`, con `stopReason: 'interrupted'`), 
 `interrupt` idempotente, `respond` con solicitud desconocida o repetida → `UNKNOWN_REQUEST`, `close` idempotente con un
 solo `exit`, y bloques abiertos con `block-start` antes de cualquier delta.
 
+### AgentService (F2.2)
+
+`AgentService` (`packages/core/src/agent-service.ts`) implementa `AgentHandlers` (`service.handlers` va a
+`createDispatcher({ agents })`; el daemon lo compone en F2.4) y sale de puertos inyectados: proveedores, `EventBusPort`,
+`ClockPort`, `IdPort` (ahora con `agentSession()` y `block()`) y `AgentPaneDirectory` (lo implementa `LayoutService`).
+
+**Ciclo de vida de la sesión.** `agent.create` valida el panel (`kind: 'agent'`, sin otra sesión viva) y reserva el
+cupo antes de abrir el proceso, de modo que las aperturas simultáneas no pasan de `maxAgentSessions` (`CONFLICT`); el
+panel recibe `agentSessionId`. `status` (`Attention`): `idle` al crear → `working` en `send` → `needs-input` mientras
+hay permisos o preguntas pendientes → al `turn-end`: `done` (`end-turn` y similares), `idle` (`interrupted`) o `error`
+(`stopReason: 'error'`, la sesión sigue usable). Cada cambio emite `agent.status` y, si cambia el estado, `pane.attention`
+(el panel lo guarda `LayoutService.setPaneAttention`, sin `layout.changed`). Un `exit` que no se pidió, un `error`
+fatal, el tope de bloques, un `IdPort` que repite ids, una interrupción que el proveedor no atiende en
+`interruptTimeoutMs` (5 s) o demasiados eventos inválidos dejan la sesión en `error`: queda legible (con un bloque
+`error` fatal), rechaza `send` con `CONFLICT` y se quita con `agent.close`, que cierra el proveedor, libera el panel y
+emite `agent.session { removed }`. Cerrar un panel, pestaña o espacio cierra su sesión (`WorkspaceService`).
+
+**Documento.** El servicio asigna `BlockId`, `index` (posición en el arreglo: sin huecos ni repetidos), `turn` y
+`seq`, y asocia la `ref` del proveedor a su bloque hasta el `block-end` (después la `ref` puede reutilizarse). `send`
+añade el bloque `user`; `turn-end` cierra lo que quedó abierto (texto `complete`, acciones sin terminar en `error`) y
+añade un bloque `usage`. El proveedor no puede abrir bloques `user`, `permission` ni `question`. `block-end` sin
+contenido cierra un texto (`complete`) y marca `ok` una acción que seguía en `pending`/`running`.
+
+**Eventos inválidos.** Cada evento pasa por `ProviderEvent.safeParse`; se descarta y se cuenta (`stats().invalidEvents`)
+el que no cumple el esquema, llega fuera de turno, usa una `ref` o `requestId` desconocidos o repetidos, cambia el tipo
+del bloque o no corresponde a su campo. Con `maxConsecutiveInvalid` (20) seguidos la sesión pasa a `error`; un evento
+válido reinicia la racha.
+
+**Deltas por lote.** Los `block-delta` se acumulan en un `OutputBatcher` por sesión y salen como un solo `agent.delta`
+cada `batchMs` (16 ms, configurable, reloj inyectado) o al juntar `maxDeltaBytes` (32 KiB; un lote mayor se parte sin
+cortar caracteres). `seq` cuenta los deltas **emitidos** de un bloque, no los del proveedor. Cualquier otro evento del
+proveedor, `agent.snapshot`, `exit` y el cierre del turno vacían antes el lote, así que el orden de eventos coincide con
+el del documento. Un bloque que llegó al tope de 128 KiB queda `truncated` y descarta los deltas siguientes sin
+emitirlos (memoria y tráfico acotados). Por tanto el cliente que aplica `agent.block` (upsert) y `agent.delta`
+(`applyBlockDelta`) reproduce exactamente el `agent.snapshot` (lo comprueba una prueba de propiedades con `AgentMirror`).
+
+**Tamaño.** Todo bloque que se publica o guarda cabe en `maxMessageBytes` menos 8 KiB de sobre: si su JSON no cabe se
+recortan, sin partir caracteres, los campos de texto más grandes y el bloque (`text`, `reasoning`, `action`) queda
+`truncated`. Un delta que haría pasar de ese tamaño a una acción se sustituye por un `agent.block` recortado. Un `plan`
+con `markdown` y entradas enormes se recorta sin marca (el tipo no la tiene). `agent.snapshot` empaqueta bloques hasta
+ese presupuesto, así que puede devolver menos que `limit`, pero siempre al menos uno.
+
+**Límites.** `maxAgentSessions` y `maxBlocksPerSession` dan `CONFLICT` (en `create` y en `send`). Las últimas
+`reservedBlocks` (8) posiciones solo las usan permisos, preguntas, errores y `usage`: los bloques ordinarios del
+proveedor que ya no caben se descartan (`stats().droppedBlocks`) y `send` rechaza turnos nuevos al llegar a ese punto. Si
+una solicitud no cabe ni en la reserva, la sesión pasa a `error`.
+
+**Permisos y preguntas.** `permission-request` y `question-request` crean un bloque `pending` (las opciones y preguntas
+repetidas se descartan) y la sesión pasa a `needs-input`. `agent.respond` comprueba que el bloque exista (`NOT_FOUND`),
+sea del tipo indicado y que la opción o respuestas valgan (`INVALID_PARAMS`, `validateAnswers`), y que siga `pending`
+(`CONFLICT` si ya se resolvió o canceló; dos respuestas simultáneas: una gana). Luego llama a `respond` del proveedor: si
+este falla el bloque sigue pendiente (salvo `UNKNOWN_REQUEST`, que lo cancela); si acepta, el bloque pasa a
+`accepted`/`rejected` según `kind` de la opción (`allow*`/`reject*`) o a `answered`. Interrumpir (`agent.interrupt`),
+`request-cancelled`, `turn-end` o el cierre de la sesión dejan los pendientes `cancelled`. Un solo turno a la vez: `send`
+con un turno en curso responde `CONFLICT`.
+
 Cómo cubre cada proveedor: Claude (`includePartialMessages`: `content_block_*` → `block-start/delta/end`;
 `tool_use`/`tool_result` → `action`; `canUseTool` → `permission-request`; `AskUserQuestion` →
 `question-request`, con `updatedInput.answers` al responder; `result` con `total_cost_usd` y `usage` → `turn-end`),
