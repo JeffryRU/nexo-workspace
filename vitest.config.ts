@@ -9,11 +9,18 @@ const heavyFiles = [
   'packages/adapters/pty-host/test/**/*.test.ts',
   'apps/cli/src/cli.integration.test.ts',
   'apps/cli/src/cli.adversarial.test.ts',
+  'apps/cli/src/agent.integration.test.ts',
   'apps/daemon/src/daemon.integration.test.ts',
+  'apps/daemon/src/agents.integration.test.ts',
   'apps/daemon/src/daemon.adversarial.test.ts',
   'packages/client/src/node/daemon.integration.test.ts',
   'packages/client/src/node/discovery.adversarial.test.ts',
 ]
+
+// Máquinas lentas o compartidas (p. ej. un VPS con otras cargas): NEXO_TEST_TIMEOUT_SCALE=3 triplica los plazos
+// de las pruebas. Vale 1 por omisión; el CI no lo usa. Ver AGENTS.md.
+const parsedScale = Number(process.env.NEXO_TEST_TIMEOUT_SCALE ?? '1')
+const scale = Number.isFinite(parsedScale) && parsedScale >= 1 ? Math.min(parsedScale, 20) : 1
 
 const heavyProject = (name: string, include: string[]) => ({
   test: {
@@ -21,8 +28,8 @@ const heavyProject = (name: string, include: string[]) => ({
     root: '.',
     include,
     environment: 'node' as const,
-    testTimeout: 30000,
-    hookTimeout: 30000,
+    testTimeout: 30000 * scale,
+    hookTimeout: 30000 * scale,
     fileParallelism: false,
   },
 })
@@ -41,8 +48,8 @@ const project = (name: string, root: string, testTimeout = 5000) => ({
     // Las pruebas *.live.test.ts usan el SDK y credenciales reales: solo corren a mano (ver docs).
     exclude: ['**/node_modules/**', '**/*.live.test.ts', ...heavyWithin(root)],
     environment: 'node',
-    testTimeout,
-    hookTimeout: testTimeout,
+    testTimeout: testTimeout * scale,
+    hookTimeout: testTimeout * scale,
   },
 })
 
