@@ -105,6 +105,26 @@ export function createActions(deps: {
       await run((c) => c.call('tab.create', { workspaceId }))
     },
 
+    /** Pestaña nueva con un panel de agente (`tab.create` no admite `kind`: se divide y se cierra el panel inicial). */
+    async newAgentTab(workspaceId: WorkspaceId | undefined = currentWorkspaceId()): Promise<void> {
+      if (workspaceId === undefined) return
+      const created = await run((c) => c.call('tab.create', { workspaceId }))
+      const initial = created?.tab.panes[0]
+      if (initial === undefined) return
+      const split = await run((c) =>
+        c.call('pane.split', { paneId: initial.id, direction: 'row', kind: 'agent' }),
+      )
+      if (split === undefined) return
+      await run((c) => c.call('pane.close', { paneId: initial.id }))
+      await actions.focusPane(split.pane.id)
+    },
+
+    /** Divide un panel y deja un panel de agente al lado. */
+    async splitAgent(paneId: PaneId, direction: SplitDirection): Promise<void> {
+      const split = await run((c) => c.call('pane.split', { paneId, direction, kind: 'agent' }))
+      if (split !== undefined) await actions.focusPane(split.pane.id)
+    },
+
     async renameTab(tabId: TabId, title: string): Promise<void> {
       const clean = cleanName(title)
       if (clean === undefined) return

@@ -45,7 +45,7 @@ export function App(props: { state: AppProps | undefined }) {
 }
 
 function Workbench(props: { model: AppModel }) {
-  const { store, status, sessions, request } = props.model
+  const { store, status, sessions, agents, request } = props.model
   // Hasta tener el primer snapshot no hay nada que mostrar salvo el estado de la conexión.
   const everOpened = createMemo<boolean>((was) => was || status() === 'open', false)
 
@@ -53,7 +53,10 @@ function Workbench(props: { model: AppModel }) {
     const stop = installShortcuts(props.model)
     onCleanup(stop)
   })
-  onCleanup(() => sessions.disposeAll())
+  onCleanup(() => {
+    sessions.disposeAll()
+    agents.disposeAll()
+  })
 
   // Libera las terminales de paneles que ya no existen.
   createEffect(() => {
@@ -62,6 +65,7 @@ function Workbench(props: { model: AppModel }) {
       for (const t of w.tabs) for (const id of paneIdsOf(t.layout)) live.add(id)
     }
     sessions.prune(live)
+    agents.prune(live)
   })
 
   const info = useQuery(() => ({

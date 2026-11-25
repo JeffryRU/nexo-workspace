@@ -243,6 +243,10 @@ export function createDaemonSession(deps: SessionDeps) {
       if (client === undefined) return Promise.reject(new Error('sin conexión'))
       return client.call(method, params)
     },
+    /** El cliente actual si hay conexión (para los documentos de agente, que se suscriben a sus eventos). */
+    agentClient(): ClientLike | undefined {
+      return status() === 'open' ? client : undefined
+    },
     retry: start,
     dispose(): void {
       generation++
