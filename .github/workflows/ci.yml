@@ -76,8 +76,11 @@ jobs:
         # (con 10 + 30 terminales) pasaría de 15 minutos; la CLI, el daemon y la web ya se prueban allí en `check`.
         os: [ubuntu-latest]
     env:
-      # Los runners compartidos son más lentos y variables: margen del doble sobre el presupuesto local (16 ms).
-      NEXO_PERF_TAB_P95_MS: "32"
+      # Los runners compartidos son más lentos y variables (p95 medido entre 12 y 44 ms con el mismo código): margen
+      # de 2,5x sobre el presupuesto local (16 ms) y salida menos densa (20 ms por línea); el valor previo a las
+      # optimizaciones (53 ms en local) seguiría fallando.
+      NEXO_PERF_TAB_P95_MS: "40"
+      NEXO_PERF_EMIT_MS: "20"
       NEXO_PERF_LONGTASK_MAX_MS: "500"
     steps:
       - uses: actions/checkout@v4

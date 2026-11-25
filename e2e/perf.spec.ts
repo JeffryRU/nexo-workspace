@@ -37,8 +37,11 @@ function save(name: string, data: unknown): void {
   writeFileSync(join(OUT_DIR, `${name}.json`), `${JSON.stringify(data, null, 2)}\n`)
 }
 
-/** Salida continua: una línea de ~70 caracteres cada 5 ms. */
-const EMITTER = "let n=0;setInterval(()=>console.log('linea '+(n++)+' '+'x'.repeat(60)),5)"
+/** Salida continua: una línea de ~70 caracteres cada `EMIT_MS` ms. */
+// En CI (2 núcleos compartidos con el daemon, 10 procesos y el navegador) se baja a una línea cada 20 ms: el
+// ruido por CPU saturada tapaba la medida (p95 entre 12 y 44 ms con el mismo código).
+const EMIT_MS = Number(process.env.NEXO_PERF_EMIT_MS ?? '5')
+const EMITTER = `let n=0;setInterval(()=>console.log('linea '+(n++)+' '+'x'.repeat(60)),${EMIT_MS})`
 
 test('cambiar de pestaña con 10 terminales activas: p95 < 16 ms', async ({ stack, app }) => {
   for (let i = 1; i <= TABS; i++) await stack.newTab(`t${i}`, EMITTER)
@@ -65,7 +68,7 @@ test('cambiar de pestaña con 10 terminales activas: p95 < 16 ms', async ({ stac
   const samples = await app.evaluate(() => globalThis.__NEXO_PERF__)
   const work = summarize(samples?.tabSwitch ?? [])
   const raw = summarize(samples?.tabSwitchRaw ?? [])
-  const result = { tabs: TABS, switches: SWITCHES, limitP95Ms: TAB_SWITCH_P95_MS, work, raw }
+  const result = { tabs: TABS, switches: SWITCHES, emitMs: EMIT_MS, limitP95Ms: TAB_SWITCH_P95_MS, work, raw }
   save('tab-switch', result)
   console.log(`tab-switch (ms): ${JSON.stringify(result)}`)
 
