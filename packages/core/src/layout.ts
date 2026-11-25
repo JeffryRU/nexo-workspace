@@ -5,6 +5,7 @@ import {
   type SplitDirection,
   type SplitNode,
 } from '@nexo/contracts'
+import { DomainError } from './errors.ts'
 
 /**
  * Operaciones puras e inmutables sobre el árbol de distribución.
@@ -20,12 +21,11 @@ export type Direction = 'left' | 'right' | 'up' | 'down'
 
 export type LayoutErrorCode = 'NOT_FOUND' | 'INVALID_PARAMS' | 'CONFLICT'
 
-export class LayoutError extends Error {
-  readonly code: LayoutErrorCode
+export class LayoutError extends DomainError {
+  declare readonly code: LayoutErrorCode
   constructor(code: LayoutErrorCode, message: string) {
-    super(message)
+    super(code, message)
     this.name = 'LayoutError'
-    this.code = code
   }
 }
 
