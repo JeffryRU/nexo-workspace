@@ -95,6 +95,18 @@ describe('autenticación hostil', () => {
     expect(snap.workspaces).toHaveLength(0)
   })
 
+  it('daemon.shutdown sin autenticar es UNAUTHORIZED y el daemon sigue vivo', async () => {
+    const stops: number[] = []
+    const d = await boot({ onShutdownRequested: () => void stops.push(1) })
+    const c = await raw(await openSocket(d.port))
+    const res = await c.request('daemon.shutdown', {})
+    expect((res.error as { code: string }).code).toBe('UNAUTHORIZED')
+    await c.waitClose()
+    await new Promise((r) => setTimeout(r, 150))
+    expect(stops).toEqual([])
+    expect((await (await authed(d)).call<{ pid: number }>('daemon.info')).pid).toBe(process.pid)
+  })
+
   it('JSON roto o binario antes de auth cierra la conexión', async () => {
     const d = await boot()
     const c = await raw(await openSocket(d.port))

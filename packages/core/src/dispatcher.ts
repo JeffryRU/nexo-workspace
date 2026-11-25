@@ -20,6 +20,8 @@ export type DispatcherServices = {
    * lo aporta quien despacha.
    */
   subscribe: (params: MethodParams<'events.subscribe'>) => MethodResult<'events.subscribe'>
+  /** Pide el apagado del daemon; debe volver enseguida (el apagado ocurre después de responder). */
+  shutdown: () => void
 }
 
 /** Petición ya validada con zod: unión discriminada por `method`. */
@@ -41,6 +43,10 @@ export function createHandlers(s: DispatcherServices): Handlers {
     // La autenticación la resuelve quien despacha (daemon) antes de llegar aquí; ya autenticado es un no-op.
     auth: () => ({}),
     'daemon.info': () => s.snapshot.daemonInfo(),
+    'daemon.shutdown': () => {
+      s.shutdown()
+      return {}
+    },
     snapshot: () => s.snapshot.snapshot(),
     'events.subscribe': (p) => s.subscribe(p),
     'workspace.list': () => s.workspaces.list(),

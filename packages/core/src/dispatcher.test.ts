@@ -12,6 +12,7 @@ describe('createDispatcher', () => {
       terminals: h.terminals,
       snapshot: h.snapshot,
       subscribe: () => ({ seq: 0 }),
+      shutdown: () => {},
     })
     expect(Object.keys(handlers).sort()).toEqual([...METHOD_NAMES].sort())
   })
@@ -47,6 +48,8 @@ describe('createDispatcher', () => {
     expect((await run('workspace.list', {})).workspaces).toHaveLength(1)
     expect((await run('snapshot', {})).workspaces[0]?.name).toBe('q')
     expect(await run('daemon.info', {})).toMatchObject({ protocol: 1, version: '0.0.0-test' })
+    expect(await run('daemon.shutdown', {})).toEqual({})
+    expect(h.shutdowns.count).toBe(1)
     expect(await run('events.subscribe', {})).toEqual({ seq: h.bus.events.length })
     await run('terminal.kill', { terminalId })
     await run('pane.close', { paneId: pane.id })
@@ -81,6 +84,7 @@ describe('createDispatcher', () => {
       subscribe: () => {
         throw new Error('clave secreta en el mensaje')
       },
+      shutdown: () => {},
     })
     const out = await dispatch({ method: 'events.subscribe', params: {} })
     expect(out).toEqual({ ok: false, error: { code: 'INTERNAL', message: 'error interno' } })
@@ -95,6 +99,7 @@ describe('createDispatcher', () => {
       subscribe: () => {
         throw new DomainError('UNAUTHORIZED', 'no', { x: 1 })
       },
+      shutdown: () => {},
     })
     expect(await dispatch({ method: 'events.subscribe', params: {} })).toEqual({
       ok: false,

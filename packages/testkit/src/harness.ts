@@ -37,13 +37,17 @@ export function createHarness(options: HarnessOptions = {}) {
     identity: { version: '0.0.0-test', pid: 1, startedAt: '2026-01-01T00:00:00.000Z' },
     currentSeq: () => bus.events.length,
   })
+  const shutdowns = { count: 0 }
   const dispatch = createDispatcher({
     workspaces,
     terminals,
     snapshot,
     subscribe: () => ({ seq: bus.events.length }),
+    shutdown: () => {
+      shutdowns.count++
+    },
   })
-  return { clock, bus, ids, pty, layout, terminals, workspaces, snapshot, dispatch }
+  return { clock, bus, ids, pty, layout, terminals, workspaces, snapshot, dispatch, shutdowns }
 }
 
 export type Harness = ReturnType<typeof createHarness>

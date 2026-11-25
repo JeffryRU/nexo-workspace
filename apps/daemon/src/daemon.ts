@@ -66,6 +66,8 @@ export type DaemonOptions = {
   /** `apps/web/dist` por omisión; `null` desactiva la web. */
   webRoot?: string | null
   pty?: PtyPort
+  /** Se llama (tras responder) cuando un cliente pide `daemon.shutdown`; por omisión detiene el daemon. */
+  onShutdownRequested?: (stop: () => Promise<void>) => void
   terminal?: TerminalServiceConfig
   server?: Partial<
     Pick<
@@ -166,6 +168,14 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
         terminals,
         snapshot: new SnapshotService({ layout, identity, currentSeq: hooks.currentSeq }),
         subscribe: hooks.subscribe,
+        shutdown: () => {
+          // Un respiro para que la respuesta salga antes de cerrar las conexiones.
+          const timer = setTimeout(
+            () => (options.onShutdownRequested ?? ((s) => void s()))(stop),
+            50,
+          )
+          timer.unref()
+        },
       }),
     ...options.server,
   })

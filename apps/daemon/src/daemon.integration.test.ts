@@ -115,6 +115,28 @@ describe('daemon real', () => {
     expect((await c.call<{ pid: number }>('daemon.info')).pid).toBe(process.pid)
   })
 
+  it('daemon.shutdown responde y luego detiene el daemon y borra el descubrimiento', async () => {
+    const stops: number[] = []
+    const d = await boot({ onShutdownRequested: (stop) => void stop().then(() => stops.push(1)) })
+    const c = await client(d)
+    expect(await c.call('daemon.shutdown')).toEqual({})
+    const end = Date.now() + 5000
+    while (stops.length === 0 && Date.now() < end) await new Promise((r) => setTimeout(r, 20))
+    expect(stops).toEqual([1])
+    await expect(stat(d.paths.daemon)).rejects.toThrow()
+  })
+
+  it('daemon.shutdown por omisión detiene el daemon', async () => {
+    const d = await boot()
+    const c = await client(d)
+    await c.call('daemon.shutdown')
+    const end = Date.now() + 5000
+    while (d.logs.every((l) => !l.includes('daemon detenido')) && Date.now() < end) {
+      await new Promise((r) => setTimeout(r, 20))
+    }
+    expect(d.logs.some((l) => l.includes('daemon detenido'))).toBe(true)
+  })
+
   it('GET /health sin token devuelve solo ok y versión', async () => {
     const d = await boot()
     const res = await fetch(`http://127.0.0.1:${d.port}/health`)

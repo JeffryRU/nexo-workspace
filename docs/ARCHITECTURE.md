@@ -183,7 +183,7 @@ Transporte: WebSocket con mensajes JSON de texto. Tamaño máximo de mensaje: 1 
 - Autenticación: el token va en el primer mensaje (`auth`) o en la cabecera `Sec-WebSocket-Protocol`,
   nunca en logs. Comparación en tiempo constante.
 
-Métodos de la fase 1 (terminal): `auth` (solo como primer mensaje; el daemon lo resuelve antes de despachar), `daemon.info`, `snapshot`, `events.subscribe`,
+Métodos de la fase 1 (terminal): `auth` (solo como primer mensaje; el daemon lo resuelve antes de despachar), `daemon.info`, `daemon.shutdown` (apagado limpio; solo clientes autenticados), `snapshot`, `events.subscribe`,
 `workspace.{list,create,rename,close}`, `tab.{create,close,focus,move,rename}`,
 `pane.{split,close,focus,resize,swap}`, `terminal.{spawn,write,resize,read,kill}`.
 Eventos: `layout.changed`, `workspace.changed`, `terminal.output`, `terminal.exit`, `pane.title`, `pane.attention`,
@@ -221,7 +221,7 @@ Detalles fijados en F0 (la fuente exacta es `packages/contracts`):
   reinicia). Las llamadas pendientes al caer fallan con `DISCONNECTED`. `close()` es definitivo.
   Estados: `connecting | open | reconnecting | closed`. Los logs del cliente nunca incluyen el token.
 - `@nexo/client/node`: `discoverDaemon()` (lee `NEXO_STATE_DIR` o el directorio por plataforma, valida `daemon.json`
-  con zod, exige archivos regulares pequeños y un token `[A-Za-z0-9_-]{16,512}`, comprueba `/health` con
+  con zod (ignora campos desconocidos; la URL siempre usa 127.0.0.1), exige archivos regulares pequeños y un token `[A-Za-z0-9_-]{16,512}`, comprueba `/health` con
   `X-Nexo-Daemon: 1`; errores `NOT_RUNNING`, `STALE`, `CORRUPT`), `connectToDaemon()` (redescubre en cada
   reconexión) y `ensureDaemon({ start })` (arranca con un callback inyectado y espera a `/health`).
 
