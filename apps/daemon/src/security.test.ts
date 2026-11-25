@@ -112,6 +112,13 @@ describe('entorno', () => {
     expect(parseEnv({})).toMatchObject({ port: 4317, dev: false, maxConnections: 128 })
   })
 
+  it('NEXO_PTY_MODE: host, direct o sin valor', () => {
+    expect(parseEnv({}).ptyMode).toBeUndefined()
+    expect(parseEnv({ NEXO_PTY_MODE: '' }).ptyMode).toBeUndefined()
+    expect(parseEnv({ NEXO_PTY_MODE: 'host' }).ptyMode).toBe('host')
+    expect(parseEnv({ NEXO_PTY_MODE: 'direct' }).ptyMode).toBe('direct')
+  })
+
   it('lee y valida', () => {
     expect(parseEnv({ NEXO_PORT: '0', NEXO_DEV: '1', NEXO_STATE_DIR: '/x' })).toMatchObject({
       port: 0,
@@ -129,6 +136,7 @@ describe('entorno', () => {
       { NEXO_DEV: 'sí' },
       { NEXO_LOG_LEVEL: 'ruidoso' },
       { NEXO_MAX_CONNECTIONS: '0' },
+      { NEXO_PTY_MODE: 'otro' },
     ]) {
       expect(() => parseEnv(env), JSON.stringify(env)).toThrow(/variable de entorno inválida/)
     }
