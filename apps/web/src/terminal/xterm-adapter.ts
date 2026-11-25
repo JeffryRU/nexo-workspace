@@ -31,6 +31,13 @@ export interface XtermHandle extends TerminalSink {
   dispose(): void
 }
 
+declare global {
+  // Solo con `__NEXO_E2E__ = true` (lo pone la prueba antes de cargar la página): deja leer el búfer de cada
+  // terminal desde Playwright. Sin esa bandera no se expone nada.
+  var __NEXO_E2E__: boolean | undefined
+  var __NEXO_E2E_TERMS__: { element: HTMLElement; text: () => string }[] | undefined
+}
+
 export type XtermFactory = () => XtermHandle
 
 export const SCROLLBACK = 5000
@@ -68,6 +75,17 @@ export function createXtermHandle(): XtermHandle {
 
   const element = document.createElement('div')
   element.className = 'xterm-host'
+  const probe = {
+    element,
+    text: () => {
+      const lines: string[] = []
+      for (let i = 0; i < term.buffer.active.length; i++) {
+        lines.push(term.buffer.active.getLine(i)?.translateToString(true) ?? '')
+      }
+      return lines.join('\n')
+    },
+  }
+  if (globalThis.__NEXO_E2E__ === true) (globalThis.__NEXO_E2E_TERMS__ ??= []).push(probe)
   let opened = false
   let webgl: WebglAddon | undefined
 
@@ -154,6 +172,9 @@ export function createXtermHandle(): XtermHandle {
       term.reset()
     },
     dispose() {
+      const terms = globalThis.__NEXO_E2E_TERMS__
+      const at = terms?.indexOf(probe) ?? -1
+      if (at >= 0) terms?.splice(at, 1)
       dropWebgl()
       term.dispose()
       element.remove()

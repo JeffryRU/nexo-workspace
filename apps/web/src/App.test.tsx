@@ -1,5 +1,5 @@
 import { fireEvent, render } from '@solidjs/testing-library'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { App } from './App.tsx'
 import { resetTabSwitchSamples, tabSwitchSamples } from './perf.ts'
 import { mountApp } from './test-app.tsx'
@@ -140,7 +140,7 @@ describe('pestañas', () => {
     expect(container.querySelector('#tabpanel-t1')?.hasAttribute('hidden')).toBe(true)
     expect(container.querySelector('#tabpanel-t2')?.hasAttribute('hidden')).toBe(false)
     expect(container.querySelector('[data-pane-id="p1"]')).toBe(paneBefore)
-    expect(tabSwitchSamples()).toHaveLength(1)
+    await vi.waitFor(() => expect(tabSwitchSamples()).toHaveLength(1))
     expect(performance.getEntriesByName('tab-switch').length).toBeGreaterThan(0)
   })
 
