@@ -20,6 +20,8 @@ async function main(): Promise<number> {
       port: env.port,
       dev: env.dev,
       logLevel: env.logLevel,
+      agentProviders: env.agentProviders,
+      ...(env.claudeExecutable === undefined ? {} : { claudeExecutable: env.claudeExecutable }),
       ...(env.ptyMode === undefined ? {} : { ptyMode: env.ptyMode }),
       onShutdownRequested: () => shutdown('daemon.shutdown'),
       server: { maxConnections: env.maxConnections, authTimeoutMs: env.authTimeoutMs },

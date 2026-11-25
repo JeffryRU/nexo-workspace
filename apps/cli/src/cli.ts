@@ -1,3 +1,4 @@
+import { agentCommand } from './commands/agent.ts'
 import { daemonCommand } from './commands/daemon.ts'
 import { lsCommand } from './commands/ls.ts'
 import { newCommand } from './commands/new.ts'
@@ -24,6 +25,7 @@ const HANDLERS: Record<CommandName, Handler> = {
   kill: killCommand,
   close: closeCommand,
   rename: renameCommand,
+  agent: agentCommand,
   daemon: daemonCommand,
 }
 

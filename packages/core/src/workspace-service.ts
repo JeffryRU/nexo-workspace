@@ -2,7 +2,17 @@ import type { MethodParams, MethodResult, PaneId } from '@nexo/contracts'
 import type { LayoutService } from './layout-service.ts'
 import type { TerminalService } from './terminal-service.ts'
 
-export type WorkspaceServiceDeps = { layout: LayoutService; terminals: TerminalService }
+/** Lo que `WorkspaceService` necesita del servicio de agentes: cerrar la sesión de un panel que se cierra. */
+export interface AgentPaneCloser {
+  closePane(paneId: PaneId): void
+}
+
+export type WorkspaceServiceDeps = {
+  layout: LayoutService
+  terminals: TerminalService
+  /** Sin él (daemon sin proveedores) no hay sesiones de agente que cerrar. */
+  agents?: AgentPaneCloser
+}
 
 /**
  * Casos de uso `workspace.*`, `tab.*` y `pane.*`. Envuelve a `LayoutService` (dueño del estado)
@@ -12,10 +22,12 @@ export type WorkspaceServiceDeps = { layout: LayoutService; terminals: TerminalS
 export class WorkspaceService {
   readonly #layout: LayoutService
   readonly #terminals: TerminalService
+  readonly #agents: AgentPaneCloser | undefined
 
   constructor(deps: WorkspaceServiceDeps) {
     this.#layout = deps.layout
     this.#terminals = deps.terminals
+    this.#agents = deps.agents
   }
 
   list(): MethodResult<'workspace.list'> {
@@ -68,6 +80,7 @@ export class WorkspaceService {
   closePane(params: MethodParams<'pane.close'>): MethodResult<'pane.close'> {
     this.#layout.closePane(params.paneId)
     this.#terminals.closePane(params.paneId)
+    this.#agents?.closePane(params.paneId)
     return {}
   }
 
@@ -90,6 +103,9 @@ export class WorkspaceService {
   }
 
   #killPanes(paneIds: readonly PaneId[]): void {
-    for (const id of paneIds) this.#terminals.closePane(id)
+    for (const id of paneIds) {
+      this.#terminals.closePane(id)
+      this.#agents?.closePane(id)
+    }
   }
 }

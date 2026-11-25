@@ -1,4 +1,6 @@
 import {
+  AgentSessionId,
+  BlockId,
   type EventData,
   type EventName,
   PaneId,
@@ -7,7 +9,6 @@ import {
   WorkspaceId,
 } from '@nexo/contracts'
 import {
-  type AgentProviderPort,
   type BusEvent,
   type ClockPort,
   type EventBusPort,
@@ -80,6 +81,8 @@ export class SequentialIds implements IdPort {
   #tab = 0
   #pane = 0
   #term = 0
+  #agent = 0
+  #block = 0
   workspace(): WorkspaceId {
     return WorkspaceId.parse(`ws-${++this.#ws}`)
   }
@@ -91,6 +94,12 @@ export class SequentialIds implements IdPort {
   }
   terminal(): TerminalId {
     return TerminalId.parse(`term-${++this.#term}`)
+  }
+  agentSession(): AgentSessionId {
+    return AgentSessionId.parse(`agent-${++this.#agent}`)
+  }
+  block(): BlockId {
+    return BlockId.parse(`blk-${++this.#block}`)
   }
 }
 
@@ -346,13 +355,5 @@ export class FakeProcessLauncher implements ProcessLauncherPort {
   async run(options: RunOptions): Promise<RunResult> {
     this.calls.push(options)
     return this.respond(options)
-  }
-}
-
-export class FakeAgentProvider implements AgentProviderPort {
-  available = true
-  constructor(readonly id = 'fake') {}
-  async isAvailable(): Promise<boolean> {
-    return this.available
   }
 }

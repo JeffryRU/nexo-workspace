@@ -18,7 +18,10 @@ export type ShortcutAction =
   | 'tab.goto-7'
   | 'tab.goto-8'
   | 'tab.goto-9'
+  | 'agent.new-tab'
+  | 'agent.split-right'
   | 'terminal.search'
+  | 'attention.next'
   | 'help.toggle'
 
 /** Combinaciones por acción, p. ej. `Alt+Shift+T`. Editable: es un mapa plano. */
@@ -44,7 +47,10 @@ export const DEFAULT_KEYMAP: KeyMap = {
   'tab.goto-7': ['Alt+7'],
   'tab.goto-8': ['Alt+8'],
   'tab.goto-9': ['Alt+9'],
+  'agent.new-tab': ['Alt+Shift+A'],
+  'agent.split-right': ['Alt+Shift+E'],
   'terminal.search': ['Ctrl+Shift+F'],
+  'attention.next': ['Alt+Shift+N'],
   'help.toggle': ['Ctrl+Shift+P', '?'],
 }
 

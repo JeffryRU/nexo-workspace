@@ -151,3 +151,14 @@ export function chunkText(text: string, maxBytes: number): string[] {
   }
   return chunks
 }
+
+/** Como `sanitize`, pero conserva los saltos de línea y tabuladores (texto de varias líneas del agente). */
+export function sanitizeMultiline(value: string, maxLength = 200_000): string {
+  const clipped = value.length > maxLength ? `${value.slice(0, maxLength)}…` : value
+  return clipped
+    .split('\n')
+    .map((line) =>
+      sanitize(line.replaceAll('\r', ''), Number.MAX_SAFE_INTEGER).replaceAll('\x09', '\t'),
+    )
+    .join('\n')
+}

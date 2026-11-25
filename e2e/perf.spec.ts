@@ -218,3 +218,216 @@ test('una terminal que escupe 20 MB no congela la interfaz ni deja crecer la mem
     HEAP_GROWTH_MAX_MB / 2,
   )
 })
+
+// --- Agente (F2.6) -----------------------------------------------------------------------------------------
+
+// Del Enter al primer texto de la respuesta en pantalla (el proveedor falso emite el primer trozo a los ~20 ms,
+// el resto es RPC del daemon, eventos por el WebSocket y el fotograma que lo pinta).
+const FIRST_DELTA_MAX_MS = Number(process.env.NEXO_PERF_FIRST_DELTA_MS ?? '500')
+// Desplazamiento de un documento de 5 000 bloques: p95 del intervalo entre fotogramas durante el recorrido.
+const SCROLL_FRAME_P95_MS = Number(process.env.NEXO_PERF_SCROLL_FRAME_P95_MS ?? '50')
+
+// Velocidad del recorrido continuo: unos 2 500 px/s (una pantalla de 800 px cada 0,3 s).
+const SCROLL_SPEED_PX_S = 2500
+
+type AgentPerfWindow = {
+  __fd?: { t0: number; pending: boolean; count: number; samples: number[] }
+}
+
+const visiblePanel = (app: Page) => app.locator('.tab-panel:not([hidden])')
+const composerOf = (app: Page) => visiblePanel(app).getByLabel('Mensaje para el agente')
+
+/** Abre una pestaña de agente nueva (la sesión existe tras el primer mensaje) y espera a poder escribir. */
+async function openAgent(app: Page): Promise<void> {
+  const before = await app.getByRole('tab').count()
+  await app.getByRole('button', { name: 'Nueva pestaña de agente' }).click()
+  await expect(app.getByRole('tab')).toHaveCount(before + 1)
+  await expect(visiblePanel(app).getByLabel('Proveedor')).toBeVisible()
+}
+
+async function say(app: Page, text: string): Promise<void> {
+  await composerOf(app).fill(text)
+  await composerOf(app).press('Enter')
+}
+
+test('latencia del primer delta del agente en pantalla desde el envío', async ({ stack, app }) => {
+  await stack.newTab('base', EMITTER)
+  await app.goto(stack.url())
+  await expect(app.getByRole('tab')).toHaveCount(1)
+  await openAgent(app)
+  // El primer mensaje abre la sesión (agent.create): se mide aparte, no entra en el umbral.
+  const tFirst = Date.now()
+  await say(app, 'hola')
+  await expect(visiblePanel(app).locator('.usage')).toHaveCount(1)
+  const firstSendMs = Date.now() - tFirst
+
+  await app.evaluate(() => {
+    const w = globalThis as unknown as AgentPerfWindow
+    w.__fd = { t0: 0, pending: false, count: 0, samples: [] }
+    const fd = w.__fd
+    window.addEventListener(
+      'keydown',
+      (e) => {
+        const el = e.target as HTMLElement | null
+        if (e.key === 'Enter' && el?.getAttribute('aria-label') === 'Mensaje para el agente') {
+          fd.t0 = performance.now()
+          fd.count = document.querySelectorAll('.tab-panel:not([hidden]) .blk-text').length
+          fd.pending = true
+        }
+      },
+      true,
+    )
+    new MutationObserver(() => {
+      if (!fd.pending) return
+      const blocks = document.querySelectorAll('.tab-panel:not([hidden]) .blk-text')
+      const last = blocks[blocks.length - 1]
+      if (blocks.length > fd.count && (last?.textContent ?? '').trim().length > 0) {
+        fd.samples.push(performance.now() - fd.t0)
+        fd.pending = false
+      }
+    }).observe(document.body, { subtree: true, childList: true, characterData: true })
+  })
+
+  const TURNS = 10
+  for (let i = 1; i <= TURNS; i++) {
+    await say(app, 'lento 3')
+    await app.waitForFunction(
+      (n) => ((globalThis as unknown as AgentPerfWindow).__fd?.samples.length ?? 0) >= n,
+      i,
+    )
+    await expect(visiblePanel(app).locator('.usage')).toHaveCount(i + 1)
+  }
+  const samples = await app.evaluate(() => (globalThis as unknown as AgentPerfWindow).__fd?.samples)
+  const stats = summarize(samples ?? [])
+  const result = {
+    turns: TURNS,
+    limitP95Ms: FIRST_DELTA_MAX_MS,
+    firstSendWithSessionMs: firstSendMs,
+    ...stats,
+  }
+  save('agent-first-delta', result)
+  console.log(`primer delta (ms): ${JSON.stringify(result)}`)
+  expect(stats.n).toBe(TURNS)
+  expect(stats.p95).toBeLessThan(FIRST_DELTA_MAX_MS)
+})
+
+test('desplazamiento fluido en un documento de 5 000 bloques', async ({ stack, app }) => {
+  await stack.newTab('base', EMITTER)
+  await app.goto(stack.url())
+  await expect(app.getByRole('tab')).toHaveCount(1)
+  await openAgent(app)
+  // 1 bloque del usuario + 4 998 de texto + 1 de uso al terminar el turno = 5 000.
+  await say(app, 'bloques 4998')
+  await expect(visiblePanel(app).locator('.usage')).toHaveCount(1, { timeout: 120_000 })
+  await expect(visiblePanel(app).locator('.vitem').first()).toHaveAttribute('aria-setsize', '5000')
+
+  const run = await app.evaluate(
+    async ({ speed, seconds }) => {
+      const feed = document.querySelector<HTMLElement>('.tab-panel:not([hidden]) [role="feed"]')
+      if (feed === null) throw new Error('sin documento')
+      const longs: number[] = []
+      new PerformanceObserver((list) => {
+        for (const e of list.getEntries()) longs.push(e.duration)
+      }).observe({ type: 'longtask' })
+      const total = feed.scrollHeight - feed.clientHeight
+      let maxNodes = 0
+      const sample = () => {
+        maxNodes = Math.max(maxNodes, feed.querySelectorAll('.vitem').length)
+      }
+      // 1) Recorrido continuo a velocidad constante (un gesto de arrastre rápido) desde la mitad del documento.
+      const start = Math.round(total / 2)
+      feed.scrollTop = start
+      await new Promise((r) => setTimeout(r, 500))
+      const frames: number[] = []
+      await new Promise<void>((resolve) => {
+        const t0 = performance.now()
+        let last = t0
+        const step = (now: number) => {
+          frames.push(now - last)
+          last = now
+          const elapsed = (now - t0) / 1000
+          feed.scrollTop = start + speed * elapsed
+          sample()
+          if (elapsed < seconds) requestAnimationFrame(step)
+          else resolve()
+        }
+        requestAnimationFrame(step)
+      })
+      // 2) Saltos largos a posiciones repartidas por todo el documento (arrastrar la barra de desplazamiento).
+      for (let i = 1; i <= 20; i++) {
+        feed.scrollTop = (((i * 7919) % 1000) / 1000) * total
+        await new Promise((r) => setTimeout(r, 120))
+        sample()
+      }
+      await new Promise((r) => setTimeout(r, 300))
+      return { frames, longs, maxNodes, total }
+    },
+    { speed: SCROLL_SPEED_PX_S, seconds: 5 },
+  )
+  const frames = summarize(run.frames.slice(1))
+  const longest = Math.round(Math.max(0, ...run.longs))
+  const result = {
+    blocks: 5000,
+    documentPx: Math.round(run.total),
+    speedPxPerS: SCROLL_SPEED_PX_S,
+    limitFrameP95Ms: SCROLL_FRAME_P95_MS,
+    limitLongTaskMs: LONGTASK_MAX_MS,
+    frames,
+    longTasks: run.longs.length,
+    longestTaskMs: longest,
+    maxNodes: run.maxNodes,
+  }
+  save('agent-scroll-5000', result)
+  console.log(`desplazamiento 5 000 bloques: ${JSON.stringify(result)}`)
+  // Solo se dibuja una ventana, no los 5 000 bloques.
+  expect(run.maxNodes).toBeLessThan(200)
+  expect(longest).toBeLessThan(LONGTASK_MAX_MS)
+  expect(frames.p95).toBeLessThan(SCROLL_FRAME_P95_MS)
+})
+
+test('cambiar de pestaña con agentes activos emitiendo: p95 < 16 ms', async ({ stack, app }) => {
+  test.setTimeout(420_000)
+  const AGENTS = 4
+  const TERMINALS = 2
+  for (let i = 1; i <= TERMINALS; i++) await stack.newTab(`t${i}`, EMITTER)
+  await app.goto(stack.url())
+  await expect(app.getByRole('tab')).toHaveCount(TERMINALS)
+  for (let i = 0; i < AGENTS; i++) {
+    await openAgent(app)
+    // Una conversación larga y continua: unos 50 trozos por segundo durante minutos, mientras se cambia de pestaña.
+    await say(app, process.env.NEXO_PERF_AGENT_MESSAGE ?? 'charla 1000')
+    await expect(visiblePanel(app).locator('.blk-text').first()).toContainText(/palabra|Eco/)
+  }
+  const tabs = app.getByRole('tab')
+  const total = TERMINALS + AGENTS
+  await expect(tabs).toHaveCount(total)
+
+  for (let i = 0; i < total; i++) {
+    await tabs.nth(i).click()
+    await expect(tabs.nth(i)).toHaveAttribute('aria-selected', 'true')
+    await sleep(150)
+  }
+  await app.evaluate(() => {
+    globalThis.__NEXO_PERF__ = undefined
+  })
+  for (let i = 0; i < SWITCHES; i++) {
+    await tabs.nth((i + 1) % total).click()
+    await app.waitForFunction((n) => (globalThis.__NEXO_PERF__?.tabSwitch.length ?? 0) >= n, i + 1)
+    await sleep(40)
+  }
+  const samples = await app.evaluate(() => globalThis.__NEXO_PERF__)
+  const work = summarize(samples?.tabSwitch ?? [])
+  const raw = summarize(samples?.tabSwitchRaw ?? [])
+  const result = {
+    terminals: TERMINALS,
+    agents: AGENTS,
+    switches: SWITCHES,
+    limitP95Ms: TAB_SWITCH_P95_MS,
+    work,
+    raw,
+  }
+  save('tab-switch-agents', result)
+  console.log(`tab-switch con agentes (ms): ${JSON.stringify(result)}`)
+  expect(work.n).toBeGreaterThanOrEqual(SWITCHES)
+  expect(work.p95).toBeLessThan(TAB_SWITCH_P95_MS)
+})

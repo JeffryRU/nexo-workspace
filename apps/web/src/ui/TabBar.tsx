@@ -1,16 +1,15 @@
 import { For, Show } from 'solid-js'
 import { useModel } from '../app/model.tsx'
 import { es } from '../i18n/es.ts'
-import { aggregateAttention } from '../layout/tree.ts'
 import { findWorkspace } from '../state/store.ts'
-import { AttentionDot, InlineEdit, useCurrentWorkspaceId } from './parts.tsx'
+import { AttentionCount, AttentionDot, InlineEdit, useCurrentWorkspaceId } from './parts.tsx'
 import './TabBar.css'
 
 export const tabDomId = (tabId: string) => `tab-${tabId}`
 export const panelDomId = (tabId: string) => `tabpanel-${tabId}`
 
 export function TabBar() {
-  const { store, ui, actions } = useModel()
+  const { store, ui, actions, attention } = useModel()
   const currentId = useCurrentWorkspaceId()
   const workspace = () => findWorkspace(store.state, currentId())
 
@@ -39,7 +38,11 @@ export function TabBar() {
               {(t, i) => {
                 const selected = () => (w().activeTabId ?? w().tabs[0]?.id) === t.id
                 return (
-                  <div class="tab-wrap" classList={{ selected: selected() }}>
+                  <div
+                    class="tab-wrap"
+                    classList={{ selected: selected() }}
+                    data-attention={attention.tabAttention(t)}
+                  >
                     <InlineEdit
                       value={t.title}
                       editing={ui.editing() === `tab:${t.id}`}
@@ -65,8 +68,9 @@ export function TabBar() {
                           else move(e, i())
                         }}
                       >
-                        <AttentionDot attention={aggregateAttention(t.panes)} />
+                        <AttentionDot attention={attention.tabAttention(t)} />
                         <span class="ellipsis">{t.title === '' ? es.tabs.untitled : t.title}</span>
+                        <AttentionCount count={attention.tabPending(t)} />
                       </button>
                     </InlineEdit>
                     <button
@@ -93,6 +97,15 @@ export function TabBar() {
         onClick={() => void actions.newTab()}
       >
         +
+      </button>
+      <button
+        type="button"
+        class="icon-button"
+        title={`${es.agent.newTab} (${ui.keymap['agent.new-tab'][0] ?? ''})`}
+        aria-label={es.agent.newTab}
+        onClick={() => void actions.newAgentTab()}
+      >
+        ✦
       </button>
     </div>
   )

@@ -1,22 +1,12 @@
 import { For, Show } from 'solid-js'
 import { useModel } from '../app/model.tsx'
 import { es } from '../i18n/es.ts'
-import { aggregateAttention } from '../layout/tree.ts'
-import type { TabState, WorkspaceState } from '../state/model.ts'
 import { activeTabOf } from '../state/store.ts'
-import { AttentionDot, InlineEdit, useCurrentWorkspaceId } from './parts.tsx'
+import { AttentionCount, AttentionDot, InlineEdit, useCurrentWorkspaceId } from './parts.tsx'
 import './Sidebar.css'
 
-function tabAttention(tab: TabState) {
-  return aggregateAttention(tab.panes)
-}
-
-function workspaceAttention(w: WorkspaceState) {
-  return aggregateAttention(w.tabs.map((t) => ({ attention: tabAttention(t) })))
-}
-
 export function Sidebar() {
-  const { store, ui, actions } = useModel()
+  const { store, ui, actions, attention } = useModel()
   const current = useCurrentWorkspaceId()
 
   return (
@@ -70,8 +60,9 @@ export function Sidebar() {
                         if (e.key === 'F2') ui.setEditing(`ws:${w.id}`)
                       }}
                     >
-                      <AttentionDot attention={workspaceAttention(w)} />
+                      <AttentionDot attention={attention.workspaceAttention(w)} />
                       <span class="ellipsis">{w.name}</span>
+                      <AttentionCount count={attention.workspacePending(w)} />
                     </button>
                   </InlineEdit>
                   <button
@@ -94,10 +85,11 @@ export function Sidebar() {
                           classList={{ active: current() === w.id && activeTabOf(w)?.id === t.id }}
                           onClick={() => void actions.selectTab(w.id, t.id)}
                         >
-                          <AttentionDot attention={tabAttention(t)} />
+                          <AttentionDot attention={attention.tabAttention(t)} />
                           <span class="ellipsis">
                             {t.title === '' ? es.tabs.untitled : t.title}
                           </span>
+                          <AttentionCount count={attention.tabPending(t)} />
                         </button>
                       </li>
                     )}

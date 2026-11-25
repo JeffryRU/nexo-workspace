@@ -9,6 +9,7 @@ export function createUiState(keymap: KeyMap = DEFAULT_KEYMAP) {
   const [error, setError] = createSignal<string | undefined>()
   const [swapSource, setSwapSource] = createSignal<string | undefined>()
   const [editing, setEditing] = createSignal<string | undefined>()
+  const [windowFocused, setWindowFocused] = createSignal(true)
   let errorTimer: ReturnType<typeof setTimeout> | undefined
 
   return {
@@ -25,6 +26,9 @@ export function createUiState(keymap: KeyMap = DEFAULT_KEYMAP) {
     /** Clave del elemento que se está renombrando en línea (`ws:<id>`, `tab:<id>`). */
     editing,
     setEditing,
+    /** ¿La ventana tiene el foco del usuario? (la actualiza `trackWindowFocus`; decide notificaciones y «visto»). */
+    windowFocused,
+    setWindowFocused,
     showError(message: string): void {
       setError(message.slice(0, 300))
       if (errorTimer !== undefined) clearTimeout(errorTimer)

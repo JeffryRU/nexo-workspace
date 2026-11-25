@@ -7,6 +7,7 @@ mod discovery;
 mod health;
 mod launcher;
 mod navigation;
+mod notifications;
 mod settings;
 mod state_dir;
 
@@ -188,6 +189,7 @@ pub fn run() {
             show_main(app)
         }))
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_notification::init())
         .manage(AppState {
             launch,
             starting: Arc::new(Mutex::new(())),

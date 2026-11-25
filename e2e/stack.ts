@@ -77,6 +77,8 @@ export class Stack {
         NEXO_PORT: String(this.port),
         NEXO_DEV: '1',
         NEXO_LOG_LEVEL: 'error',
+        // Proveedor de agente determinista (sin red ni modelo) para las pruebas del panel de agente.
+        NEXO_AGENT_PROVIDERS: 'fake',
       },
       stdio: 'ignore',
       windowsHide: true,

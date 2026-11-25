@@ -1,4 +1,6 @@
 import type {
+  AgentSessionId,
+  Attention,
   Layout,
   Pane,
   PaneId,
@@ -30,12 +32,22 @@ export interface PaneDirectory {
   setPaneTitle(paneId: PaneId, title: string): void
 }
 
+/** Lo que `AgentService` necesita saber de los paneles (lo implementa `LayoutService`). */
+export interface AgentPaneDirectory {
+  paneContext(paneId: PaneId): { pane: Pane; cwd?: string } | undefined
+  attachAgentSession(paneId: PaneId, sessionId: AgentSessionId): void
+  /** No hace nada si el panel ya no existe o apunta a otra sesión. */
+  detachAgentSession(paneId: PaneId, sessionId: AgentSessionId): void
+  /** No hace nada si el panel ya no existe. No emite: el aviso es el evento `pane.attention`. */
+  setPaneAttention(paneId: PaneId, attention: Attention): void
+}
+
 /**
  * Dueño del estado de espacios, pestañas y paneles (en memoria). Cada cambio de distribución o de
  * foco emite `layout.changed` por el `EventBusPort`. Los objetos devueltos no se mutan después:
  * cada cambio produce objetos nuevos. Valida que los ids que entrega `IdPort` no se repitan.
  */
-export class LayoutService implements PaneDirectory {
+export class LayoutService implements PaneDirectory, AgentPaneDirectory {
   readonly #deps: LayoutServiceDeps
   readonly #workspaces = new Map<WorkspaceId, Workspace>()
 
@@ -262,6 +274,41 @@ export class LayoutService implements PaneDirectory {
       paneId,
       ({ terminalId: _gone, ...pane }) => pane,
       true,
+    )
+  }
+
+  attachAgentSession(paneId: PaneId, sessionId: AgentSessionId): void {
+    const { workspace, tab } = this.#locate(paneId)
+    this.#updatePane(
+      workspace.id,
+      tab,
+      paneId,
+      (pane) => ({ ...pane, agentSessionId: sessionId }),
+      true,
+    )
+  }
+
+  detachAgentSession(paneId: PaneId, sessionId: AgentSessionId): void {
+    const found = this.#findPane(paneId)
+    if (found === undefined || found.pane.agentSessionId !== sessionId) return
+    this.#updatePane(
+      found.workspace.id,
+      found.tab,
+      paneId,
+      ({ agentSessionId: _gone, ...pane }) => pane,
+      true,
+    )
+  }
+
+  setPaneAttention(paneId: PaneId, attention: Attention): void {
+    const found = this.#findPane(paneId)
+    if (found === undefined) return
+    this.#updatePane(
+      found.workspace.id,
+      found.tab,
+      paneId,
+      (pane) => ({ ...pane, attention }),
+      false,
     )
   }
 
