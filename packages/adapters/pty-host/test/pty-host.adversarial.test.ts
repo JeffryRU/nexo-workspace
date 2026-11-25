@@ -1,4 +1,4 @@
-import { fork } from 'node:child_process'
+import { fork, spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { type LoggerPort, type PtyExit, type PtyProcess, PtySpawnError } from '@nexo/core'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -202,4 +202,30 @@ describe('pty-host adversarial: carga', () => {
     await Promise.all(cs.map((c) => c.exit))
     expect(port.hostRunning).toBe(true)
   }, 240000)
+})
+
+describe('pty-host adversarial: el daemon no cae por una terminal que sale sin código (issue #37)', () => {
+  it('un onExit sin código de salida llega como exit y el proceso padre termina con código 0', async () => {
+    const child = spawn(NODE, [fixture('daemon-process.mjs'), fixture('exitless-host.mjs')], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    let stdout = ''
+    let stderr = ''
+    child.stdout.on('data', (d) => {
+      stdout += d
+    })
+    child.stderr.on('data', (d) => {
+      stderr += d
+    })
+    const code = await new Promise<number | null>((resolve) => child.on('exit', resolve))
+    const report = JSON.parse(stdout.trim().split('\n').pop() ?? '{}') as {
+      exit: PtyExit | 'timeout'
+      failures: string[]
+      logs: string[]
+    }
+    expect(report.failures).toEqual([])
+    expect(report.exit).toEqual({ exitCode: null, signal: null })
+    expect(report.logs.filter((l) => l.startsWith('warn: mensaje inválido'))).toEqual([])
+    expect(code, stderr).toBe(0)
+  })
 })

@@ -79,6 +79,9 @@ defecto en Windows; en Linux/macOS sigue el adaptador directo `pty-node`. Se eli
   las terminales nuevas. Backoff exponencial (250 ms, duplicando hasta 5 s) tras caídas rápidas consecutivas; tras 5
   seguidas el circuito se abre 30 s y `spawn` falla con «el proceso pty host se cayó 5 veces seguidas; no se reintenta…»,
   luego se permite un intento. Un host que vive ≥ 10 s se considera estable y reinicia el contador.
+- **Salida sin código.** node-pty (ConPTY) puede llamar a `onExit` sin `exitCode` numérico. El host lo envía como
+  `exitCode: null` (y lo registra); si no, el daemon descartaría el evento `exit` por inválido y la terminal nunca
+  saldría (issue #37).
 - **Mensajes hostiles del host** (malformados, enormes, de ids ajenos) se descartan y se registran; tras 20 inválidos el
   host se mata y se trata como caída. El host valida también lo que recibe y termina si el canal IPC se cierra
   (nunca quedan terminales huérfanas); el cierre ordenado (`shutdown`) mata las terminales una a una.

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { createHostHandler, type HostSpawnOptions, type PtyLike } from '../src/host-handler.ts'
-import type { HostEvent } from '../src/protocol.ts'
+import { type HostEvent, parseHostEvent } from '../src/protocol.ts'
 
-type ExitCb = (e: { exitCode: number; signal?: number | undefined }) => void
+type ExitCb = (e: { exitCode: number | undefined; signal?: number | undefined }) => void
 
 class FakePty implements PtyLike {
   readonly pid = 77
@@ -81,6 +81,15 @@ describe('createHostHandler', () => {
       { t: 'data', id: 1, data: 'hola' },
       { t: 'exit', id: 1, exitCode: 3, signal: null },
     ])
+  })
+
+  it('una salida sin código de salida se envía como exitCode null (no como evento inválido)', () => {
+    const s = setup('win32')
+    s.handle(spawnMsg(1))
+    s.ptys[0]?.exitCb({ exitCode: undefined, signal: undefined })
+    expect(s.events[1]).toEqual({ t: 'exit', id: 1, exitCode: null, signal: null })
+    expect(parseHostEvent(s.events[1])).toMatchObject({ ok: true })
+    expect(s.logs.join(' ')).toContain('sin código de salida')
   })
 
   it('rechaza ids repetidos y errores de node-pty', () => {

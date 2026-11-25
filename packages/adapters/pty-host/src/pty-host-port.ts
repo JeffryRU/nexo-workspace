@@ -41,7 +41,7 @@ const signalNames = new Map<number, string>(
   Object.entries(constants.signals).map(([name, value]) => [value, name]),
 )
 
-export function toExit(raw: { exitCode: number; signal: number | null }): PtyExit {
+export function toExit(raw: { exitCode: number | null; signal: number | null }): PtyExit {
   const signal =
     raw.signal === null || raw.signal === 0
       ? null

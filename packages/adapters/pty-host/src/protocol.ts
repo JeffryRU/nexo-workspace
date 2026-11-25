@@ -51,7 +51,8 @@ export const HostEventSchema = z.discriminatedUnion('t', [
   z.strictObject({
     t: z.literal('exit'),
     id,
-    exitCode: z.number().int(),
+    /** `null` cuando node-pty no informó el código de salida (ocurre con ConPTY al cerrarse en plena operación). */
+    exitCode: z.number().int().nullable(),
     signal: z.number().int().nullable(),
   }),
 ])
