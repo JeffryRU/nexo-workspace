@@ -34,7 +34,10 @@ mod tests {
     #[test]
     fn no_usa_conjuntos_amplios_ni_permisos_de_otros_plugins() {
         for permission in permissions() {
-            assert!(permission.starts_with("notification:allow-"), "{permission}");
+            assert!(
+                permission.starts_with("notification:allow-"),
+                "{permission}"
+            );
             assert!(!permission.ends_with(":default"), "{permission}");
             for other in ["fs", "shell", "opener", "http", "process", "core:window"] {
                 assert!(!permission.contains(other), "{permission}");
