@@ -1,9 +1,9 @@
-import { BlockId } from '@nexo/contracts'
+import { BlockId, PaneId } from '@nexo/contracts'
 import { afterEach, describe, expect, it } from 'vitest'
 import { agentApi } from './agent-api.ts'
 import { AgentDocument, type AgentDocumentEvent } from './agent-document.ts'
 import { NexoClient } from './client.ts'
-import { FakeServer, SID, snapshotServer, textBlock } from './test-helpers.ts'
+import { FakeServer, SID, session, snapshotServer, textBlock } from './test-helpers.ts'
 
 const clients: NexoClient[] = []
 afterEach(() => {
@@ -137,17 +137,52 @@ describe('AgentDocument', () => {
     expect(doc.blocks()).toHaveLength(0)
   })
 
-  it('agentApi llama a los métodos agent.*', async () => {
+  it('agentApi llama a cada método agent.*', async () => {
     seq = 0
     const server = new FakeServer()
     const seen: string[] = []
     server.handler = (req) => {
       seen.push(req.method)
-      if (req.method === 'agent.list') return { result: { sessions: [] } }
-      return undefined
+      switch (req.method) {
+        case 'agent.providers':
+          return { result: { providers: [] } }
+        case 'agent.list':
+          return { result: { sessions: [] } }
+        case 'agent.create':
+          return { result: { session: session() } }
+        case 'agent.send':
+          return { result: { blockId: 'block-00000001', index: 0, turn: 1 } }
+        case 'agent.snapshot':
+          return { result: { session: session(), blocks: [], nextIndex: null } }
+        default:
+          return undefined
+      }
     }
     const api = agentApi(await connect(server))
+    expect(await api.providers()).toEqual({ providers: [] })
     expect(await api.list()).toEqual({ sessions: [] })
-    expect(seen).toContain('agent.list')
+    expect(
+      (await api.create({ paneId: PaneId.parse('pane-00000001'), provider: 'fake' })).session.id,
+    ).toBe(SID)
+    expect((await api.send({ sessionId: SID, text: 'hola' })).turn).toBe(1)
+    expect((await api.snapshot({ sessionId: SID })).nextIndex).toBeNull()
+    await api.interrupt({ sessionId: SID })
+    await api.respond({
+      type: 'permission',
+      sessionId: SID,
+      blockId: BlockId.parse('block-00000001'),
+      optionId: 'allow',
+    })
+    await api.close({ sessionId: SID })
+    expect(seen.filter((m) => m.startsWith('agent.'))).toEqual([
+      'agent.providers',
+      'agent.list',
+      'agent.create',
+      'agent.send',
+      'agent.snapshot',
+      'agent.interrupt',
+      'agent.respond',
+      'agent.close',
+    ])
   })
 })
