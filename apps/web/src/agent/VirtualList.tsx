@@ -56,7 +56,8 @@ export function VirtualList(props: Props) {
   let scheduled = false
   let dirtyHeights = false
   let pendingAdjust = 0
-  let programmatic = false
+  /** Último `scrollTop` conocido: sirve para distinguir que el usuario subió de que el contenido creció. */
+  let lastTop = 0
 
   const win = createMemo(() => {
     version()
@@ -66,13 +67,9 @@ export function VirtualList(props: Props) {
   const visible = createMemo(() => model.slice(win().start, win().end))
 
   const toEnd = () => {
-    programmatic = true
     scroller.scrollTop = scroller.scrollHeight
-    // El navegador emite `scroll` después; se baja la bandera cuando ya llegó.
-    setScrollTop(scroller.scrollTop)
-    queueMicrotask(() => {
-      programmatic = false
-    })
+    lastTop = scroller.scrollTop
+    setScrollTop(lastTop)
   }
 
   const flush = () => {
@@ -151,11 +148,15 @@ export function VirtualList(props: Props) {
   const onScroll = () => {
     const top = scroller.scrollTop
     setScrollTop(top)
-    if (programmatic) return
+    const previous = lastTop
+    lastTop = top
     const distance = scroller.scrollHeight - top - scroller.clientHeight
-    // Sin layout (distance NaN o negativa por jsdom) se mantiene lo que había.
-    if (Number.isFinite(distance) && scroller.clientHeight > 0)
-      setStuck(distance <= STICK_THRESHOLD)
+    // Sin layout (jsdom) no hay nada que decidir.
+    if (!Number.isFinite(distance) || scroller.clientHeight <= 0) return
+    if (distance <= STICK_THRESHOLD) setStuck(true)
+    // Solo subir desengancha: que el contenido crezca por debajo (el `scroll` programático llega después de
+    // que el contenido ya creció) no es una acción del usuario.
+    else if (top < previous - 1) setStuck(false)
   }
 
   return (

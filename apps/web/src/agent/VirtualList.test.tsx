@@ -91,7 +91,7 @@ describe('VirtualList', () => {
     expect(drawn[0]?.getAttribute('aria-posinset')).toBe('1')
   })
 
-  it('sigue el final cuando llega contenido y no cuando el usuario subió', async () => {
+  it('sigue el final cuando llega contenido y no cuando el usuario subió', () => {
     const m = mount(ids(100))
     m.frames.flush()
     expect(m.scroller.scrollTop).toBe(m.scroller.scrollHeight)
@@ -99,7 +99,6 @@ describe('VirtualList', () => {
     m.setList(ids(120))
     m.frames.flush()
     expect(m.scroller.scrollTop).toBe(m.scroller.scrollHeight)
-    await Promise.resolve() // el scroll programático ya terminó
     // El usuario sube: scrollHeight - scrollTop - clientHeight > umbral.
     m.scroller.scrollTop = 100
     fireEvent.scroll(m.scroller)
@@ -127,6 +126,18 @@ describe('VirtualList', () => {
     const above = items.filter((el) => Number(el.getAttribute('aria-posinset')) - 1 < 80).length
     expect(m.scroller.scrollTop).toBeGreaterThanOrEqual(before)
     expect(above).toBeGreaterThanOrEqual(0)
+  })
+
+  it('un scroll tardío tras crecer el contenido no se toma por una subida del usuario', () => {
+    const m = mount(ids(100))
+    m.frames.flush()
+    // El contenido creció antes de que llegara el evento `scroll` de nuestro propio desplazamiento.
+    Object.defineProperty(m.scroller, 'scrollHeight', { configurable: true, value: 20_000 })
+    fireEvent.scroll(m.scroller)
+    expect(m.container.querySelector('.vlist-end')).toBeNull()
+    m.setList(ids(110))
+    m.frames.flush()
+    expect(m.scroller.scrollTop).toBe(20_000)
   })
 
   it('scrollToIndex lleva el elemento a la vista y deja de seguir el final', () => {
