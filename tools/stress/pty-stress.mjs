@@ -2,7 +2,7 @@
 //
 // Cada ronda corre en un proceso hijo desechable: si node-pty provoca una violación de acceso nativa,
 // solo cae ese hijo y el script cuenta un crash. Uso:
-//   node tools/stress/pty-stress.mjs [--rounds 100] [--terminals 12] [--variants a,b,c] [--json]
+//   node tools/stress/pty-stress.mjs [--rounds 100] [--parallel 1] [--terminals 12] [--variants a,b,c] [--json]
 //   node tools/stress/pty-stress.mjs --list
 // Variantes: ver VARIANTS. `direct-*` y `host-*` usan los adaptadores del repo; con `host-*` los crashes
 // quedan contenidos en el pty host y el hijo de la ronda (que hace de daemon) debe terminar bien.
@@ -23,6 +23,7 @@ const VARIANTS = {
   'dll-nogap-kill': { dll: true, gap: 0, mode: 'kill' },
   'sys-gap25-kill': { dll: false, gap: 25, mode: 'kill' },
   'dll-gap25-kill': { dll: true, gap: 25, mode: 'kill' },
+  'sys-nogap-mixed': { dll: false, gap: 0, mode: 'mixed' },
   'dll-nogap-mixed': { dll: true, gap: 0, mode: 'mixed' },
   'dll-gap25-mixed': { dll: true, gap: 25, mode: 'mixed' },
   'dll-nogap-output-exit': { dll: true, gap: 0, mode: 'output-exit' },
@@ -202,6 +203,7 @@ async function main() {
   if (roundVariant) return runRound(roundVariant, terminals)
 
   const rounds = Number(arg('rounds', '100'))
+  const parallel = Number(arg('parallel', '1'))
   const names = arg('variants') ? arg('variants').split(',') : DEFAULT_VARIANTS
   const results = []
   for (const name of names) {
@@ -211,22 +213,28 @@ async function main() {
     let hang = 0
     let hostCrashes = 0
     const codes = new Map()
-    for (let r = 0; r < rounds; r++) {
-      const res = await runChild(name, terminals, 60000)
-      if (res.kind === 'ok') {
-        ok++
-        if (res.hostCrashed) hostCrashes++
-      } else if (res.kind === 'hang') hang++
-      else {
-        crash++
-        const k = `code=${res.code} signal=${res.signal}`
-        codes.set(k, (codes.get(k) ?? 0) + 1)
+    let next = 0
+    // --parallel N: N rondas a la vez (simula la carga de una corrida completa de pruebas).
+    const worker = async () => {
+      while (next++ < rounds) {
+        const res = await runChild(name, terminals, 120000)
+        if (res.kind === 'ok') {
+          ok++
+          if (res.hostCrashed) hostCrashes++
+        } else if (res.kind === 'hang') hang++
+        else {
+          crash++
+          const k = `code=${res.code} signal=${res.signal}`
+          codes.set(k, (codes.get(k) ?? 0) + 1)
+        }
       }
     }
+    await Promise.all(Array.from({ length: parallel }, worker))
     const row = {
       variant: name,
       rounds,
       terminals,
+      parallel,
       ok,
       crash,
       hang,
