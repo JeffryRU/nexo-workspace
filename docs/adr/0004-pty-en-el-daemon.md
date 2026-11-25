@@ -43,23 +43,23 @@ node-pty 1.1.0 con ConPTY se cae a veces con una violación de acceso nativa (`0
 
 Cada ronda corre en un proceso hijo desechable (`tools/stress/pty-stress.mjs`). Variantes con node-pty a pelo:
 
-| Variante                                   | Rondas con crash                |
-| ------------------------------------------ | ------------------------------- |
-| `conpty.dll` incluido, `kill` a la vez     | **12 / 100** (todas 0xC0000005) |
+| Variante                                                | Rondas con crash                                 |
+| ------------------------------------------------------- | ------------------------------------------------ |
+| `conpty.dll` incluido, `kill` a la vez                  | **12 / 100** (todas 0xC0000005)                  |
 | `conpty.dll`, mitad salen solas / mitad `kill` a la vez | **34 / 100** (25 / 100 con 4 rondas en paralelo) |
-| `conpty.dll`, `kill` espaciados 25 ms      | 0 / 100                         |
-| `conpty.dll`, mixto con espaciado 25 ms    | 0 / 100                         |
-| `conpty.dll`, todas salen solas a la vez   | 0 / 100                         |
-| `conpty.dll`, salida abundante + exit      | 0 / 100                         |
-| `conpty.dll`, `resize` durante la salida   | 0 / 100                         |
-| ConPTY del sistema, `kill` a la vez        | 0 / 100                         |
-| ConPTY del sistema, mixto a la vez         | 0 / 100                         |
-| ConPTY del sistema, `resize` durante la salida | 0 / 100                     |
+| `conpty.dll`, `kill` espaciados 25 ms                   | 0 / 100                                          |
+| `conpty.dll`, mixto con espaciado 25 ms                 | 0 / 100                                          |
+| `conpty.dll`, todas salen solas a la vez                | 0 / 100                                          |
+| `conpty.dll`, salida abundante + exit                   | 0 / 100                                          |
+| `conpty.dll`, `resize` durante la salida                | 0 / 100                                          |
+| ConPTY del sistema, `kill` a la vez                     | 0 / 100                                          |
+| ConPTY del sistema, mixto a la vez                      | 0 / 100                                          |
+| ConPTY del sistema, `resize` durante la salida          | 0 / 100                                          |
 
 Conclusiones: el crash se reproduce con node-pty solo (caso mínimo en `tools/stress/node-pty-conpty-repro.mjs`: 10 / 100;
 borrador de reporte en `docs/upstream/node-pty-conpty-crash.md`) y la causa es el **`kill` simultáneo** con
 `conpty.dll`. Contra lo anotado en F1.1, en estas pruebas el ConPTY del sistema no se cayó (0 / 400 rondas en
-variantes con `kill`/`resize`), y el espaciado de 25 ms con `conpty.dll` tampoco (0 / 400 con él). El crash residual que
+todas las variantes), y el espaciado de 25 ms con `conpty.dll` tampoco (0 / 400 con él). El crash residual que
 se vio en corridas completas de `pnpm check` (muchos workers y procesos en paralelo) no se reprodujo con el adaptador
 directo y la mitigación actual (0 / 300 rondas, 4 en paralelo), así que sigue siendo un riesgo intermitente que no se puede
 descartar; por eso se contiene en lugar de confiar solo en la mitigación.
@@ -89,10 +89,10 @@ defecto en Windows; en Linux/macOS sigue el adaptador directo `pty-node`. Se eli
 
 ### Coste del salto IPC (`tools/stress/pty-bench.mjs`, Windows, ConPTY, 300 ecos y 20 MiB de salida)
 
-| Adaptador        | Eco ida y vuelta p50 / p95 / máx | Salida de 20 MiB |
-| ---------------- | -------------------------------- | ---------------- |
-| directo          | 0,15 / 0,30 / 1,13 ms            | 5,5 MiB/s        |
-| pty host (IPC)   | 0,23 / 0,46 / 2,05 ms            | 5,5 MiB/s        |
+| Adaptador      | Eco ida y vuelta p50 / p95 / máx | Salida de 20 MiB |
+| -------------- | -------------------------------- | ---------------- |
+| directo        | 0,15 / 0,30 / 1,13 ms            | 5,5 MiB/s        |
+| pty host (IPC) | 0,23 / 0,46 / 2,05 ms            | 5,5 MiB/s        |
 
 El salto añade ~0,1 ms al eco y no cambia el throughput (el límite es ConPTY). Frente a los presupuestos de F1.8
 (p95 de cambio de pestaña en ms) es despreciable.

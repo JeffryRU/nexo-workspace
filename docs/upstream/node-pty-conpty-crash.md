@@ -28,7 +28,13 @@ Caso mínimo, solo node-pty (sin código de Nexo): `tools/stress/node-pty-conpty
 const pty = require('node-pty')
 const ptys = []
 for (let i = 0; i < 12; i++) {
-  ptys.push(pty.spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { cols: 80, rows: 24, useConptyDll: true }))
+  ptys.push(
+    pty.spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+      cols: 80,
+      rows: 24,
+      useConptyDll: true,
+    }),
+  )
 }
 await new Promise((r) => setTimeout(r, 500)) // que arranquen
 for (const p of ptys) p.kill() // todos a la vez -> a veces el proceso muere con 0xC0000005
