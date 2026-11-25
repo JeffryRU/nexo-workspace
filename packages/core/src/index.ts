@@ -4,7 +4,14 @@ export * from './layout.ts'
 export * from './layout-service.ts'
 export * from './output-batcher.ts'
 export type {
+  AgentOpenOptions,
+  AgentProviderErrorCode,
   AgentProviderPort,
+  AgentProviderSession,
+  AgentResponse,
+} from './ports/agent.ts'
+export { AgentProviderError } from './ports/agent.ts'
+export type {
   BusEvent,
   ClockPort,
   EventBusPort,

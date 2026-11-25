@@ -11,6 +11,12 @@ import type { SnapshotService } from './snapshot-service.ts'
 import type { TerminalService } from './terminal-service.ts'
 import type { WorkspaceService } from './workspace-service.ts'
 
+/** Los métodos `agent.*`; los implementa el servicio de agentes (F2.2). */
+export type AgentMethodName = Extract<MethodName, `agent.${string}`>
+export type AgentHandlers = {
+  [M in AgentMethodName]: (params: MethodParams<M>) => MethodResult<M> | Promise<MethodResult<M>>
+}
+
 export type DispatcherServices = {
   workspaces: WorkspaceService
   terminals: TerminalService
@@ -20,6 +26,8 @@ export type DispatcherServices = {
    * lo aporta quien despacha.
    */
   subscribe: (params: MethodParams<'events.subscribe'>) => MethodResult<'events.subscribe'>
+  /** Sin él (daemon sin proveedores), todo `agent.*` responde `PROVIDER_UNAVAILABLE`. */
+  agents?: AgentHandlers
   /** Pide el apagado del daemon; debe volver enseguida (el apagado ocurre después de responder). */
   shutdown: () => void
 }
@@ -39,6 +47,12 @@ type Handlers = {
 
 /** Tabla exhaustiva: si falta un método del registro, no compila. */
 export function createHandlers(s: DispatcherServices): Handlers {
+  const agents = (): AgentHandlers => {
+    if (s.agents === undefined) {
+      throw new DomainError('PROVIDER_UNAVAILABLE', 'no hay proveedores de agente configurados')
+    }
+    return s.agents
+  }
   return {
     // La autenticación la resuelve quien despacha (daemon) antes de llegar aquí; ya autenticado es un no-op.
     auth: () => ({}),
@@ -68,6 +82,14 @@ export function createHandlers(s: DispatcherServices): Handlers {
     'terminal.resize': (p) => s.terminals.resize(p),
     'terminal.read': (p) => s.terminals.read(p),
     'terminal.kill': (p) => s.terminals.kill(p),
+    'agent.providers': (p) => agents()['agent.providers'](p),
+    'agent.create': (p) => agents()['agent.create'](p),
+    'agent.send': (p) => agents()['agent.send'](p),
+    'agent.interrupt': (p) => agents()['agent.interrupt'](p),
+    'agent.respond': (p) => agents()['agent.respond'](p),
+    'agent.list': (p) => agents()['agent.list'](p),
+    'agent.snapshot': (p) => agents()['agent.snapshot'](p),
+    'agent.close': (p) => agents()['agent.close'](p),
   }
 }
 

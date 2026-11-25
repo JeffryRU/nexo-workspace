@@ -1,5 +1,17 @@
 import { z } from 'zod'
 import {
+  AgentRespondParams,
+  AgentSession,
+  Block,
+  PermissionMode,
+  ProviderId,
+  ProviderInfo,
+  ProviderSessionToken,
+  Token,
+} from './agent.ts'
+import {
+  AgentSessionId,
+  BlockId,
   LayoutSchema,
   Pane,
   PaneId,
@@ -13,7 +25,7 @@ import {
 } from './domain.ts'
 import { EventNameSchema } from './events.ts'
 import { LIMITS } from './limits.ts'
-import { boundedBytes, DisplayText, FORBIDDEN_KEYS } from './text.ts'
+import { bodyText, boundedBytes, DisplayText, FORBIDDEN_KEYS } from './text.ts'
 
 const Empty = z.strictObject({})
 const Ok = z.strictObject({})
@@ -180,6 +192,60 @@ export const methods = {
     params: z.strictObject({ terminalId: TerminalId, signal: Signal.optional() }),
     result: Ok,
   },
+  'agent.providers': {
+    params: Empty,
+    result: z.strictObject({ providers: z.array(ProviderInfo).max(32) }),
+  },
+  'agent.create': {
+    params: z.strictObject({
+      paneId: PaneId,
+      provider: ProviderId,
+      cwd: Path.optional(),
+      model: Token.optional(),
+      effort: Token.optional(),
+      permissionMode: PermissionMode.optional(),
+      /** Reanuda la sesión del proveedor con esta ficha (`providerSessionId`). */
+      resume: ProviderSessionToken.optional(),
+    }),
+    result: z.strictObject({ session: AgentSession }),
+  },
+  'agent.send': {
+    params: z.strictObject({
+      sessionId: AgentSessionId,
+      text: bodyText(LIMITS.maxBlockTextBytes, 1),
+    }),
+    /** El bloque `user` ya añadido al documento. */
+    result: z.strictObject({
+      blockId: BlockId,
+      index: z.int().nonnegative(),
+      turn: z.int().positive(),
+    }),
+  },
+  'agent.interrupt': { params: z.strictObject({ sessionId: AgentSessionId }), result: Ok },
+  'agent.respond': { params: AgentRespondParams, result: Ok },
+  'agent.list': {
+    params: Empty,
+    result: z.strictObject({ sessions: z.array(AgentSession).max(LIMITS.maxAgentSessions) }),
+  },
+  /**
+   * Página del documento: bloques con `index >= fromIndex` (0 por omisión), hasta `limit`. `nextIndex` es el
+   * `fromIndex` de la página siguiente, o `null` al llegar al final. El daemon puede devolver menos bloques
+   * que `limit` para no pasar de `maxMessageBytes`. Un cliente que ve un hueco de `seq` o `agent.delta`
+   * fuera de orden vuelve a pedir desde el `index` del bloque afectado.
+   */
+  'agent.snapshot': {
+    params: z.strictObject({
+      sessionId: AgentSessionId,
+      fromIndex: z.int().nonnegative().optional(),
+      limit: z.int().min(1).max(LIMITS.maxSnapshotBlocks).optional(),
+    }),
+    result: z.strictObject({
+      session: AgentSession,
+      blocks: z.array(Block).max(LIMITS.maxSnapshotBlocks),
+      nextIndex: z.int().nonnegative().nullable(),
+    }),
+  },
+  'agent.close': { params: z.strictObject({ sessionId: AgentSessionId }), result: Ok },
 } as const
 
 export type MethodName = keyof typeof methods

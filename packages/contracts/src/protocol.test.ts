@@ -85,6 +85,14 @@ describe('parseRequest', () => {
       'terminal.resize': { terminalId: 'x1', cols: 1, rows: 1000 },
       'terminal.read': { terminalId: 'x1' },
       'terminal.kill': { terminalId: 'x1', signal: 'SIGTERM' },
+      'agent.providers': {},
+      'agent.create': { paneId: 'p1', provider: 'claude' },
+      'agent.send': { sessionId: 's1', text: 'hola' },
+      'agent.interrupt': { sessionId: 's1' },
+      'agent.respond': { type: 'permission', sessionId: 's1', blockId: 'b1', optionId: 'allow' },
+      'agent.list': {},
+      'agent.snapshot': { sessionId: 's1' },
+      'agent.close': { sessionId: 's1' },
     }
     expect(Object.keys(samples).sort()).toEqual([...METHOD_NAMES].sort())
     for (const [method, params] of Object.entries(samples)) {
@@ -93,9 +101,13 @@ describe('parseRequest', () => {
     }
   })
 
-  it('el registro de eventos tiene los nombres de la F1', () => {
+  it('el registro de eventos tiene los nombres de la F1 y la F2', () => {
     expect([...EVENT_NAMES].sort()).toEqual(
       [
+        'agent.block',
+        'agent.delta',
+        'agent.session',
+        'agent.status',
         'client.resync',
         'layout.changed',
         'pane.attention',
