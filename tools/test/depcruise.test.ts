@@ -37,6 +37,7 @@ describe('reglas de dependency-cruiser', () => {
         'adapters-aislados',
         'adapters-sin-apps',
         'apps-aisladas',
+        'client-node-subpath',
         'client-solo-contracts',
         'contracts-solo-zod',
         'core-solo-contracts',
@@ -58,5 +59,16 @@ describe('reglas de dependency-cruiser', () => {
   it('contracts no puede importar librerías que no sean zod', async () => {
     const found = await violationsOf('violations')
     expect((found.get('contracts-solo-zod') ?? []).join('\n')).toContain('fast-check')
+  })
+
+  it('client: node:* solo en el subpath node, y ahi solo node:*, zod, client y contracts', async () => {
+    const found = await violationsOf('violations')
+    const client = (found.get('client-solo-contracts') ?? []).join('\n')
+    expect(client).toContain('packages/client/src/uses-node.ts -> fs')
+    expect(client).not.toContain('src/node/')
+    const node = (found.get('client-node-subpath') ?? []).join('\n')
+    expect(node).toContain('packages/client/src/node/bad.ts')
+    expect(node).not.toMatch(/-> (fs|zod)$/m)
+    expect([...(await violationsOf('clean')).keys()]).toEqual([])
   })
 })
