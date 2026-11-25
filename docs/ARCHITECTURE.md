@@ -555,6 +555,10 @@ Presupuestos (los mide una prueba de rendimiento en CI, con margen):
 - **Salida de PTY agrupada** en el daemon: se envía cada ~8 ms o cada 64 KiB, lo que ocurra antes. En la
   web, las escrituras a xterm y las actualizaciones del documento se agrupan por `requestAnimationFrame`.
 - **Documento virtualizado:** conversaciones largas solo dibujan los bloques visibles.
+- **Agente (F2.6), medido en `pnpm perf`:** latencia del primer delta en pantalla desde el Intro (p95 < 500 ms en local), recorrido
+  completo de un documento de 5 000 bloques sin tareas largas por encima del umbral existente (150 ms en local, 500 en CI) ni
+  más de 200 nodos dibujados, y cambio de pestaña con 4 agentes y 2 terminales emitiendo con el mismo presupuesto de p95
+  que antes. Mediciones del CI: {{MEDICIONES}}
 - **Agentes rápidos:** el texto se transmite en parcial (deltas); el proceso del proveedor se precalienta
   al abrir una pestaña de agente o enfocar el redactor; Codex usa un solo `app-server` para todos los hilos.
 - **Reactividad fina:** SolidJS actualiza solo los nodos que cambian; el estado en vivo vive en stores de
@@ -661,10 +665,59 @@ inicial, igual que la CLI) y con ✦ en la cabecera de un panel o `Alt+Shift+E` 
   anidadas y entradas patológicas; ANSI hostil; documentos de 5 000 bloques; ráfagas de 3 000 deltas; bloques truncados), propiedades
   con fast-check (`safeHref`, `stripAnsi`, `VirtualModel`, `parseDiff`, Markdown inerte) y E2E con el daemon y el proveedor falso
   (`e2e/agent.spec.ts`: conversación, permiso, pregunta, interrupción). `NEXO_CAPTURAS=1 pnpm e2e -g capturas` regenera
-  `docs/capturas/f2-5-*.png`.
-- **Para la F2.6** (atención en la barra y notificaciones): el estado de atención ya llega a `Pane.attention` por `pane.attention`
-  (barra lateral y pestañas ya pintan el punto); el panel además conoce `status` y `pendingIds()` del modelo de su panel
-  (`app.agents.get(paneId)`), que es lo que haría falta para contar pendientes por pestaña.
+  `docs/capturas/f2-5-*.png`. La atención y las notificaciones (F2.6) se describen en la sección siguiente.
+
+### Atención y notificaciones (F2.6)
+
+El servidor guarda el estado de la sesión en `Pane.attention` (`idle`, `working`, `needs-input`, `done`, `error`) y lo
+publica con `pane.attention`; **no sabe quién lo ha visto**. Todo lo demás es de cada cliente, en `apps/web/src/attention/`.
+
+- **Qué se muestra** (`model.ts`). `done` se conserva hasta que el usuario enfoca el panel con la ventana a la vista;
+  entonces se muestra como `idle`. Lo decide **el cliente, no el servidor**: dos ventanas abiertas a la vez pueden tener
+  visto distinto, y el estado de la sesión (`done` hasta el siguiente `send`) no cambia. El «visto» se olvida cuando el panel
+  sale de `done`, así que el siguiente `done` vuelve a mostrarse. `AttentionDot` pinta el punto (`working` pulsa con
+  `prefers-reduced-motion` respetado; `needs-input` lleva un halo de alerta; `error` un halo rojo), y la pestaña, la barra
+  lateral y la cabecera del panel usan el estado **mostrado** (agregado por urgencia: `error` > `needs-input` > `working` > `done`).
+- **Contador de pendientes.** `needs-input` cuenta los permisos y preguntas pendientes de cada panel
+  (`app.agents.get(paneId).pendingIds()`, o 1 si el modelo del panel aún no existe); se suma por pestaña y por espacio y se
+  pinta como una insignia (`AttentionCount`). La pestaña lleva `data-attention` y subraya con el color del estado.
+- **Título del documento.** `(N) Nexo Workspace`, con N = paneles que reclaman atención (`needs-input`, `error` o `done` sin
+  ver). El título de la ventana nativa del escritorio sigue al del documento solo si el shell lo sincroniza: no se pidió el
+  permiso `core:window:allow-set-title` para no ampliar la capability.
+- **Atajo `Alt+Shift+N`** (`attention.next`): salta al siguiente panel que necesita atención, en cualquier pestaña o espacio
+  (abre el espacio y la pestaña y enfoca el panel: `actions.revealPane`). Orden: primero los que esperan respuesta, luego
+  los errores y por último los terminados; cíclico desde el panel enfocado.
+- **Notificaciones del sistema.** Puerto `Notifier` (`notifier.ts`) con tres adaptadores y un falso (`fake-notifier.ts`, más
+  la suite de conformidad `notifier-conformance.ts`): la API `Notification` del navegador, el plugin oficial
+  `tauri-plugin-notification` (por `invoke('plugin:notification|…')`, sin dependencia de JS) y uno nulo. El
+  **coordinador** (`coordinator.ts`) recibe la foto de los paneles cada vez que cambia y detecta los pasos a
+  `needs-input`, `error` o `done`; solo avisa con la **ventana sin foco** (`trackWindowFocus`: foco del documento y
+  visibilidad) y el ajuste activado. Lo que ya estaba así al abrir no avisa. **Agrupa** lo que llega dentro de 1,5 s en una
+  notificación («N paneles necesitan atención», la más urgente primero), **limita la frecuencia** (20 s por panel y 5 s
+  entre dos avisos cualesquiera, así que un agente que alterna estados no hace spam) y descarta lo que dejó de ser
+  cierto o la ventana recuperó el foco antes de enviar. Los textos salen sin controles y acotados.
+- **Clic.** En el navegador, `Notification.onclick` enfoca la ventana y revela el panel. El plugin de Tauri **no** avisa del clic en
+  escritorio (su API de acciones es solo móvil), así que si la ventana recupera el foco en los 20 s siguientes a un aviso se
+  salta a ese panel (`supportsClick: false`).
+- **Permiso y ajuste.** El interruptor del pie («Notificaciones activadas/desactivadas/bloqueadas») es el gesto del usuario
+  que pide el permiso (los navegadores lo exigen). Si se niega, el ajuste queda desactivado y se explica. El ajuste (por
+  omisión desactivado) se guarda en el `localStorage` de la página (`state/settings.ts`, clave `nexo.settings`, validado al
+  leer); aún no existía un mecanismo de ajustes en el daemon.
+- **Escritorio.** `tauri-plugin-notification` registrado en `lib.rs`; la capability de la ventana concede solo
+  `notification:allow-is-permission-granted`, `notification:allow-request-permission` y `notification:allow-notify` (no el
+  conjunto `notification:default`), y una prueba de Rust (`notifications.rs`) lo comprueba.
+- **Proveedor falso.** Además de `largo`, `lento`, `permiso` y `pregunta`: `editar` (acción `edit` con diff unificado), `ansi`
+  (acción `exec` con salida coloreada), `bloques [n]` (n bloques de texto, hasta 9 000, para documentos largos) y `charla [n]`
+  (n párrafos cortos que se escriben por trozos: una conversación larga y continua para medir el rendimiento).
+- **Pruebas.** Unitarias, adversariales y de propiedades del coordinador (nunca avisa con foco, desactivado ni dos veces al
+  mismo panel dentro de la espera), del modelo, de los ajustes y de los adaptadores; E2E con el daemon real y el proveedor
+  falso (`e2e/agent.spec.ts`: diff, ANSI, atención en pestaña, barra y título, atajo, notificación simulada con la API
+  `Notification` sustituida y el foco simulado). Las capturas `docs/capturas/f2-6-*.png` se regeneran con
+  `NEXO_CAPTURAS=1 pnpm e2e -g capturas`.
+
+![Atención en la barra y en las pestañas](capturas/f2-6-atencion.png)
+![Diff de una acción edit](capturas/f2-6-diff.png)
+![Salida con colores ANSI](capturas/f2-6-ansi.png)
 
 ## Shell de escritorio (apps/desktop, F1.7)
 
@@ -682,7 +735,10 @@ pequeños y probados con `cargo test` (`apps/desktop/src-tauri/src`):
   `NEXO_CLOSE_TO_TRAY=0` (cerrar la ventana la cierra de verdad).
 - Comando `daemon_info` → `{ port, token }`; el token nunca se registra. Instancia única (la segunda ejecución enfoca
   la ventana), bandeja (Mostrar, Ocultar, Salir; salir no detiene el daemon) y cerrar oculta a la bandeja.
-- Seguridad: CSP con `connect-src ws://127.0.0.1:*` y nada externo, capability sin permisos (solo comandos propios),
+- Notificaciones (F2.6): `tauri-plugin-notification` registrado; la capability concede solo `notification:allow-is-permission-granted`,
+  `notification:allow-request-permission` y `notification:allow-notify` (prueba en `notifications.rs`). En escritorio el plugin no
+  avisa del clic en la notificación: ver «Atención y notificaciones (F2.6)».
+- Seguridad: CSP con `connect-src ws://127.0.0.1:*` y nada externo, capability sin más permisos que esos tres y los comandos propios,
   sin `shell`/`fs` abiertos a la página. El WebView envía `Origin` `http://tauri.localhost` (o `https://`) en Windows y
   `tauri://localhost` en Linux, todos permitidos por el daemon.
 
@@ -719,7 +775,7 @@ Nexo funciona al 100 % sin mascota. Una mascota es un **paquete intercambiable**
 | Conformidad de puertos | `packages/testkit/conformance` contra falso y adaptador real | Vitest                   |
 | Integración            | daemon real + node-pty real, Linux y Windows                 | Vitest                   |
 | Extremo a extremo      | daemon real + web compilada (`vite preview`), en Chromium    | Playwright (`pnpm e2e`)  |
-| Rendimiento            | cambio de pestaña con 10 terminales y 20 MB de salida        | Playwright (`pnpm perf`) |
+| Rendimiento            | cambio de pestaña, 20 MB de salida, agente (F2.6)            | Playwright (`pnpm perf`) |
 | Rust                   | `apps/desktop`                                               | `cargo test`, `clippy`   |
 
 **Pruebas adversariales obligatorias** (`*.adversarial.test.ts`) en cada funcionalidad: entradas
