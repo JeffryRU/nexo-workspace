@@ -79,6 +79,8 @@ export default defineConfig({
         '**/ports/**',
         '**/test-helpers.ts',
         'apps/cli/src/main.ts',
+        // Composición del proceso pty host (corre en un hijo); su lógica está en host-handler.ts.
+        'packages/adapters/pty-host/src/host.ts',
         '**/*.test.tsx',
         'apps/web/src/main.tsx',
         'apps/web/src/vite-env.d.ts',
