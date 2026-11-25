@@ -43,7 +43,9 @@ export function AgentPanel(props: {
       app.status() === 'open' && props.sessionId === undefined && agent.sessionId === undefined,
     // Con un proveedor caído (p. ej. Ollama sin arrancar) se vuelve a preguntar pronto, al enfocar la ventana.
     staleTime: (query) =>
-      query.state.data?.some((p) => !p.available) === true ? PROVIDERS_RETRY_MS : PROVIDERS_STALE_MS,
+      query.state.data?.some((p) => !p.available) === true
+        ? PROVIDERS_RETRY_MS
+        : PROVIDERS_STALE_MS,
   }))
   const providersState = createMemo(() => ({
     loading: providers.isPending && !providers.isError,

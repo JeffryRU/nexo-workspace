@@ -481,12 +481,12 @@ líneas inválidas el turno se da por malo). (3) `client.ts`: `GET /api/tags` y 
 (`redirect: 'error'`, sin credenciales). (4) `session.ts`: historial, turnos, interrupción y plazos. (5) `provider.ts`:
 validación de opciones, capacidades y disponibilidad.
 
-| Ollama (`/api/chat`, una línea JSON por trozo)      | `ProviderEvent`                                                                            |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `message.thinking`                                  | bloque `reasoning` (`block-start` / `block-delta` / `block-end`)                           |
-| `message.content`                                   | bloque `text`; al cambiar de tipo se cierra el bloque anterior                             |
-| `done: true`, `done_reason`                         | `turn-end`: `stop` → `end-turn`, `length` → `max-tokens`, otro → `other`                   |
-| `prompt_eval_count`, `eval_count`, `total_duration` | `usage` del `turn-end`: tokens de entrada y salida, `durationMs`, `numTurns`               |
+| Ollama (`/api/chat`, una línea JSON por trozo)      | `ProviderEvent`                                                                                       |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `message.thinking`                                  | bloque `reasoning` (`block-start` / `block-delta` / `block-end`)                                      |
+| `message.content`                                   | bloque `text`; al cambiar de tipo se cierra el bloque anterior                                        |
+| `done: true`, `done_reason`                         | `turn-end`: `stop` → `end-turn`, `length` → `max-tokens`, otro → `other`                              |
+| `prompt_eval_count`, `eval_count`, `total_duration` | `usage` del `turn-end`: tokens de entrada y salida, `durationMs`, `numTurns`                          |
 | `{ "error": "..." }` (también a mitad del flujo)    | bloque `error` no fatal (`MODEL_NOT_FOUND`, `THINK_UNSUPPORTED`, `OLLAMA_ERROR`) y `turn-end` `error` |
 
 **Sesión sin estado en Ollama.** Ollama no tiene sesiones: el adaptador guarda el historial de la conversación
