@@ -1,10 +1,43 @@
 import { defineConfig } from 'vitest/config'
 
+// Pruebas pesadas: procesos reales (daemon, CLI), PTY reales y E/S de archivos enormes. Corren en un único
+// proyecto, un archivo a la vez, para que no compitan entre sí ni con el resto: en Windows, ConPTY y el
+// arranque de procesos se ralentizan mucho bajo carga (timeouts al azar, issue #18) y dos suites con PTY
+// reales a la vez llegaron a tumbar un worker.
+const heavyFiles = [
+  'packages/adapters/pty-node/test/**/*.test.ts',
+  'apps/cli/src/cli.integration.test.ts',
+  'apps/cli/src/cli.adversarial.test.ts',
+  'apps/daemon/src/daemon.integration.test.ts',
+  'apps/daemon/src/daemon.adversarial.test.ts',
+  'packages/client/src/node/daemon.integration.test.ts',
+  'packages/client/src/node/discovery.adversarial.test.ts',
+]
+
+const heavyProject = (name: string, include: string[]) => ({
+  test: {
+    name,
+    root: '.',
+    include,
+    environment: 'node' as const,
+    testTimeout: 30000,
+    hookTimeout: 30000,
+    fileParallelism: false,
+  },
+})
+
+/** Los patrones pesados que caen dentro de `root`, relativos a él, para excluirlos del proyecto ligero. */
+const heavyWithin = (root: string) => {
+  const prefix = `${root.replace(/^\.\//, '')}/`
+  return heavyFiles.filter((f) => f.startsWith(prefix)).map((f) => f.slice(prefix.length))
+}
+
 const project = (name: string, root: string, testTimeout = 5000) => ({
   test: {
     name,
     root,
     include: ['src/**/*.test.ts', 'test/**/*.test.ts'],
+    exclude: ['**/node_modules/**', ...heavyWithin(root)],
     environment: 'node',
     testTimeout,
     hookTimeout: testTimeout,
@@ -24,6 +57,7 @@ export default defineConfig({
       project('mcp', './apps/mcp'),
       './apps/web',
       project('tools', './tools'),
+      heavyProject('heavy', heavyFiles),
     ],
     coverage: {
       provider: 'v8',
