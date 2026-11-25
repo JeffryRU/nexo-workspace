@@ -198,6 +198,22 @@ describe('límites de métodos', () => {
     expect(resize(1.01)).toBe(false)
   })
 
+  it('pane.resize por camino de nodo: valida tabId, camino, índice y delta', () => {
+    const resize = (params: Record<string, unknown>) => parseRequest(req('pane.resize', params)).ok
+    const ok = { tabId: 't1', path: [0, 1], index: 0, delta: 0.1 }
+    expect(resize(ok)).toBe(true)
+    expect(resize({ ...ok, path: [] })).toBe(true)
+    expect(resize({ ...ok, path: new Array(LIMITS.maxLayoutPathDepth).fill(0) })).toBe(true)
+    expect(resize({ ...ok, path: new Array(LIMITS.maxLayoutPathDepth + 1).fill(0) })).toBe(false)
+    expect(resize({ ...ok, path: [-1] })).toBe(false)
+    expect(resize({ ...ok, path: [0.5] })).toBe(false)
+    expect(resize({ ...ok, index: -1 })).toBe(false)
+    expect(resize({ ...ok, index: 1.5 })).toBe(false)
+    expect(resize({ ...ok, delta: 2 })).toBe(false)
+    expect(resize({ ...ok, paneId: 'p1' })).toBe(false)
+    expect(resize({ path: [], index: 0, delta: 0.1 })).toBe(false)
+  })
+
   it('terminal.spawn: env con nombres reservados o inválidos se rechaza', () => {
     const spawn = (env: unknown) =>
       parseRequest(req('terminal.spawn', { paneId: 'p1', cols: 80, rows: 24, env })).ok

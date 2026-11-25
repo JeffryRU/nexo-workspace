@@ -10,6 +10,7 @@ import {
   nodeAt,
   pathOf,
   resize,
+  resizeBoundary,
   split,
   swap,
 } from './layout.ts'
@@ -228,5 +229,51 @@ describe('utilidades', () => {
     expect(pathOf(l, d)).toBeNull()
     expect(() => nodeAt(l, [9])).toThrow(LayoutError)
     expect(() => nodeAt(leaf(a), [0])).toThrow(LayoutError)
+  })
+})
+
+describe('resizeBoundary', () => {
+  const grid = (): Layout => {
+    const l = split(split(leaf(a), a, 'row', c), a, 'column', b)
+    return split(l, c, 'column', d)
+  }
+
+  it('mueve el divisor central de una 2x2 (entre dos subárboles)', () => {
+    const g = grid()
+    expect(g.type === 'split' && g.children.map((x) => x.type)).toEqual(['split', 'split'])
+    const next = resizeBoundary(g, [], 0, 0.1)
+    expect(next.type === 'split' && next.ratios[0]).toBeCloseTo(0.6)
+    expect(next.type === 'split' && next.ratios[1]).toBeCloseTo(0.4)
+    expectValid(next)
+  })
+
+  it('delta negativo achica el hijo de la izquierda y no toca la entrada', () => {
+    const g = grid()
+    const before = JSON.stringify(g)
+    const next = resizeBoundary(g, [], 0, -0.2)
+    expect(next.type === 'split' && next.ratios[0]).toBeCloseTo(0.3)
+    expect(JSON.stringify(g)).toBe(before)
+  })
+
+  it('respeta el mínimo por panel', () => {
+    const next = resizeBoundary(split(leaf(a), a, 'row', b), [], 0, 5)
+    expect(next.type === 'split' && next.ratios[1]).toBeCloseTo(MIN_RATIO)
+  })
+
+  it('divisores de subárboles anidados', () => {
+    const t = split(split(leaf(a), a, 'row', b), b, 'column', c)
+    const next = resizeBoundary(t, [1], 0, 0.2)
+    const inner = next.type === 'split' ? next.children[1] : undefined
+    expect(inner?.type === 'split' && inner.ratios[0]).toBeCloseTo(0.7)
+    expect(next.type === 'split' && next.ratios).toEqual(t.type === 'split' ? t.ratios : [])
+  })
+
+  it('camino que no existe, que apunta a una hoja o índice fuera de rango: error', () => {
+    const t = split(leaf(a), a, 'row', b)
+    expect(() => resizeBoundary(t, [5], 0, 0.1)).toThrow(LayoutError)
+    expect(() => resizeBoundary(t, [0], 0, 0.1)).toThrow(LayoutError)
+    expect(() => resizeBoundary(t, [], 1, 0.1)).toThrow(LayoutError)
+    expect(() => resizeBoundary(t, [], -1, 0.1)).toThrow(LayoutError)
+    expect(() => resizeBoundary(t, [], 0.5, 0.1)).toThrow(LayoutError)
   })
 })

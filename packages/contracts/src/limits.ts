@@ -18,6 +18,8 @@ export const LIMITS = {
   maxEnvValueLength: 32 * 1024,
   /** Paneles por pestaña (acota la profundidad y el tamaño del árbol). */
   maxPanesPerTab: 1024,
+  /** Profundidad máxima del camino de nodo en `pane.resize`. */
+  maxLayoutPathDepth: 64,
   maxErrorMessageLength: 4096,
   /** Tolerancia de la suma de proporciones de un `Layout`. */
   ratioTolerance: 1e-6,

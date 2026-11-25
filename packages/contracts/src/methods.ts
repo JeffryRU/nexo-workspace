@@ -31,6 +31,33 @@ const Env = z
   .record(EnvName, z.string().max(LIMITS.maxEnvValueLength))
   .refine((o) => Object.keys(o).length <= LIMITS.maxEnvEntries, { message: 'demasiadas variables' })
 
+const ResizeDelta = z.number().min(-1).max(1)
+
+/** Frontera de un panel con su hermano directo (forma original). */
+const ResizeByPane = z.strictObject({ paneId: PaneId, delta: ResizeDelta })
+
+/**
+ * Frontera por camino de nodo: `path` son los índices de hijo desde la raíz hasta un split de la pestaña
+ * (vacío = la raíz) e `index` es el hijo cuya frontera con el siguiente se mueve; delta > 0 agranda ese hijo.
+ * Cualquier divisor del árbol (entre hojas o subárboles) queda así identificado sin ambigüedad.
+ */
+const ResizeByPath = z.strictObject({
+  tabId: TabId,
+  path: z
+    .array(
+      z
+        .int()
+        .min(0)
+        .max(LIMITS.maxPanesPerTab - 1),
+    )
+    .max(LIMITS.maxLayoutPathDepth),
+  index: z
+    .int()
+    .min(0)
+    .max(LIMITS.maxPanesPerTab - 2),
+  delta: ResizeDelta,
+})
+
 const Signal = z.enum(['SIGINT', 'SIGTERM', 'SIGKILL', 'SIGHUP'])
 
 /**
@@ -107,7 +134,7 @@ export const methods = {
   'pane.close': { params: z.strictObject({ paneId: PaneId }), result: Ok },
   'pane.focus': { params: z.strictObject({ paneId: PaneId }), result: Ok },
   'pane.resize': {
-    params: z.strictObject({ paneId: PaneId, delta: z.number().min(-1).max(1) }),
+    params: z.union([ResizeByPane, ResizeByPath]),
     result: z.strictObject({ layout: LayoutSchema }),
   },
   'pane.swap': {

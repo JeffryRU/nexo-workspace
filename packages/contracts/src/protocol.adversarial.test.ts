@@ -94,6 +94,20 @@ describe('adversarial: valores y tipos', () => {
       parseRequest('{"v":1,"id":"a","method":"pane.resize","params":{"paneId":"p1","delta":NaN}}')
         .ok,
     ).toBe(false)
+    const byPath = { tabId: 't1', path: [], index: 0 }
+    expect(call('pane.resize', { ...byPath, delta: Number.NaN }).ok).toBe(false)
+    expect(call('pane.resize', { ...byPath, delta: Number.NEGATIVE_INFINITY }).ok).toBe(false)
+    expect(call('pane.resize', { ...byPath, path: [Number.MAX_SAFE_INTEGER], delta: 0.1 }).ok).toBe(
+      false,
+    )
+    expect(call('pane.resize', { ...byPath, path: ['0'], delta: 0.1 }).ok).toBe(false)
+    expect(call('pane.resize', { ...byPath, path: 'x', delta: 0.1 }).ok).toBe(false)
+    expect(
+      call('pane.resize', { ...byPath, path: new Array(100_000).fill(0), delta: 0.1 }).ok,
+    ).toBe(false)
+    expect(call('pane.resize', { ...byPath, index: LIMITS.maxPanesPerTab, delta: 0.1 }).ok).toBe(
+      false,
+    )
     expect(call('tab.move', { tabId: 't1', index: -1 }).ok).toBe(false)
     expect(call('terminal.spawn', { paneId: 'p1', cols: -80, rows: 24 }).ok).toBe(false)
     expect(call('terminal.read', { terminalId: 't1', maxBytes: 0 }).ok).toBe(false)

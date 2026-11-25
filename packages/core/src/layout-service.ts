@@ -11,7 +11,7 @@ import type {
   WorkspaceId,
 } from '@nexo/contracts'
 import { DomainError } from './errors.ts'
-import { close, LayoutError, leaf, leaves, resize, split, swap } from './layout.ts'
+import { close, LayoutError, leaf, leaves, resize, resizeBoundary, split, swap } from './layout.ts'
 import type { EventBusPort, IdPort } from './ports/misc.ts'
 
 export type LayoutServiceDeps = { ids: IdPort; bus: EventBusPort }
@@ -218,6 +218,13 @@ export class LayoutService implements PaneDirectory {
   resizePane(paneId: PaneId, delta: number): Layout {
     const { workspace, tab } = this.#locate(paneId)
     const layout = resize(tab.layout, paneId, delta)
+    this.#update(workspace.id, { ...tab, layout })
+    return layout
+  }
+
+  resizeBoundaryAt(tabId: TabId, path: readonly number[], index: number, delta: number): Layout {
+    const { workspace, tab } = this.#locateTab(tabId)
+    const layout = resizeBoundary(tab.layout, path, index, delta)
     this.#update(workspace.id, { ...tab, layout })
     return layout
   }

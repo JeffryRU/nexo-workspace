@@ -77,7 +77,12 @@ export class WorkspaceService {
   }
 
   resizePane(params: MethodParams<'pane.resize'>): MethodResult<'pane.resize'> {
-    return { layout: this.#layout.resizePane(params.paneId, params.delta) }
+    if ('paneId' in params) {
+      return { layout: this.#layout.resizePane(params.paneId, params.delta) }
+    }
+    return {
+      layout: this.#layout.resizeBoundaryAt(params.tabId, params.path, params.index, params.delta),
+    }
   }
 
   swapPanes(params: MethodParams<'pane.swap'>): MethodResult<'pane.swap'> {

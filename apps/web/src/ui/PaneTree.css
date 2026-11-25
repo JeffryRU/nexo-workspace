@@ -54,9 +54,3 @@
 .divider:focus-visible {
   background: var(--accent);
 }
-.divider.disabled {
-  cursor: default;
-}
-.divider.disabled:hover {
-  background: var(--border);
-}
