@@ -97,6 +97,9 @@ jobs:
       NEXO_PERF_TAB_P95_MS: "40"
       NEXO_PERF_EMIT_MS: "20"
       NEXO_PERF_LONGTASK_MAX_MS: "500"
+      # Agente (F2.6): mismo criterio de margen para runners compartidos.
+      NEXO_PERF_FIRST_DELTA_MS: "1000"
+      NEXO_PERF_SCROLL_FRAME_P95_MS: "100"
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
