@@ -38,7 +38,8 @@ const project = (name: string, root: string, testTimeout = 5000) => ({
     name,
     root,
     include: ['src/**/*.test.ts', 'test/**/*.test.ts'],
-    exclude: ['**/node_modules/**', ...heavyWithin(root)],
+    // Las pruebas *.live.test.ts usan el SDK y credenciales reales: solo corren a mano (ver docs).
+    exclude: ['**/node_modules/**', '**/*.live.test.ts', ...heavyWithin(root)],
     environment: 'node',
     testTimeout,
     hookTimeout: testTimeout,
@@ -53,6 +54,7 @@ export default defineConfig({
       project('testkit', './packages/testkit'),
       project('adapter-pty-node', './packages/adapters/pty-node', 30000),
       project('adapter-pty-host', './packages/adapters/pty-host', 30000),
+      project('adapter-provider-claude', './packages/adapters/provider-claude', 15000),
       project('client', './packages/client', 30000),
       project('daemon', './apps/daemon', 30000),
       project('cli', './apps/cli', 30000),
