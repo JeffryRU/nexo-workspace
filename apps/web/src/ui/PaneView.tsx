@@ -1,0 +1,95 @@
+import type { PaneId } from '@nexo/contracts'
+import { createMemo, Show } from 'solid-js'
+import { useModel } from '../app/model.tsx'
+import { es } from '../i18n/es.ts'
+import { findPaneTab } from '../state/store.ts'
+import { AttentionDot } from './parts.tsx'
+import { TerminalView } from './TerminalView.tsx'
+import './PaneView.css'
+
+export function PaneView(props: { paneId: PaneId }) {
+  const { store, ui, actions } = useModel()
+  const located = createMemo(() => findPaneTab(store.state, props.paneId))
+  const pane = () => located()?.tab.panes.find((p) => p.id === props.paneId)
+  const focused = () => located()?.tab.focusedPaneId === props.paneId
+  const swapping = () => ui.swapSource() !== undefined
+
+  const swap = () => {
+    const source = ui.swapSource()
+    if (source === undefined) ui.setSwapSource(props.paneId)
+    else {
+      ui.setSwapSource(undefined)
+      void actions.swapPanes(source as PaneId, props.paneId)
+    }
+  }
+
+  return (
+    <Show when={pane()}>
+      {(p) => (
+        <section
+          class="pane"
+          classList={{ focused: focused(), 'swap-source': ui.swapSource() === props.paneId }}
+          data-pane-id={props.paneId}
+          aria-label={p().title}
+          onPointerDown={() => void actions.focusPane(props.paneId)}
+          onFocusIn={() => void actions.focusPane(props.paneId)}
+        >
+          <header class="pane-header">
+            <AttentionDot attention={p().attention} />
+            <span class="pane-title ellipsis" title={p().title}>
+              {p().title}
+            </span>
+            <span class="pane-actions">
+              <button
+                type="button"
+                class="icon-button subtle"
+                title={es.pane.splitRight}
+                aria-label={es.pane.splitRight}
+                onClick={() => void actions.splitPane(props.paneId, 'row')}
+              >
+                ▯▯
+              </button>
+              <button
+                type="button"
+                class="icon-button subtle"
+                title={es.pane.splitDown}
+                aria-label={es.pane.splitDown}
+                onClick={() => void actions.splitPane(props.paneId, 'column')}
+              >
+                ▭
+              </button>
+              <button
+                type="button"
+                class="icon-button subtle"
+                classList={{ active: swapping() }}
+                title={swapping() ? es.pane.swapPending : es.pane.swap}
+                aria-label={es.pane.swap}
+                aria-pressed={ui.swapSource() === props.paneId}
+                onClick={swap}
+              >
+                ⇄
+              </button>
+              <button
+                type="button"
+                class="icon-button subtle"
+                title={es.pane.close}
+                aria-label={es.pane.close}
+                onClick={() => void actions.closePane(props.paneId)}
+              >
+                ×
+              </button>
+            </span>
+          </header>
+          <TerminalView
+            paneId={props.paneId}
+            terminalId={p().terminalId}
+            exit={
+              p().terminalId === undefined ? undefined : store.state.exits[p().terminalId as string]
+            }
+            focused={focused()}
+          />
+        </section>
+      )}
+    </Show>
+  )
+}

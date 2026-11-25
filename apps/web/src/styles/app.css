@@ -1,0 +1,108 @@
+:root {
+  color-scheme: dark;
+
+  /* Paleta base (One Dark Pro Night Flat). Cambiar estas variables basta para tematizar. */
+  --bg: #15181d;
+  --bg-sunken: #11141a;
+  --bg-elevated: #1b1f26;
+  --bg-hover: rgb(171 178 191 / 0.07);
+  --bg-active: rgb(97 175 239 / 0.14);
+  --fg: #abb2bf;
+  --fg-strong: #d7dae0;
+  --fg-muted: #7f848e;
+  --border: rgb(171 178 191 / 0.1);
+  --accent: #61afef;
+  --focus-ring: #61afef;
+  --ok: #98c379;
+  --warn: #e5c07b;
+  --danger: #e06c75;
+  --attention-idle: #4b5263;
+  --attention-working: #61afef;
+  --attention-needs-input: #e5c07b;
+  --attention-done: #98c379;
+  --attention-error: #e06c75;
+
+  --opacity-dim: 0.6;
+  --opacity-subtle: 0.55;
+  --radius: 6px;
+  --sidebar-width: 232px;
+
+  --font-ui:
+    system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+  --font-mono:
+    "JetBrainsMono Nerd Font", "JetBrainsMono NF", "FiraCode Nerd Font", "CaskaydiaCove Nerd Font",
+    "MesloLGS NF", "Hack Nerd Font", "Cascadia Code", Consolas, "DejaVu Sans Mono", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px / 1.4 var(--font-ui);
+  overflow: hidden;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+[hidden] {
+  display: none;
+}
+
+.tab-panel[hidden] {
+  display: none;
+}
+
+.ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.muted {
+  color: var(--fg-muted);
+}
+
+.workbench {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  height: 100%;
+  position: relative;
+}
+
+.main {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+}
+
+.statusbar {
+  display: flex;
+  gap: 8px;
+  padding: 2px 10px;
+  font-size: 11px;
+  color: var(--fg-muted);
+  background: var(--bg-sunken);
+  border-top: 1px solid var(--border);
+}

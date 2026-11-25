@@ -22,7 +22,7 @@ export default defineConfig({
       project('daemon', './apps/daemon', 30000),
       project('cli', './apps/cli', 30000),
       project('mcp', './apps/mcp'),
-      project('web', './apps/web'),
+      './apps/web',
       project('tools', './tools'),
     ],
     coverage: {
@@ -34,6 +34,7 @@ export default defineConfig({
         'packages/adapters/*/src/**/*.ts',
         'packages/client/src/**/*.ts',
         'apps/cli/src/**/*.ts',
+        'apps/web/src/**/*.{ts,tsx}',
       ],
       // main.ts de la CLI es solo composición: lo ejercitan las pruebas de integración (proceso hijo).
       exclude: [
@@ -42,12 +43,17 @@ export default defineConfig({
         '**/ports/**',
         '**/test-helpers.ts',
         'apps/cli/src/main.ts',
+        '**/*.test.tsx',
+        'apps/web/src/main.tsx',
+        'apps/web/src/vite-env.d.ts',
+        'apps/web/src/test-*.{ts,tsx}',
       ],
       thresholds: {
         'packages/contracts/src/**': { statements: 90, branches: 90, functions: 90, lines: 90 },
         'packages/core/src/**': { statements: 90, branches: 90, functions: 90, lines: 90 },
         'packages/client/src/**': { statements: 90, branches: 90, functions: 90, lines: 90 },
         'apps/cli/src/**': { statements: 85, branches: 85, functions: 85, lines: 85 },
+        'apps/web/src/**': { statements: 80, branches: 80, functions: 80, lines: 80 },
         'packages/adapters/*/src/**': { statements: 80, branches: 80, functions: 80, lines: 80 },
       },
     },

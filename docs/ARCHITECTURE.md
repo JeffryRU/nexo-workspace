@@ -254,6 +254,31 @@ Presupuestos (los mide una prueba de rendimiento en CI, con margen):
 - Terminal: `@xterm/xterm` + addons `fit`, `webgl`, `web-links`, `unicode11`, `search`.
 - Textos de la interfaz en español, desde un diccionario (`i18n/es.ts`) para poder traducir.
 
+Implementación de la F1.6 (`apps/web/src`):
+
+- **Conexión** (`daemon/`): `getDaemonInfo()` tiene dos fuentes que se eligen en tiempo de ejecución: navegador/dev
+  (lee `?port=&t=`, borra el token de la barra con `history.replaceState` y solo lo guarda en memoria, nunca en
+  localStorage) y Tauri (`window.__TAURI__` presente → `invoke('daemon_info')`, pendiente de F1.7).
+  `createDaemonSession` conecta, se suscribe, pide `snapshot` (por `@tanstack/solid-query`) y, con `autoResync`,
+  reconstruye el estado en cada `resync`.
+- **Estado** (`state/`): reductor puro `reduce(estado, evento)` + store de Solid con `reconcile`; ignora `seq` ya
+  aplicados. La salida de terminales no pasa por el store: va al `TerminalHub` (`terminal/hub.ts`), que lleva el
+  offset de cada terminal, relee con `terminal.read { fromOffset }` ante un hueco o un `resync` (sin perder ni
+  duplicar), agrupa las escrituras por fotograma con control de flujo y acota lo pendiente (4 M caracteres por
+  terminal; si se pasa, se descarta lo más antiguo).
+- **Terminales:** una `PaneSession` por panel, creada al verlo por primera vez y liberada al cerrarlo; sobrevive a
+  recolocaciones del árbol (solo se mueve su elemento). WebGL solo mientras es visible (si falla o pierde el
+  contexto, renderer DOM). El cambio de pestaña publica `performance.measure('tab-switch')` y deja las muestras en
+  `globalThis.__NEXO_PERF__.tabSwitch` para la F1.8.
+- **Atajos** (`shortcuts/keymap.ts`, mapa editable): `Alt+Shift+T` pestaña nueva, `Alt+Shift+W` cerrar panel,
+  `Alt+Shift+D` / `Alt+Shift+S` dividir a la derecha / abajo, `Alt+flechas` mover el foco, `Ctrl+RePág/AvPág` (o
+  `Alt+RePág/AvPág`) cambiar de pestaña, `Alt+1..9`, `Ctrl+Shift+F` buscar, `Ctrl+Shift+P` o `?` ayuda. Una
+  `Ctrl+<letra>` sin más modificadores siempre va a la terminal.
+- **Limitación del protocolo:** `pane.resize` solo mueve la frontera de un panel con su hermano directo, así que un
+  divisor entre dos subárboles (p. ej. una cuadrícula 2×2) no se puede arrastrar todavía y se muestra deshabilitado.
+- **Desarrollo:** `pnpm dev:web` arranca el daemon (`NEXO_DEV=1`, puerto efímero, estado en un directorio temporal)
+  y Vite en 5173, e imprime la URL con el token.
+
 ## Compañeros (mascotas)
 
 Nexo funciona al 100 % sin mascota. Una mascota es un **paquete intercambiable** (ver ADR 0006):

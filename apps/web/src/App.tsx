@@ -1,6 +1,93 @@
+import { useQuery } from '@tanstack/solid-query'
+import { createEffect, createMemo, Match, onCleanup, onMount, Show, Switch } from 'solid-js'
+import { type AppModel, ModelProvider } from './app/model.tsx'
+import type { InfoFailure } from './daemon/info.ts'
 import { es } from './i18n/es.ts'
+import { paneIdsOf } from './layout/tree.ts'
+import { installShortcuts } from './shortcuts/handler.ts'
+import {
+  ConnectionScreen,
+  HelpDialog,
+  NoDaemonScreen,
+  ReconnectBanner,
+  SearchBar,
+  Toast,
+} from './ui/Overlays.tsx'
+import { Sidebar } from './ui/Sidebar.tsx'
+import { Stage } from './ui/Stage.tsx'
+import { TabBar } from './ui/TabBar.tsx'
+import './styles/app.css'
 
-// TODO(F1): pestanas, paneles y terminales. Estado del servidor con @tanstack/solid-query.
-export function App() {
-  return <h1>{es.appName}</h1>
+export type AppProps =
+  | { kind: 'no-daemon'; reason: InfoFailure; onRetry: () => void }
+  | { kind: 'ready'; model: AppModel }
+
+export function App(props: { state: AppProps | undefined }) {
+  return (
+    <Switch>
+      <Match when={props.state?.kind === 'ready' && (props.state as { model: AppModel }).model}>
+        {(model) => (
+          <ModelProvider value={model()}>
+            <Workbench model={model()} />
+          </ModelProvider>
+        )}
+      </Match>
+      <Match
+        when={
+          props.state?.kind === 'no-daemon' &&
+          (props.state as { reason: InfoFailure; onRetry: () => void })
+        }
+      >
+        {(p) => <NoDaemonScreen reason={p().reason} onRetry={p().onRetry} />}
+      </Match>
+    </Switch>
+  )
+}
+
+function Workbench(props: { model: AppModel }) {
+  const { store, status, sessions, request } = props.model
+  // Hasta tener el primer snapshot no hay nada que mostrar salvo el estado de la conexión.
+  const everOpened = createMemo<boolean>((was) => was || status() === 'open', false)
+
+  onMount(() => {
+    const stop = installShortcuts(props.model)
+    onCleanup(stop)
+  })
+  onCleanup(() => sessions.disposeAll())
+
+  // Libera las terminales de paneles que ya no existen.
+  createEffect(() => {
+    const live = new Set<string>()
+    for (const w of store.state.workspaces) {
+      for (const t of w.tabs) for (const id of paneIdsOf(t.layout)) live.add(id)
+    }
+    sessions.prune(live)
+  })
+
+  const info = useQuery(() => ({
+    queryKey: ['daemon.info', status() === 'open'],
+    queryFn: () => request('daemon.info', {}),
+    enabled: status() === 'open',
+    staleTime: Number.POSITIVE_INFINITY,
+  }))
+
+  return (
+    <Show when={everOpened()} fallback={<ConnectionScreen />}>
+      <div class="workbench">
+        <Sidebar />
+        <div class="main">
+          <TabBar />
+          <Stage />
+          <SearchBar />
+          <footer class="statusbar">
+            <span>{es.appName}</span>
+            <Show when={info.data}>{(d) => <span class="muted">v{d().version}</span>}</Show>
+          </footer>
+        </div>
+        <ReconnectBanner />
+        <HelpDialog />
+        <Toast />
+      </div>
+    </Show>
+  )
 }
