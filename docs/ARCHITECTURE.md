@@ -89,6 +89,31 @@ apps/*               raíces de composición: daemon (une core + adaptadores), w
 `packages/testkit` un **falso** en memoria y una **suite de conformidad** que se ejecuta contra el falso
 y contra cada adaptador real: así el falso no miente.
 
+### Servicios de core (F1.2)
+
+Todo en `packages/core`, sin I/O; el daemon (F1.3) solo los conecta con adaptadores reales.
+
+- `LayoutService` es el único dueño del estado de espacios, pestañas y paneles (y valida que `IdPort` no
+  repita ids). `WorkspaceService` lo envuelve para `workspace.*`, `tab.*` y `pane.*`: cerrar un panel, una
+  pestaña o un espacio mata sus terminales (`SIGKILL`), así que nunca hay terminales sin panel.
+- `TerminalService`: una terminal viva por panel como máximo. Si el proceso termina, la terminal queda legible
+  (`terminal.read`) hasta que se cierre el panel o se lance otra en él. Límites configurables: terminales vivas
+  (`CONFLICT` al excederlas) y escrituras por ventana deslizante sobre `ClockPort` (`RATE_LIMITED`, con
+  `data.retryAfterMs`). `PtySpawnError` se mapea así: `EXECUTABLE_NOT_FOUND` y `CWD_NOT_FOUND` → `NOT_FOUND`,
+  `INVALID_OPTIONS` → `INVALID_PARAMS`, el resto → `INTERNAL`. Escribir o redimensionar una terminal terminada es
+  `CONFLICT`.
+- Salida: `RingBuffer` (2 MiB por omisión, offset absoluto en bytes) + `OutputBatcher` (~8 ms o 64 KiB; al terminar
+  el proceso se vacía lo pendiente antes de `terminal.exit`). Los pares sustitutos partidos entre trozos se unen
+  antes de contar bytes, así los offsets de `terminal.output` y de `terminal.read` coinciden. El título (OSC 0/2,
+  saneado, máx. 256) sale como `pane.title` sin emitir `layout.changed`.
+- `SnapshotService` resuelve `snapshot` y `daemon.info`; el `seq` lo aporta el daemon.
+- `createDispatcher(services)`: despachador puro `{ method, params }` (ya validados con zod) → resultado o
+  `{ code, message }`. La tabla es exhaustiva sobre `METHOD_NAMES` (si falta un método no compila). Un error que
+  no es de dominio sale como `INTERNAL` sin su mensaje. `events.subscribe` depende de la conexión, por eso lo
+  aporta quien despacha.
+- Los renombres de espacio y de pestaña no emiten evento (el registro de eventos no tiene uno): los clientes los
+  ven en el siguiente `snapshot`.
+
 ## Protocolo (v1)
 
 Todo mensaje que cruza un límite de proceso se valida con zod **al recibirlo** (el daemon valida lo que
@@ -132,6 +157,9 @@ Detalles fijados en F0 (la fuente exacta es `packages/contracts`):
 - Títulos y nombres rechazan caracteres de control; `terminal.write` sí acepta ANSI/OSC.
 - `terminal.output` lleva `offset` (posición absoluta en el búfer) y `terminal.read` devuelve
   `{ data, offset }`, para reconectar sin perder ni duplicar salida.
+  `terminal.read` acepta `fromOffset` (sin él devuelve lo más reciente, hasta `maxBytes`); `offset` es el final
+  de `data`. Si `fromOffset` ya se descartó del búfer circular, `data` empieza en lo más antiguo disponible y el
+  resultado trae `truncated: true`. El búfer nunca parte un carácter UTF-8 ni un par sustituto al recortar.
 
 Versiones fijadas: TypeScript 6.x (dependency-cruiser aún no soporta TS 7) y solid-js 1.9
 (`@tanstack/solid-query` y `vite-plugin-solid` piden Solid 1.x). Se revisan al subir esas dependencias.

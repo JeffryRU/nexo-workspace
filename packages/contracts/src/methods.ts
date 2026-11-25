@@ -131,10 +131,15 @@ export const methods = {
     params: z.strictObject({
       terminalId: TerminalId,
       maxBytes: z.int().min(1).max(LIMITS.maxReadBytes).optional(),
+      /** Offset absoluto desde el que leer; sin él, devuelve lo más reciente (hasta `maxBytes`). */
+      fromOffset: z.int().nonnegative().optional(),
     }),
     result: z.strictObject({
       data: z.string().max(LIMITS.maxMessageBytes),
+      /** Offset absoluto del final de `data`: el siguiente `fromOffset` para no perder ni duplicar. */
       offset: z.int().nonnegative(),
+      /** `true` si `fromOffset` ya se había descartado del búfer y `data` empieza en lo más antiguo disponible. */
+      truncated: z.boolean().optional(),
     }),
   },
   'terminal.kill': {

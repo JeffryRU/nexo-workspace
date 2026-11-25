@@ -285,3 +285,19 @@ describe('valores ya parseados', () => {
     expect(utf8ByteLength('\ud800a')).toBe(4)
   })
 })
+
+describe('terminal.read: fromOffset y truncated', () => {
+  it('acepta fromOffset entero no negativo y rechaza el resto', () => {
+    const ok = parseRequest(req('terminal.read', { terminalId: 't1', fromOffset: 0, maxBytes: 10 }))
+    expect(ok.ok).toBe(true)
+    for (const fromOffset of [-1, 1.5, '3', null]) {
+      expect(parseRequest(req('terminal.read', { terminalId: 't1', fromOffset })).ok).toBe(false)
+    }
+  })
+
+  it('el resultado admite truncated opcional booleano', () => {
+    expect(parseResult('terminal.read', { data: 'x', offset: 1 }).ok).toBe(true)
+    expect(parseResult('terminal.read', { data: 'x', offset: 1, truncated: true }).ok).toBe(true)
+    expect(parseResult('terminal.read', { data: 'x', offset: 1, truncated: 'si' }).ok).toBe(false)
+  })
+})
