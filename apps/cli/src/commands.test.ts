@@ -99,7 +99,6 @@ describe('nexo new', () => {
     expect(await run(env, 'new')).toBe(0)
     expect(env.client.callsTo('workspace.create')[0]).toMatchObject({ name: 'carpeta' })
     expect(env.client.callsTo('terminal.spawn')[0]).toMatchObject({
-      cmd: '/bin/sh',
       cols: 200,
       rows: 50,
     })
@@ -128,23 +127,17 @@ describe('nexo new', () => {
     expect(env2.cap.err).toContain('ambigua')
   })
 
-  it('el shell por omisión en Windows es pwsh.exe si existe y NEXO_SHELL manda', async () => {
-    const a = setup({
-      platform: 'win32',
-      commandExists: (n) => n === 'pwsh.exe',
-      cwd: 'C:\\w\\proyecto',
-    })
+  it('sin comando no envía cmd: el shell por omisión lo elige el daemon', async () => {
+    const a = setup({ platform: 'win32', cwd: 'C:wproyecto' })
     wire(a)
     await run(a, 'new')
-    expect(a.client.callsTo('terminal.spawn')[0]).toMatchObject({ cmd: 'pwsh.exe' })
-    const b = setup({ platform: 'win32', commandExists: () => false })
+    const spawn = a.client.callsTo('terminal.spawn')[0] as Record<string, unknown>
+    expect(spawn).not.toHaveProperty('cmd')
+    expect(spawn).not.toHaveProperty('args')
+    const b = setup({})
     wire(b)
-    await run(b, 'new')
-    expect(b.client.callsTo('terminal.spawn')[0]).toMatchObject({ cmd: 'powershell.exe' })
-    const c = setup({ platform: 'win32', env: { NEXO_SHELL: 'C:\\tools\\fish.exe' } })
-    wire(c)
-    await run(c, 'new')
-    expect(c.client.callsTo('terminal.spawn')[0]).toMatchObject({ cmd: 'C:\\tools\\fish.exe' })
+    await run(b, 'new', '--', 'node', '-v')
+    expect(b.client.callsTo('terminal.spawn')[0]).toMatchObject({ cmd: 'node', args: ['-v'] })
   })
 
   it('si la terminal no arranca deshace la pestaña (o el espacio creado) y sale 2', async () => {

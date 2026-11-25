@@ -99,7 +99,6 @@ export function makeEnv(
     platform?: NodeJS.Platform
     connect?: Deps['connect']
     daemon?: Partial<Deps['daemon']>
-    commandExists?: (name: string) => boolean
     cwd?: string
     columns?: number
     rows?: number
@@ -140,7 +139,6 @@ export function makeEnv(
     env: options.env ?? {},
     platform: options.platform ?? 'linux',
     cwd: () => options.cwd ?? WORK,
-    commandExists: options.commandExists ?? (() => false),
     signal: abort.signal,
     sleep: async () => {},
   }

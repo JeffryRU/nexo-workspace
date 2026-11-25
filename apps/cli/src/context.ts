@@ -33,7 +33,6 @@ export type Deps = {
   env: Readonly<Record<string, string | undefined>>
   platform: NodeJS.Platform
   cwd: () => string
-  commandExists: (name: string) => boolean
   /** Se cancela con Ctrl+C o al cerrarse la tubería de salida. */
   signal: AbortSignal
   /** Espera `ms` (cancelable); inyectable para pruebas. */

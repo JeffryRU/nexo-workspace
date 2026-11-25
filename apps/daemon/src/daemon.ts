@@ -20,6 +20,7 @@ import { generateToken } from './auth.ts'
 import { probeDaemon } from './probe.ts'
 import { createRedactor } from './redact.ts'
 import { DaemonServer, type ServerOptions, type ServerStats } from './server.ts'
+import { resolveDefaultShell } from './shell.ts'
 import {
   acquireLock,
   defaultStateDir,
@@ -94,11 +95,6 @@ export type RunningDaemon = {
   stop(): Promise<void>
 }
 
-function defaultShell(): { cmd: string } {
-  if (process.platform === 'win32') return { cmd: process.env.ComSpec ?? 'cmd.exe' }
-  return { cmd: process.env.SHELL ?? '/bin/sh' }
-}
-
 /** Las terminales no heredan las variables internas de Nexo. */
 function childBaseEnv(): Record<string, string | undefined> {
   const env: Record<string, string | undefined> = {}
@@ -137,13 +133,15 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   const ids = new UuidIds()
   const clock = new SystemClock()
   const layout = new LayoutService({ ids, bus })
+  const shell = resolveDefaultShell({ env: process.env, platform: process.platform })
+  if (shell.warning !== undefined) logger.warn(shell.warning)
   const terminals = new TerminalService({
     pty: options.pty ?? new NodePtyPort({ baseEnv: childBaseEnv() }),
     bus,
     clock,
     ids,
     panes: layout,
-    config: { defaultCommand: defaultShell(), ...options.terminal },
+    config: { defaultCommand: { cmd: shell.cmd }, ...options.terminal },
   })
   const workspaces = new WorkspaceService({ layout, terminals })
   const identity = { version: DAEMON_VERSION, pid: process.pid, startedAt }

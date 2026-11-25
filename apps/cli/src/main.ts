@@ -3,7 +3,6 @@
 import process from 'node:process'
 import { runCli } from './cli.ts'
 import { makeConnect, makeDaemonControl } from './launcher.ts'
-import { findOnPath } from './shell.ts'
 
 const controller = new AbortController()
 const abort = () => controller.abort()
@@ -44,7 +43,6 @@ const code = await runCli(process.argv.slice(2), {
   env,
   platform: process.platform,
   cwd: () => process.cwd(),
-  commandExists: (name) => findOnPath(name, env, process.platform),
   signal: controller.signal,
 })
 process.exitCode = code

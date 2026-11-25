@@ -11,7 +11,6 @@ import {
   startTimeoutMs,
 } from './launcher.ts'
 import { resolveRef, shortId } from './resolve.ts'
-import { defaultShell, findOnPath } from './shell.ts'
 import { sampleWorkspaces } from './test-helpers.ts'
 
 describe('args', () => {
@@ -66,32 +65,6 @@ describe('resolveRef', () => {
   it('shortId', () => {
     expect(shortId('pane-1a2b3c4d-1111-2222')).toBe('pane-1a2b3c4d')
     expect(shortId('abcdefghijklmnop')).toBe('abcdefghijkl')
-  })
-})
-
-describe('shell', () => {
-  it('findOnPath busca en el PATH de la plataforma', () => {
-    const exists = (p: string) => p === 'C:\\bin\\pwsh.exe' || p === '/usr/bin/sh'
-    expect(findOnPath('pwsh.exe', { Path: 'C:\\x;C:\\bin' }, 'win32', exists)).toBe(true)
-    expect(findOnPath('pwsh.exe', { PATH: 'C:\\x' }, 'win32', exists)).toBe(false)
-    expect(findOnPath('sh', { PATH: '/bin:/usr/bin' }, 'linux', exists)).toBe(true)
-    expect(findOnPath('sh', {}, 'linux', exists)).toBe(false)
-    expect(findOnPath('sh', { PATH: '' }, 'linux', exists)).toBe(false)
-    expect(findOnPath('sh', { PATH: '::' }, 'linux', exists)).toBe(false)
-  })
-  it('defaultShell', () => {
-    const base = { commandExists: () => false }
-    expect(defaultShell({ ...base, env: { SHELL: '/bin/zsh' }, platform: 'linux' })).toBe(
-      '/bin/zsh',
-    )
-    expect(defaultShell({ ...base, env: { SHELL: '' }, platform: 'linux' })).toBe('/bin/sh')
-    expect(defaultShell({ ...base, env: {}, platform: 'linux' })).toBe('/bin/sh')
-    expect(defaultShell({ ...base, env: { NEXO_SHELL: '/x/fish' }, platform: 'linux' })).toBe(
-      '/x/fish',
-    )
-    expect(defaultShell({ ...base, env: { NEXO_SHELL: '' }, platform: 'win32' })).toBe(
-      'powershell.exe',
-    )
   })
 })
 
