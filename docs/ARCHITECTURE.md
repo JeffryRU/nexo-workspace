@@ -333,12 +333,95 @@ este falla el bloque sigue pendiente (salvo `UNKNOWN_REQUEST`, que lo cancela); 
 `request-cancelled`, `turn-end` o el cierre de la sesión dejan los pendientes `cancelled`. Un solo turno a la vez: `send`
 con un turno en curso responde `CONFLICT`.
 
-Cómo cubre cada proveedor: Claude (`includePartialMessages`: `content_block_*` → `block-start/delta/end`;
+Cómo cubre cada proveedor: Claude (detalle en «Proveedor Claude (F2.3)»; `includePartialMessages`: `content_block_*` → `block-start/delta/end`;
 `tool_use`/`tool_result` → `action`; `canUseTool` → `permission-request`; `AskUserQuestion` →
 `question-request`, con `updatedInput.answers` al responder; `result` con `total_cost_usd` y `usage` → `turn-end`),
 Codex (`app-server`: items y aprobaciones), ACP/Gemini (`session/update`, `session/request_permission`, cuyas opciones
 `allow_once`/`allow_always`/`reject_once`/`reject_always` son las de `PermissionOptionKind`), Antigravity (`stream-json`) y
 Ollama (solo texto, sin permisos).
+
+### Proveedor Claude (F2.3)
+
+`packages/adapters/provider-claude` (`createClaudeProvider(options)`) implementa `AgentProviderPort` sobre
+`@anthropic-ai/claude-agent-sdk` (0.3.331). No compone nada: el daemon lo registra en F2.4. Importa solo `core`
+y `contracts`.
+
+**Capas.** (1) `translator.ts`: traducción pura de `SDKMessage` a `ProviderEvent`, una máquina de estados sin E/S
+(valida cada mensaje con zod laxo, `looseObject`; lo desconocido o roto se ignora y se cuenta). (2) `session.ts`: la
+conversación viva (turnos, `canUseTool`, interrupción, muerte del proceso). (3) `transport.ts`: la interfaz pequeña
+(`ClaudeTransport`) detrás de la que está el SDK; `sdk-transport.ts` es la implementación real y las pruebas usan un
+transporte falso. (4) `provider.ts`: validación de opciones, capacidades y `warmUp`.
+
+**Sesión viva.** Una conversación = un `query()` con entrada en streaming (`AsyncIterable<SDKUserMessage>`) e
+`includePartialMessages: true`; cada `send` añade un mensaje de usuario a esa entrada. Modelo (`model`), esfuerzo
+(`effort`: `low|medium|high|xhigh|max`), carpeta (`cwd`) y modo de permisos se fijan por sesión; el modo normalizado se
+traduce `ask`→`default`, `accept-edits`→`acceptEdits`, `plan`→`plan`, `bypass`→`bypassPermissions` (este último añade
+`allowDangerouslySkipPermissions`). Una sesión nueva fija su `sessionId` (UUID) al arrancar, así `providerSessionId` se
+conoce en `open`; `resume` pasa el id del SDK (se comprueba con `getSessionInfo` que exista: si no, `INVALID_OPTIONS`) y
+`session-info` repite el id real que informa `system/init`.
+
+| SDK                                                    | `ProviderEvent`                                                                                                                     |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `system/init`                                          | `session-info` (id de sesión, modelo, modo)                                                                                         |
+| `content_block_start/delta/stop` de texto y `thinking` | `block-start`/`block-delta`/`block-end` (`text`, `reasoning`)                                                                       |
+| `tool_use` (+ `input_json_delta`)                      | `block-start` de una `action` en `pending`; al completarse la entrada, `block-update` en `running` con título, ruta, entrada y diff |
+| `tool_result`                                          | `block-end` de esa acción en `ok` o `error`, con `output`, `exitCode` y duración                                                    |
+| `canUseTool`                                           | `permission-request` (opciones Permitir / Permitir siempre, si el SDK sugiere reglas / Rechazar)                                    |
+| `canUseTool` con `AskUserQuestion`                     | `question-request`; al responder devuelve `updatedInput: { questions, answers }`                                                    |
+| `result`                                               | `turn-end` (`usage`: tokens, costo del turno = diferencia del acumulado `total_cost_usd`, duración, vueltas)                        |
+| `TodoWrite`                                            | un bloque `plan` por turno, que se actualiza con cada llamada                                                                       |
+| `assistant.error`, `result.is_error`                   | bloque `error` (credenciales: `AUTH_REQUIRED`, fatal)                                                                               |
+
+`kind` de la acción: `Read`→`read`; `Edit`/`Write`/`MultiEdit`/`NotebookEdit`→`edit` (diff unificado sin contexto);
+`Bash`/`PowerShell`→`exec` (`exitCode` del texto `Exit code N`; 0 si no hay error); `Grep`/`Glob`→`search`; el resto
+(incluidas las herramientas MCP)→`other`. Con parciales activos el texto sale por deltas y los mensajes `assistant`
+completos que repiten ese texto se descartan; sin parciales, el bloque completo se entrega igualmente como
+`block-start` + deltas + `block-end`.
+
+**Garantías.** Todo texto pasa por `sanitizeBodyText` y los deltas se parten por bytes (≤ `maxDeltaBytes`) sin partir
+pares sustitutos, ni siquiera cuando el SDK parte uno entre dos deltas (`TextCarry`); el documento resultante es el
+mismo con cualquier partición. Cada bloque abierto tiene su `ref` (contador de la sesión); un `tool_result` sin
+`tool_use`, un índice repetido o un tipo desconocido se ignoran. Cada `send` aceptado produce exactamente un `turn-end`:
+al llegar el `result` del SDK (con `stopReason: 'interrupted'` si el usuario interrumpió) o, si el SDK no responde a
+`interrupt()` en 3 s, de forma sintética (el `result` tardío se descarta). Al interrumpir se emite `request-cancelled`
+por cada solicitud pendiente y se deniega al SDK con `interrupt: true`. Si el proceso muere llega un bloque `error`
+fatal y `exit` (sin `turn-end`), y la sesión rechaza todo con `CLOSED`.
+
+**Autenticación.** Nexo no implementa ningún inicio de sesión ni lee ni copia credenciales de claude.ai. El SDK usa lo
+que haya en el entorno del daemon (se le pasa una copia de `process.env`):
+
+- `ANTHROPIC_API_KEY`: una clave de la API de Anthropic, o
+- `CLAUDE_CODE_OAUTH_TOKEN`: el token propio del usuario, generado por él con `claude setup-token`.
+
+`isAvailable()` solo comprueba que el SDK se pueda importar y que exista el ejecutable de Claude Code (el paquete
+`@anthropic-ai/claude-agent-sdk-<plataforma>` que trae el SDK, o `pathToClaudeCodeExecutable`); no hace llamadas de red
+ni comprueba credenciales. Un fallo de credenciales (`authentication_failed`, `Invalid API key`, `Please run /login`...,
+también cuando el proceso muere con ese mensaje en stderr) se muestra como un bloque `error` en español que nombra las
+dos opciones. Los logs y errores pasan por un redactor de secretos propio del adaptador (`redact.ts`; el del daemon vive
+en `apps/`): tacha los valores literales de las variables sensibles del entorno (`*KEY*`, `*TOKEN*`...) y los patrones
+habituales (`sk-...`, `Bearer ...`, JWT), y el mismo valor literal se tacha del texto del agente (mejor esfuerzo: un
+secreto partido entre dos deltas no se detecta).
+
+**Capacidades.** `capabilities()` pregunta al SDK (`Query.supportedModels()`, arranca un proceso breve; se cachea y, si
+falla, se reintenta pasado un minuto) y cae a una lista estática (`sonnet`, `opus`, `haiku`, `fable`: los alias que
+acepta Claude Code). Esfuerzos: los cinco del SDK. `resume`, `warmup` y `streaming` son `true`. El modelo se acepta tal
+cual (cualquier alias o id válido como `Token`); si Claude Code no lo conoce, llega un bloque `error` `MODEL_NOT_FOUND`.
+
+**`warmUp`.** El SDK lo permite (`startup()` arranca el proceso y completa el handshake). `warmUp({ cwd })` deja un
+proceso listo por carpeta (máximo 4, caducan a los 5 minutos); `open` lo reclama y le aplica `setModel` y
+`setPermissionMode`. No se reclama si la sesión pide esfuerzo (solo se fija al arrancar), `bypass` (necesita
+`allowDangerouslySkipPermissions` al arrancar) o `resume`: en esos casos se arranca uno nuevo.
+
+**Limitaciones.** El esfuerzo y el modo `bypass` no se pueden cambiar con la sesión abierta. Los modos `auto` y
+`dontAsk` de Claude Code no tienen equivalente normalizado (no se ofrecen). `session-info` puede cambiar el
+`providerSessionId` si el SDK informa otro id al reanudar. La salida de una acción llega entera en el `block-end` (no
+por deltas de `output`), recortada a `maxBlockTextBytes`. Los subagentes solo muestran sus llamadas a herramienta, no su
+texto. No se ofrece «rechazar siempre». La configuración de Claude Code (`CLAUDE.md`, ajustes de usuario) la carga el
+propio SDK según su valor por omisión.
+
+**Probar de verdad.** `NEXO_LIVE_CLAUDE=1 pnpm --filter @nexo/adapter-provider-claude test:live` ejecuta
+`test/provider.live.test.ts` (modelo `haiku`, un saludo; usa las credenciales del entorno). No corre en el CI ni en
+`pnpm check`.
 
 ## Protocolo (v1)
 

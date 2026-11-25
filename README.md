@@ -6,8 +6,10 @@ multiplexor. Un daemon es la única fuente de verdad; la ventana, la CLI y el se
 iguales: cerrar la ventana no mata agentes ni terminales.
 
 Estado: **F2 en curso**. Terminales, daemon, CLI, web y escritorio (F0 y F1) están hechos. De la F2 (agente Claude Code)
-va el modelo normalizado de agentes: bloques, protocolo `agent.*` y `AgentProviderPort` con su falso (F2.1) y el servicio de agentes de
-`core` (F2.2); aún no hay proveedor real ni panel de agente (ver [`docs/ROADMAP.md`](docs/ROADMAP.md)).
+va el modelo normalizado de agentes: bloques, protocolo `agent.*` y `AgentProviderPort` con su falso (F2.1), el servicio de agentes de
+`core` (F2.2) y el adaptador `provider-claude` (F2.3, Claude Agent SDK; se autentica con
+`ANTHROPIC_API_KEY` o `CLAUDE_CODE_OAUTH_TOKEN` del entorno del daemon, ver «Proveedor Claude» en
+`docs/ARCHITECTURE.md`); aún no hay panel de agente (ver [`docs/ROADMAP.md`](docs/ROADMAP.md)).
 
 ## Requisitos
 
