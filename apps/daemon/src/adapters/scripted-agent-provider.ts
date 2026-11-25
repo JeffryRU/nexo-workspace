@@ -19,6 +19,8 @@ import {
  * - `pregunta`: pregunta A o B; responde con la elección.
  * - `editar`: una acción `edit` con un diff unificado (sin pedir permiso).
  * - `ansi`: una acción `exec` cuya salida lleva colores ANSI (SGR) y otras secuencias.
+ * - `charla [n]`: n párrafos cortos (20 por omisión, hasta 5 000) de 10 trozos cada uno: una conversación larga y continua, sin
+ *   un único bloque enorme (a diferencia de `lento 10000`).
  * - `bloques [n]`: n bloques de texto completos (100 por omisión, hasta 9 000) para documentos largos.
  * - cualquier otro: `Eco: <texto>`.
  */
@@ -170,6 +172,17 @@ export class ScriptedSession implements AgentProviderSession {
         epoch,
         this.#chunkMs,
       )
+      return
+    }
+    if (word === 'charla') {
+      const n = Math.min(5000, Math.max(1, Number(text.split(/\s+/)[1] ?? 20) || 20))
+      for (let i = 1; i <= n; i++) {
+        await this.#text(
+          Array.from({ length: 10 }, () => 'palabra '),
+          epoch,
+          this.#chunkMs,
+        )
+      }
       return
     }
     if (word === 'bloques') {

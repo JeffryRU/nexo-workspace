@@ -54,6 +54,12 @@ describe('ScriptedAgentProvider', () => {
     expect(huge.events.filter((e) => e.type === 'block-end')).toHaveLength(9000)
   })
 
+  it('charla n emite n párrafos de 10 trozos', async () => {
+    const { events } = await collect('charla 3')
+    expect(events.filter((e) => e.type === 'block-end')).toHaveLength(3)
+    expect(events.filter((e) => e.type === 'block-delta')).toHaveLength(30)
+  })
+
   it('lento n emite n trozos', async () => {
     const { events } = await collect('lento 7')
     expect(events.filter((e) => e.type === 'block-delta')).toHaveLength(7)
