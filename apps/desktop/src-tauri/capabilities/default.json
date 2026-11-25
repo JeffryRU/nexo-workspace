@@ -1,7 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Ventana principal: solo puede invocar los comandos propios (daemon_info); sin fs, shell ni opener desde la página.",
+  "description": "Ventana principal: comandos propios (daemon_info) y, del plugin de notificaciones, solo consultar y pedir el permiso y mostrar una notificación; sin fs, shell ni opener desde la página.",
   "windows": ["main"],
-  "permissions": []
+  "permissions": [
+    "notification:allow-is-permission-granted",
+    "notification:allow-request-permission",
+    "notification:allow-notify"
+  ]
 }
