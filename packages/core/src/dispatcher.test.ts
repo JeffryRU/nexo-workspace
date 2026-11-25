@@ -39,6 +39,12 @@ describe('createDispatcher', () => {
     expect(await run('terminal.read', { terminalId })).toEqual({ data: 'hola', offset: 4 })
     const { pane } = await run('pane.split', { paneId, direction: 'row' })
     await run('pane.resize', { paneId, delta: 0.1 })
+    await run('pane.resize', { tabId: tab.id, path: [], index: 0, delta: -0.1 })
+    const missing = await h.dispatch({
+      method: 'pane.resize',
+      params: { tabId: tab.id, path: [9], index: 0, delta: 0.1 },
+    })
+    expect(missing).toMatchObject({ ok: false, error: { code: 'NOT_FOUND' } })
     await run('pane.swap', { paneId, otherPaneId: pane.id })
     await run('pane.focus', { paneId })
     await run('tab.rename', { tabId: tab.id, title: 'x' })

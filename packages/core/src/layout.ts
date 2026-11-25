@@ -201,6 +201,25 @@ export function resize(layout: Layout, target: PaneId | NodePath, delta: number)
   return replaceAt(layout, parentPath, { ...parent, ratios: renormalize(ratios) }) as Layout
 }
 
+/**
+ * Mueve el divisor entre los hijos `index` e `index + 1` del split en `splitPath`: delta > 0 agranda el
+ * hijo `index`. El camino debe apuntar a un split y `index + 1` debe existir; si no, `NOT_FOUND`.
+ */
+export function resizeBoundary(
+  layout: Layout,
+  splitPath: NodePath,
+  index: number,
+  delta: number,
+): Layout {
+  if (!Number.isInteger(index) || index < 0) {
+    throw new LayoutError('INVALID_PARAMS', 'índice de divisor inválido')
+  }
+  const node = nodeAt(layout, splitPath)
+  if (node.type !== 'split') throw new LayoutError('NOT_FOUND', 'el camino no apunta a un split')
+  if (index + 1 >= node.children.length) throw new LayoutError('NOT_FOUND', 'divisor inexistente')
+  return resize(layout, [...splitPath, index], delta)
+}
+
 /** Intercambia la posición de dos paneles. */
 export function swap(layout: Layout, a: PaneId, b: PaneId): Layout {
   const pa = requirePath(layout, a)

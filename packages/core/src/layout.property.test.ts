@@ -2,7 +2,17 @@ import { type Layout, LayoutSchema, PaneId } from '@nexo/contracts'
 import { arbLayout } from '@nexo/testkit'
 import * as fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { close, focusNeighbor, leaves, MIN_RATIO, resize, split, swap } from './layout.ts'
+import {
+  close,
+  focusNeighbor,
+  leaves,
+  MIN_RATIO,
+  nodeAt,
+  resize,
+  resizeBoundary,
+  split,
+  swap,
+} from './layout.ts'
 
 type Op =
   | { kind: 'split'; at: number; direction: 'row' | 'column'; ratio: number }
@@ -164,6 +174,83 @@ describe('propiedades del árbol de distribución', () => {
             expect(to).not.toBe(from)
             expect(ids).toContain(to)
           }
+        }
+      }),
+    )
+  })
+})
+
+describe('propiedades de resizeBoundary', () => {
+  type BOp =
+    | { kind: 'split'; at: number; direction: 'row' | 'column' }
+    | { kind: 'close'; at: number }
+    | { kind: 'resize'; at: number; index: number; delta: number }
+
+  const arbBOp: fc.Arbitrary<BOp> = fc.oneof(
+    fc.record({
+      kind: fc.constant('split' as const),
+      at: fc.nat(),
+      direction: fc.constantFrom('row' as const, 'column' as const),
+    }),
+    fc.record({ kind: fc.constant('close' as const), at: fc.nat() }),
+    fc.record({
+      kind: fc.constant('resize' as const),
+      at: fc.nat(),
+      index: fc.nat(5),
+      delta: fc.double({ min: -2, max: 2, noNaN: true }),
+    }),
+  )
+
+  const splitPaths = (layout: Layout): number[][] => {
+    const out: number[][] = []
+    const stack: { node: Layout; path: number[] }[] = [{ node: layout, path: [] }]
+    while (stack.length > 0) {
+      const { node, path } = stack.pop() as { node: Layout; path: number[] }
+      if (node.type !== 'split') continue
+      out.push(path)
+      node.children.forEach((c, i) => {
+        stack.push({ node: c, path: [...path, i] })
+      })
+    }
+    return out
+  }
+
+  it('secuencias aleatorias de split/resize/close por camino: suman 1 y respetan el mínimo', () => {
+    fc.assert(
+      fc.property(fc.array(arbBOp, { maxLength: 80 }), (ops) => {
+        let layout: Layout | null = { type: 'leaf', paneId: PaneId.parse('p0') }
+        let next = 1
+        for (const op of ops) {
+          if (layout === null) break
+          const ids = leaves(layout)
+          const target = ids[op.at % ids.length] as PaneId
+          if (op.kind === 'split') {
+            layout = split(layout, target, op.direction, PaneId.parse(`p${next++}`))
+          } else if (op.kind === 'close') {
+            layout = close(layout, target)
+          } else {
+            const paths = splitPaths(layout)
+            const path = paths[op.at % Math.max(paths.length, 1)]
+            if (path === undefined) continue
+            const node = nodeAt(layout, path)
+            if (node.type !== 'split') continue
+            const index = op.index % (node.children.length - 1)
+            const before = node.ratios
+            layout = resizeBoundary(layout, path, index, op.delta)
+            const after = nodeAt(layout, path)
+            if (after.type !== 'split') throw new Error('el split desapareció')
+            for (const k of [index, index + 1]) {
+              expect(after.ratios[k] as number).toBeGreaterThanOrEqual(
+                Math.min(MIN_RATIO, before[k] as number) - 1e-9,
+              )
+            }
+            for (let k = 0; k < before.length; k++) {
+              if (k !== index && k !== index + 1) {
+                expect(after.ratios[k] as number).toBeCloseTo(before[k] as number, 9)
+              }
+            }
+          }
+          if (layout !== null) checkInvariants(layout)
         }
       }),
     )
