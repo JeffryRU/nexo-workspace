@@ -129,7 +129,8 @@ describe('adversarial: árboles profundos', () => {
     }
     expect(leaves(t)).toHaveLength(1001)
     expect(LayoutSchema.safeParse(t).success).toBe(true)
-  })
+    // Con cobertura y carga paralela en Windows supera los 5 s por omisión.
+  }, 30_000)
 
   it('close, resize, swap y focusNeighbor funcionan sobre 1000 niveles', () => {
     const t = deepChain(1000)
