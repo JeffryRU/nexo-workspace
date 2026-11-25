@@ -1,0 +1,62 @@
+.split {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+.split.row {
+  flex-direction: row;
+}
+.split.column {
+  flex-direction: column;
+}
+.split-child {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+.split-child > * {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.divider {
+  flex: none;
+  border: 0;
+  background: var(--border);
+  position: relative;
+  z-index: 1;
+}
+.divider.vertical {
+  width: 1px;
+  margin: 0 2px;
+  cursor: col-resize;
+}
+.divider.horizontal {
+  height: 1px;
+  margin: 2px 0;
+  cursor: row-resize;
+}
+/* Zona de agarre más ancha que la línea visible. */
+.divider::after {
+  content: "";
+  position: absolute;
+}
+.divider.vertical::after {
+  inset: 0 -4px;
+}
+.divider.horizontal::after {
+  inset: -4px 0;
+}
+.divider:hover,
+.divider.dragging,
+.divider:focus-visible {
+  background: var(--accent);
+}
+.divider.disabled {
+  cursor: default;
+}
+.divider.disabled:hover {
+  background: var(--border);
+}

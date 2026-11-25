@@ -1,0 +1,20 @@
+.stage {
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+  background: var(--bg);
+}
+.tab-panel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
+.tab-panel > * {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.stage-empty {
+  margin: 24px;
+  color: var(--fg-muted);
+}
