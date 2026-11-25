@@ -132,6 +132,9 @@ Detalles fijados en F0 (la fuente exacta es `packages/contracts`):
 - Títulos y nombres rechazan caracteres de control; `terminal.write` sí acepta ANSI/OSC.
 - `terminal.output` lleva `offset` (posición absoluta en el búfer) y `terminal.read` devuelve
   `{ data, offset }`, para reconectar sin perder ni duplicar salida.
+  `terminal.read` acepta `fromOffset` (sin él devuelve lo más reciente, hasta `maxBytes`); `offset` es el final
+  de `data`. Si `fromOffset` ya se descartó del búfer circular, `data` empieza en lo más antiguo disponible y el
+  resultado trae `truncated: true`. El búfer nunca parte un carácter UTF-8 ni un par sustituto al recortar.
 
 Versiones fijadas: TypeScript 6.x (dependency-cruiser aún no soporta TS 7) y solid-js 1.9
 (`@tanstack/solid-query` y `vite-plugin-solid` piden Solid 1.x). Se revisan al subir esas dependencias.
