@@ -117,6 +117,7 @@ async function runRound(variantName, terminals) {
     }
   }
 
+  let hostCrashed = false
   const procs = []
   const done = []
   for (let i = 0; i < terminals; i++) {
@@ -132,7 +133,14 @@ async function runRound(variantName, terminals) {
             : SCRIPTS.output
     const p = await spawnOne(script)
     procs.push(p)
-    done.push(new Promise((resolve) => p.onExit(resolve)))
+    done.push(
+      new Promise((resolve) =>
+        p.onExit((exit) => {
+          if (exit?.signal === 'HOST_CRASH') hostCrashed = true
+          resolve()
+        }),
+      ),
+    )
     p.onData(() => {})
   }
   // Todas salen o se matan a la vez
@@ -150,7 +158,7 @@ async function runRound(variantName, terminals) {
     }),
   ])
   closePort()
-  console.log('ROUND_OK')
+  console.log(hostCrashed ? 'ROUND_OK HOST_CRASHED' : 'ROUND_OK')
   process.exit(0)
 }
 
@@ -176,7 +184,8 @@ function runChild(variantName, terminals, timeoutMs) {
     }, timeoutMs)
     child.on('exit', (code, signal) => {
       clearTimeout(timer)
-      if (code === 0 && out.includes('ROUND_OK')) resolve({ kind: 'ok' })
+      if (code === 0 && out.includes('ROUND_OK'))
+        resolve({ kind: 'ok', hostCrashed: out.includes('HOST_CRASHED') })
       else if (timedOut) resolve({ kind: 'hang', code, signal })
       else resolve({ kind: 'crash', code, signal, tail: out.slice(-300) })
     })
@@ -200,11 +209,14 @@ async function main() {
     let ok = 0
     let crash = 0
     let hang = 0
+    let hostCrashes = 0
     const codes = new Map()
     for (let r = 0; r < rounds; r++) {
       const res = await runChild(name, terminals, 60000)
-      if (res.kind === 'ok') ok++
-      else if (res.kind === 'hang') hang++
+      if (res.kind === 'ok') {
+        ok++
+        if (res.hostCrashed) hostCrashes++
+      } else if (res.kind === 'hang') hang++
       else {
         crash++
         const k = `code=${res.code} signal=${res.signal}`
@@ -218,12 +230,13 @@ async function main() {
       ok,
       crash,
       hang,
+      hostCrashes,
       crashRate: `${((crash / rounds) * 100).toFixed(1)}%`,
       codes: Object.fromEntries(codes),
     }
     results.push(row)
     console.error(
-      `${name.padEnd(26)} ok=${ok} crash=${crash} hang=${hang} (${row.crashRate}) ${JSON.stringify(row.codes)}`,
+      `${name.padEnd(26)} ok=${ok} crash=${crash} hang=${hang} hostCrashes=${hostCrashes} (${row.crashRate}) ${JSON.stringify(row.codes)}`,
     )
   }
   if (process.argv.includes('--json')) {
