@@ -1,7 +1,7 @@
 import { PaneId } from '@nexo/contracts'
 import { describe, expect, it } from 'vitest'
+import { FakeAgentProvider } from './fake-agent.ts'
 import {
-  FakeAgentProvider,
   FakeClock,
   FakeFileSystem,
   FakeLogger,
@@ -126,5 +126,6 @@ describe('otros falsos', () => {
     const provider = new FakeAgentProvider('claude')
     provider.available = false
     expect(await provider.isAvailable()).toBe(false)
+    await expect(provider.open({ cwd: '/x' })).rejects.toThrow()
   })
 })

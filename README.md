@@ -5,8 +5,9 @@ Codex, Gemini, Antigravity, modelos locales) y terminales reales en pestañas y 
 multiplexor. Un daemon es la única fuente de verdad; la ventana, la CLI y el servidor MCP son clientes
 iguales: cerrar la ventana no mata agentes ni terminales.
 
-Estado: **F0 (base)**. Monorepo, contratos del protocolo, núcleo de dominio y utilidades de prueba. Aún no
-hay daemon ni interfaz funcional (ver [`docs/ROADMAP.md`](docs/ROADMAP.md)).
+Estado: **F2 en curso**. Terminales, daemon, CLI, web y escritorio (F0 y F1) están hechos. De la F2 (agente Claude Code)
+va el modelo normalizado de agentes: bloques, protocolo `agent.*` y `AgentProviderPort` con su falso (F2.1); aún no hay
+proveedor real ni panel de agente (ver [`docs/ROADMAP.md`](docs/ROADMAP.md)).
 
 ## Requisitos
 

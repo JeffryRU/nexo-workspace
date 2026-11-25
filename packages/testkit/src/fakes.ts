@@ -7,7 +7,6 @@ import {
   WorkspaceId,
 } from '@nexo/contracts'
 import {
-  type AgentProviderPort,
   type BusEvent,
   type ClockPort,
   type EventBusPort,
@@ -346,13 +345,5 @@ export class FakeProcessLauncher implements ProcessLauncherPort {
   async run(options: RunOptions): Promise<RunResult> {
     this.calls.push(options)
     return this.respond(options)
-  }
-}
-
-export class FakeAgentProvider implements AgentProviderPort {
-  available = true
-  constructor(readonly id = 'fake') {}
-  async isAvailable(): Promise<boolean> {
-    return this.available
   }
 }

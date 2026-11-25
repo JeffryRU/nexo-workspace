@@ -128,4 +128,52 @@ describe('createDispatcher', () => {
       if (!out.ok) expect(ERROR_CODES).toContain(out.error.code)
     }
   })
+
+  it('sin servicio de agentes, cada agent.* responde PROVIDER_UNAVAILABLE', async () => {
+    const h = createHarness()
+    for (const method of METHOD_NAMES.filter((m) => m.startsWith('agent.'))) {
+      const out = await h.dispatch({ method, params: {} } as never)
+      expect(out, method).toMatchObject({ ok: false, error: { code: 'PROVIDER_UNAVAILABLE' } })
+    }
+  })
+
+  it('con servicio de agentes, delega con los params y devuelve el resultado', async () => {
+    const h = createHarness()
+    const calls: unknown[] = []
+    const noop = () => ({})
+    const dispatch = createDispatcher({
+      workspaces: h.workspaces,
+      terminals: h.terminals,
+      snapshot: h.snapshot,
+      subscribe: () => ({ seq: 0 }),
+      shutdown: () => {},
+      agents: {
+        'agent.providers': () => ({ providers: [] }),
+        'agent.create': (p) => {
+          calls.push(p)
+          throw new DomainError('CONFLICT', 'demasiadas sesiones')
+        },
+        'agent.send': () => ({ blockId: 'b' as never, index: 0, turn: 1 }),
+        'agent.interrupt': noop,
+        'agent.respond': noop,
+        'agent.list': () => ({ sessions: [] }),
+        'agent.snapshot': () => {
+          throw new Error('secreto interno')
+        },
+        'agent.close': noop,
+      },
+    })
+    expect(await dispatch({ method: 'agent.list', params: {} })).toEqual({
+      ok: true,
+      result: { sessions: [] },
+    })
+    const created = await dispatch({
+      method: 'agent.create',
+      params: { paneId: 'p1' as never, provider: 'claude' },
+    })
+    expect(created).toMatchObject({ ok: false, error: { code: 'CONFLICT' } })
+    expect(calls).toEqual([{ paneId: 'p1', provider: 'claude' }])
+    const snap = await dispatch({ method: 'agent.snapshot', params: { sessionId: 's' as never } })
+    expect(snap).toEqual({ ok: false, error: { code: 'INTERNAL', message: 'error interno' } })
+  })
 })
