@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createClaudeProvider } from '@nexo/adapter-provider-claude'
+import { createOllamaProvider } from '@nexo/adapter-provider-ollama'
 import { PtyHostPort } from '@nexo/adapter-pty-host'
 import { NodePtyPort } from '@nexo/adapter-pty-node'
 import {
@@ -88,6 +89,8 @@ export type DaemonOptions = {
   agentProviders?: readonly (AgentProviderName | AgentProviderPort)[]
   /** Ejecutable de Claude Code (por omisión, el del SDK). */
   claudeExecutable?: string
+  /** URL base de Ollama (por omisión `http://127.0.0.1:11434`). */
+  ollamaUrl?: string
   agents?: AgentServiceConfig
   /** Se llama (tras responder) cuando un cliente pide `daemon.shutdown`; por omisión detiene el daemon. */
   onShutdownRequested?: (stop: () => Promise<void>) => void
@@ -209,6 +212,12 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
 
   function createProvider(name: AgentProviderName): AgentProviderPort {
     if (name === 'fake') return new ScriptedAgentProvider()
+    if (name === 'ollama') {
+      return createOllamaProvider({
+        ...(options.ollamaUrl === undefined ? {} : { baseUrl: options.ollamaUrl }),
+        log: (entry) => logger[entry.level](`ollama: ${entry.message}`),
+      })
+    }
     return createClaudeProvider({
       env: childBaseEnv(),
       log: (entry) => logger[entry.level](`claude: ${entry.message}`),

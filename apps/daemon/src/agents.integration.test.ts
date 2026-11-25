@@ -1,3 +1,5 @@
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import {
   AgentDocument,
@@ -61,7 +63,10 @@ async function until(
 }
 
 /** Crea espacio, pestaña, panel de agente (el panel inicial se cierra) y la sesión. */
-async function newSession(client: NexoClient): Promise<{ session: AgentSession; paneId: PaneId }> {
+async function newSession(
+  client: NexoClient,
+  provider = 'fake',
+): Promise<{ session: AgentSession; paneId: PaneId }> {
   const cwd = tmpdir()
   const { workspace } = await client.call('workspace.create', { name: 'agentes', cwd })
   const { tab } = await client.call('tab.create', { workspaceId: workspace.id, cwd })
@@ -73,7 +78,7 @@ async function newSession(client: NexoClient): Promise<{ session: AgentSession; 
     kind: 'agent',
   })
   await client.call('pane.close', { paneId: first.id })
-  const { session } = await client.call('agent.create', { paneId: pane.id, provider: 'fake' })
+  const { session } = await client.call('agent.create', { paneId: pane.id, provider })
   return { session, paneId: pane.id }
 }
 
@@ -277,5 +282,68 @@ describe('agentes en el daemon real (proveedor falso)', () => {
     daemons.push(daemon)
     const { client } = await connect(daemon)
     expect(await client.call('agent.list', {})).toEqual({ sessions: [] })
+  })
+})
+
+describe('proveedor Ollama en el daemon real (servidor HTTP falso)', () => {
+  async function fakeOllama() {
+    const server = createServer((req, res) => {
+      if (req.url === '/api/tags') {
+        res.end(JSON.stringify({ models: [{ name: 'llama3.2:latest' }] }))
+        return
+      }
+      res.setHeader('content-type', 'application/x-ndjson')
+      const line = (o: unknown) => `${JSON.stringify(o)}
+`
+      res.write(line({ message: { role: 'assistant', content: 'ho' }, done: false }))
+      res.write(line({ message: { role: 'assistant', content: 'la' }, done: false }))
+      res.end(line({ message: { content: '' }, done: true, eval_count: 2, prompt_eval_count: 5 }))
+    })
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
+    return {
+      url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+      close: () => new Promise<void>((r) => server.close(() => r())),
+    }
+  }
+
+  it('agent.providers lista modelos y una conversación completa llega al documento', async () => {
+    const ollama = await fakeOllama()
+    try {
+      const daemon = await startTestDaemon({ agentProviders: ['ollama'], ollamaUrl: ollama.url })
+      daemons.push(daemon)
+      const { client } = await connect(daemon)
+      const { providers } = await client.call('agent.providers', {})
+      expect(providers).toHaveLength(1)
+      expect(providers[0]).toMatchObject({
+        id: 'ollama',
+        available: true,
+        capabilities: { defaultModel: 'llama3.2:latest', resume: false },
+      })
+      const { session } = await newSession(client, 'ollama')
+      expect(session.provider).toBe('ollama')
+      const doc = await AgentDocument.open(client, session.id)
+      docs.push(doc)
+      await agentApi(client).send({ sessionId: session.id, text: 'hola' })
+      await until(() => doc.blocks().some((b) => b.type === 'usage'), 'fin del turno')
+      expect(doc.blocks().map((b) => b.type)).toEqual(['user', 'text', 'usage'])
+      expect(doc.blocks()[1]).toMatchObject({ text: 'hola', complete: true })
+    } finally {
+      await ollama.close()
+    }
+  })
+
+  it('sin Ollama, el proveedor sale no disponible con su motivo y crear da PROVIDER_UNAVAILABLE', async () => {
+    const daemon = await startTestDaemon({
+      agentProviders: ['ollama'],
+      ollamaUrl: 'http://127.0.0.1:1',
+    })
+    daemons.push(daemon)
+    const { client } = await connect(daemon)
+    const { providers } = await client.call('agent.providers', {})
+    expect(providers[0]).toMatchObject({ id: 'ollama', available: false })
+    expect(providers[0]?.reason).toMatch(/Ollama no responde en http:\/\/127\.0\.0\.1:1/)
+    await expect(newSession(client, 'ollama')).rejects.toMatchObject({
+      code: 'PROVIDER_UNAVAILABLE',
+    })
   })
 })

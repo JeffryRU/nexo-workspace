@@ -1,3 +1,5 @@
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
@@ -103,5 +105,34 @@ describe('nexo agent contra el daemon real (proveedor falso)', () => {
     expect((await sb.nexo(['agent', 'close', id])).code).toBe(0)
     expect(await exited).toBe(0)
     expect(out).toContain('[la sesión se cerró]')
+  })
+})
+
+describe('nexo agent con el proveedor Ollama (servidor HTTP falso)', () => {
+  it('agent new --provider ollama, enviar y ver la respuesta', async () => {
+    const server = createServer((req, res) => {
+      if (req.url === '/api/tags') {
+        res.end(JSON.stringify({ models: [{ name: 'llama3.2:latest' }] }))
+        return
+      }
+      const line = (o: unknown) => JSON.stringify(o) + String.fromCharCode(10)
+      res.write(line({ message: { content: 'respuesta ' }, done: false }))
+      res.end(line({ message: { content: 'de ollama' }, done: true }))
+    })
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+    const sb = await Sandbox.create()
+    sandbox = sb
+    try {
+      await sb.startDaemon({ NEXO_AGENT_PROVIDERS: 'ollama', NEXO_OLLAMA_URL: url })
+      const { sessionId: id } = AgentNewOutput.parse(
+        await sb.json(['agent', 'new', '--provider', 'ollama', '--cwd', tmpdir()]),
+      )
+      await sb.json(['agent', 'send', id, 'hola'])
+      const doc = await attachText(sb, id, 'respuesta de ollama')
+      expect(doc).toContain('> hola')
+    } finally {
+      await new Promise<void>((r) => server.close(() => r()))
+    }
   })
 })
