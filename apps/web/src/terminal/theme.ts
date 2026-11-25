@@ -22,3 +22,24 @@ export const terminalTheme = {
   brightCyan: '#56b6c2',
   brightWhite: '#ffffff',
 } as const
+
+/** Respaldo para los íconos de Nerd Font del prompt (Starship, etc.) cuando la fuente principal no los trae. */
+const SYMBOLS_FALLBACK = ['"Symbols Nerd Font Mono"', '"Symbols Nerd Font"']
+
+/** Agrega las fuentes de símbolos de Nerd Font a la lista, antes de la genérica `monospace`. Idempotente. */
+export function withSymbolsFallback(family: string): string {
+  const parts = family
+    .split(',')
+    .map((p) => p.trim())
+    .filter((p) => p !== '')
+  const missing = SYMBOLS_FALLBACK.filter(
+    (f) =>
+      !parts.some(
+        (p) => p.replace(/['"]/g, '').toLowerCase() === f.replace(/"/g, '').toLowerCase(),
+      ),
+  )
+  const generic = parts.lastIndexOf('monospace')
+  const at = generic === -1 ? parts.length : generic
+  parts.splice(at, 0, ...missing)
+  return parts.join(', ')
+}

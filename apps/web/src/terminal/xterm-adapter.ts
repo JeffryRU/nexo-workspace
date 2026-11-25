@@ -6,7 +6,7 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import type { TerminalSink } from './hub.ts'
-import { terminalTheme } from './theme.ts'
+import { terminalTheme, withSymbolsFallback } from './theme.ts'
 
 /** Lo que el resto de la interfaz necesita de una terminal; xterm queda detrás de esta interfaz. */
 export interface XtermHandle extends TerminalSink {
@@ -50,7 +50,7 @@ export function createXtermHandle(): XtermHandle {
     scrollback: SCROLLBACK,
     cursorBlink: true,
     fontSize: 13,
-    fontFamily: cssVar('--font-mono', 'monospace'),
+    fontFamily: withSymbolsFallback(cssVar('--font-mono', 'monospace')),
     theme: terminalTheme,
     macOptionIsMeta: true,
   })
