@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url'
 import { NexoClientError } from '@nexo/client'
 import { discoverDaemon } from '@nexo/client/node'
 import type {
+  AgentSession,
+  Block,
   EventData,
   EventName,
   MethodName,
@@ -211,6 +213,11 @@ export function sampleWorkspaces(): Workspace[] {
 
 // ---- ayudas para pruebas de integración (procesos reales) ----
 
+/** Factor de plazos para máquinas lentas (`NEXO_TEST_TIMEOUT_SCALE`, 1 por omisión). */
+const parsedScale = Number(process.env.NEXO_TEST_TIMEOUT_SCALE ?? '1')
+export const TIMEOUT_SCALE =
+  Number.isFinite(parsedScale) && parsedScale >= 1 ? Math.min(parsedScale, 20) : 1
+
 export const CLI_MAIN = fileURLToPath(new URL('./main.ts', import.meta.url))
 export const DAEMON_MAIN = fileURLToPath(new URL('../../daemon/src/main.ts', import.meta.url))
 
@@ -240,9 +247,9 @@ export class Sandbox {
   }
 
   /** Daemon real como proceso hijo (no desacoplado), listo cuando responde. */
-  async startDaemon(): Promise<ChildProcess> {
+  async startDaemon(extraEnv: Record<string, string> = {}): Promise<ChildProcess> {
     const child = spawn(process.execPath, [DAEMON_MAIN], {
-      env: this.env(),
+      env: this.env(extraEnv),
       stdio: 'ignore',
       windowsHide: true,
     })
@@ -251,7 +258,7 @@ export class Sandbox {
     return child
   }
 
-  async waitDaemon(timeoutMs = 20_000): Promise<{ pid: number; port: number }> {
+  async waitDaemon(timeoutMs = 20_000 * TIMEOUT_SCALE): Promise<{ pid: number; port: number }> {
     const end = Date.now() + timeoutMs
     for (;;) {
       try {
@@ -284,10 +291,13 @@ export class Sandbox {
       child.stderr.on('data', (d: Buffer) => {
         stderr += d.toString('utf8')
       })
-      const timer = setTimeout(() => {
-        child.kill()
-        reject(new Error(`la CLI no terminó: nexo ${args.join(' ')}\n${stdout}\n${stderr}`))
-      }, options.timeoutMs ?? 30_000)
+      const timer = setTimeout(
+        () => {
+          child.kill()
+          reject(new Error(`la CLI no terminó: nexo ${args.join(' ')}\n${stdout}\n${stderr}`))
+        },
+        options.timeoutMs ?? 30_000 * TIMEOUT_SCALE,
+      )
       child.on('error', reject)
       child.on('close', (code) => {
         clearTimeout(timer)
@@ -299,10 +309,14 @@ export class Sandbox {
   }
 
   /** Lanza la CLI sin esperar a que termine (p. ej. `read --follow`). */
-  spawnNexo(args: string[], env: Record<string, string> = {}): ChildProcess {
+  spawnNexo(
+    args: string[],
+    env: Record<string, string> = {},
+    stdin: 'ignore' | 'pipe' = 'ignore',
+  ): ChildProcess {
     const child = spawn(process.execPath, [CLI_MAIN, ...args], {
       env: this.env(env),
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: [stdin, 'pipe', 'pipe'],
       windowsHide: true,
     })
     this.children.push(child)
@@ -335,7 +349,7 @@ export class Sandbox {
 
 export async function waitUntil<T>(
   check: () => Promise<T | undefined | false>,
-  timeoutMs = 20_000,
+  timeoutMs = 20_000 * TIMEOUT_SCALE,
 ): Promise<T> {
   const end = Date.now() + timeoutMs
   for (;;) {
@@ -361,3 +375,74 @@ export const ECHO_SCRIPT =
 
 /** ¿Sin sustitutos sueltos? (`toWellFormed` aún no está en la `lib` del proyecto) */
 export const isWellFormed = (s: string): boolean => Buffer.from(s, 'utf8').toString('utf8') === s
+
+// ---- agentes ----
+
+export const SESSION_ID = 'agent-aaaa1111-0000-0000'
+
+export function agentSession(over: Record<string, unknown> = {}): AgentSession {
+  return {
+    id: SESSION_ID,
+    provider: 'fake',
+    paneId: 'pane-cccc3333-0000',
+    permissionMode: 'ask',
+    cwd: WORK,
+    status: 'idle',
+    turn: 0,
+    blockCount: 0,
+    createdAt: 1,
+    updatedAt: 1,
+    ...over,
+  } as AgentSession
+}
+
+/** Bloque de prueba: `kind` es el `type`; el resto de campos son los de ese tipo. */
+export function blk(n: number, fields: Record<string, unknown>): Block {
+  return {
+    id: `blk-${String(n).padStart(8, '0')}`,
+    index: n,
+    turn: 1,
+    seq: 0,
+    createdAt: 1,
+    ...fields,
+  } as Block
+}
+
+export const PERMISSION = (n: number, state = 'pending', extra: Record<string, unknown> = {}) =>
+  blk(n, {
+    type: 'permission',
+    tool: 'Bash',
+    title: 'Ejecutar ls',
+    options: [
+      { id: 'allow', label: 'Permitir', kind: 'allow-once' },
+      { id: 'deny', label: 'Rechazar', kind: 'reject-once' },
+    ],
+    state,
+    ...extra,
+  })
+
+export const QUESTION = (n: number, extra: Record<string, unknown> = {}) =>
+  blk(n, {
+    type: 'question',
+    state: 'pending',
+    questions: [
+      {
+        id: 'q1',
+        question: '¿Cuál?',
+        options: [{ label: 'A' }, { label: 'B' }],
+        multiSelect: false,
+        allowText: false,
+      },
+    ],
+    ...extra,
+  })
+
+/** Instala `agent.list` y `agent.snapshot` (una sola página) en el cliente falso. */
+export function agentHandlers(client: FakeClient, blocks: () => Block[], session = agentSession()) {
+  client.handlers.set('agent.list', () => ({ sessions: [session] }))
+  client.handlers.set('agent.snapshot', () => ({
+    session: { ...session, blockCount: blocks().length },
+    blocks: blocks(),
+    nextIndex: null,
+  }))
+}

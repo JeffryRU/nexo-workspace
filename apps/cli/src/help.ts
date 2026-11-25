@@ -8,6 +8,7 @@ export const COMMANDS = [
   'kill',
   'close',
   'rename',
+  'agent',
   'daemon',
 ] as const
 export type CommandName = (typeof COMMANDS)[number]
@@ -32,6 +33,7 @@ Comandos:
   kill <panel>               mata el proceso de la terminal de un panel
   close <panel|pestaña|espacio>   cierra un panel, una pestaña o un espacio
   rename <pestaña|espacio> <nombre>   renombra
+  agent <sub>                sesiones de agente (new, send, ls, attach, interrupt, close, respond)
   daemon status|stop|log     controla el daemon
 
 Los paneles, pestañas y espacios se indican con su id completo, un prefijo único del id
@@ -96,6 +98,23 @@ Cierra un panel, una pestaña o un espacio (y mata sus terminales).
   rename: `Uso: nexo rename <pestaña|espacio> <nombre...>
 
 Cambia el título de una pestaña o el nombre de un espacio.
+`,
+  agent: `Uso: nexo agent <subcomando> [opciones]
+
+  new [--provider <id>] [--model <m>] [--effort <e>] [--permissions <modo>] [--cwd <ruta>] [--name <título>]
+        crea una pestaña con un panel de agente y abre la sesión (proveedor claude por omisión;
+        permisos: ask, accept-edits, plan, bypass)
+  send <id> [--stdin] [--] <texto...>   envía un mensaje (el agente responde en el documento)
+  ls                                    sesiones abiertas, con su estado
+  attach <id> [--no-follow]             muestra el documento en vivo; con permisos o preguntas pendientes
+                                        pide la respuesta por teclado (número de opción, o texto)
+  interrupt <id>                        interrumpe el turno en curso
+  close <id>                            cierra la sesión
+  respond <id> [--block <bloque>] <respuesta...>
+        responde un permiso (número o id de opción) o una pregunta (números o etiquetas separados por
+        comas; varias preguntas separadas por ";"; texto libre si la pregunta lo admite)
+
+<id> es el id de la sesión o un prefijo único. Con --json, attach emite una línea por evento.
 `,
   daemon: `Uso: nexo daemon status|stop|log
 

@@ -12,7 +12,7 @@ const USAGE = 'nexo send <panel> [--enter] [--stdin] [--] <texto...>'
 export const MAX_STDIN_BYTES = 64 * 1024 * 1024
 const RATE_LIMIT_DEADLINE_MS = 60_000
 
-async function readStdin(ctx: Ctx): Promise<string> {
+export async function readStdin(ctx: Ctx): Promise<string> {
   const decoder = new TextDecoder('utf-8')
   let text = ''
   let bytes = 0
