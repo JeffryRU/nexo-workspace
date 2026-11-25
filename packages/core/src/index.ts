@@ -22,6 +22,8 @@ export type {
   PtyExit,
   PtyPort,
   PtyProcess,
+  PtySpawnErrorCode,
   PtySpawnOptions,
   Unsubscribe,
 } from './ports/pty.ts'
+export { PtySpawnError } from './ports/pty.ts'
