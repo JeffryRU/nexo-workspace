@@ -73,20 +73,20 @@ apps/*               raíces de composición: daemon (une core + adaptadores), w
 
 ### Dominio (core)
 
-| Concepto       | Qué es                                                                                                                                                               |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Workspace`    | Grupo de pestañas, normalmente una carpeta de proyecto (`cwd`).                                                                                                      |
-| `Tab`          | Una pestaña: su contenido es un **árbol de distribución** de paneles.                                                                                                |
-| `Layout`       | Árbol inmutable: hoja = panel; nodo = división `row`/`column` con proporciones que suman 1.                                                                          |
-| `Pane`         | Panel. `kind`: `terminal` o `agent` (más adelante `viewer`).                                                                                                         |
-| `Terminal`     | Proceso en un PTY con un búfer circular de salida (para reconectar y para `terminal.read`).                                                                          |
-| `AgentSession` | Conversación con un proveedor; su contenido es una lista de `Block` (documento).                                                                                     |
-| `Block`        | Pieza del documento: mensaje del usuario, texto del agente (Markdown), acción plegable (leer, editar con diff, ejecutar con salida), permiso, pregunta, plan, error. |
-| `Attention`    | Estado visible en la barra: `idle`, `working`, `needs-input`, `done`, `error`.                                                                                       |
+| Concepto       | Qué es                                                                                                                                                                                                                                                              |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Workspace`    | Grupo de pestañas, normalmente una carpeta de proyecto (`cwd`).                                                                                                                                                                                                     |
+| `Tab`          | Una pestaña: su contenido es un **árbol de distribución** de paneles.                                                                                                                                                                                               |
+| `Layout`       | Árbol inmutable: hoja = panel; nodo = división `row`/`column` con proporciones que suman 1.                                                                                                                                                                         |
+| `Pane`         | Panel. `kind`: `terminal` o `agent` (más adelante `viewer`).                                                                                                                                                                                                        |
+| `Terminal`     | Proceso en un PTY con un búfer circular de salida (para reconectar y para `terminal.read`).                                                                                                                                                                         |
+| `AgentSession` | Conversación con un proveedor; su contenido es una lista de `Block` (documento).                                                                                                                                                                                    |
+| `Block`        | Pieza del documento, con `id`, `index` y `turn` estables: mensaje del usuario, texto del agente (Markdown), razonamiento, acción plegable (leer, editar con diff, ejecutar con salida, buscar, otra), permiso, pregunta, plan, error, uso del turno. Ver «Agentes». |
+| `Attention`    | Estado visible en la barra: `idle`, `working`, `needs-input`, `done`, `error`.                                                                                                                                                                                      |
 
 ### Puertos (interfaces en `core/ports`)
 
-`PtyPort`, `AgentProviderPort`, `SessionStorePort`, `EventBusPort`, `ClockPort`, `IdPort`,
+`PtyPort`, `AgentProviderPort` (ver «Agentes»), `SessionStorePort`, `EventBusPort`, `ClockPort`, `IdPort`,
 `NotifierPort`, `FileSystemPort`, `LoggerPort`, `ProcessLauncherPort`. Cada puerto tiene en
 `packages/testkit` un **falso** en memoria y una **suite de conformidad** que se ejecuta contra el falso
 y contra cada adaptador real: así el falso no miente.
@@ -170,6 +170,120 @@ Todo en `packages/core`, sin I/O; el daemon (F1.3) solo los conecta con adaptado
 - **Logs:** pasan por el redactor (`Authorization`/`Bearer`, `sk-…`, `?t=`/`token=`, el subprotocolo
   `nexo.token.…`, campos con nombre sensible y el token del daemon, literal y codificado). Nunca se registra el token.
 
+## Agentes (F2.1)
+
+El modelo es **normalizado y no depende de ningún proveedor**: Claude Code (F2), Codex, Gemini/ACP, Antigravity
+y Ollama (F3) se traducen a los mismos bloques y eventos. Los esquemas viven en `packages/contracts`
+(`agent.ts`, `agent-provider.ts`, `agent-blocks.ts`); el puerto, en `packages/core/src/ports/agent.ts`.
+
+### AgentSession
+
+`{ id, provider, providerSessionId?, paneId, title?, model?, effort?, permissionMode, cwd, status, turn,
+blockCount, createdAt, updatedAt }`. `provider`, `model`, `effort` y `providerSessionId` son cadenas abiertas con
+forma acotada (para que un proveedor nuevo no cambie el contrato); lo que acepta cada uno lo declara su
+`ProviderCapabilities`. `permissionMode` sí es un enum normalizado: `ask`, `accept-edits`, `plan`, `bypass` (cada
+adaptador lo traduce a su modo). `status` es el `Attention` de la barra. `Pane` gana `agentSessionId?`.
+
+### Block
+
+Unión discriminada por `type`. Campos comunes: `id` (estable), `index` (0, 1, 2… sin huecos, estable: un rango
+`[a, b]` de bloques se puede citar, p. ej. desde la memoria observacional, ADR 0007), `turn`, `seq` (deltas ya
+aplicados) y `createdAt`.
+
+| `type`       | Campos propios                                                                                                                                                                                                                       |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `user`       | `text`                                                                                                                                                                                                                               |
+| `text`       | `text` (Markdown del agente), `complete`, `truncated?`                                                                                                                                                                               |
+| `reasoning`  | igual que `text`                                                                                                                                                                                                                     |
+| `action`     | `kind` (`read`/`edit`/`exec`/`search`/`other`), `status` (`pending`/`running`/`ok`/`error`), `tool`, `title`, `callId?`, `path?`, `input?`, `output?`, `diff?` (solo `edit`), `exitCode?` (solo `exec`), `durationMs?`, `truncated?` |
+| `permission` | `tool`, `title`, `detail?`, `options[]` (`id`, `label`, `kind`: `allow-once`/`allow-always`/`reject-once`/`reject-always`), `state` (`pending`/`accepted`/`rejected`/`cancelled`), `selectedOptionId?`                               |
+| `question`   | `questions[]` (1–4: `id`, `header?`, `question`, `options[]`, `multiSelect`, `allowText`), `state` (`pending`/`answered`/`cancelled`), `answers?` (`questionId`, `selected` por etiqueta, `text?`)                                   |
+| `plan`       | `entries[]` (`text`, `status`: `pending`/`in-progress`/`completed`), `markdown?`                                                                                                                                                     |
+| `error`      | `code`, `message`, `fatal`, `retryable?`                                                                                                                                                                                             |
+| `usage`      | `stopReason`, `usage` (tokens de entrada/salida/caché/razonamiento, `costUsd`, `durationMs`, `numTurns`; todo opcional)                                                                                                              |
+
+Reglas entre campos (`blockIssues`): ids de opción y de pregunta únicos; un permiso `pending` no tiene opción
+elegida y `accepted`/`rejected` exigen una opción de aceptar/rechazar; una pregunta `answered` lleva `answers` y solo
+ella; `diff` solo en `edit` y `exitCode` solo en `exec`. `BlockDraft` es el bloque sin identidad (`id`, `index`,
+`turn`, `seq`, `createdAt`): lo que emite un proveedor; el daemon pone lo demás.
+
+**Texto.** Los cuerpos (`text`, `output`, `diff.patch`…) admiten saltos de línea, tabuladores y secuencias ANSI/OSC
+(la interfaz los trata siempre como texto, nunca como HTML ni los interpreta), pero **no NUL ni sustitutos UTF-16
+sueltos**; los campos de una línea (título, herramienta, etiquetas, rutas) rechazan además cualquier carácter de
+control. Los adaptadores aplican `sanitizeBodyText` (NUL y sustitutos sueltos → U+FFFD) a lo que reciben del
+proveedor. Los esquemas de agentes son estrictos: una clave extra o `__proto__` invalida el mensaje.
+
+**Límites** (`LIMITS`): texto de bloque, salida y diff 128 KiB (bytes UTF-8); entrada de acción y detalle de permiso
+16 KiB; delta 32 KiB; 10 000 bloques por sesión; 64 sesiones por daemon; 200 bloques por página de
+`agent.snapshot`; 16 opciones, 4 preguntas, 256 entradas de plan. Un campo de 128 KiB con escapes JSON puede
+ocupar hasta 768 KiB, así que el daemon comprueba el tamaño serializado de cada `agent.block` contra
+`maxMessageBytes` antes de enviarlo y, si no cabe, recorta (`truncated: true`).
+
+### Métodos y eventos
+
+- `agent.providers` → `{ providers: [{ id, name, available, capabilities }] }` (modelos, esfuerzos, modos de
+  permiso, `resume`, `warmup`, `streaming`): con esto la interfaz arma los chips.
+- `agent.create { paneId, provider, cwd?, model?, effort?, permissionMode?, resume? }` → `{ session }`.
+- `agent.send { sessionId, text }` → `{ blockId, index, turn }` (el bloque `user` ya añadido). Con un turno en
+  curso, `CONFLICT`.
+- `agent.interrupt { sessionId }`; `agent.close { sessionId }`; `agent.list` → `{ sessions }`.
+- `agent.respond`: `{ type: 'permission', sessionId, blockId, optionId }` o `{ type: 'question', sessionId, blockId,
+  answers }`. Las respuestas a preguntas se validan con `validateAnswers`.
+- `agent.snapshot { sessionId, fromIndex?, limit? }` → `{ session, blocks, nextIndex }`: el documento paginado por
+  `index`; `nextIndex` es `null` al final y el daemon puede devolver menos bloques que `limit` para no pasar del
+  tamaño de mensaje.
+- Eventos: `agent.block { sessionId, block }` (alta o reemplazo: el cliente hace _upsert_ por `block.id`);
+  `agent.delta { sessionId, blockId, field: 'text' | 'output', seq, text }`; `agent.status { sessionId, status,
+  updatedAt, reason? }`; `agent.session` (alta o cambio de la sesión, o `{ sessionId, removed: true }`).
+- **Deltas.** `seq` cuenta los deltas de un bloque. El cliente aplica el delta cuya `seq` es `block.seq + 1`
+  (`applyBlockDelta`, función pura compartida por daemon y clientes), ignora los repetidos y, ante un hueco, pide
+  `agent.snapshot` desde el `index` del bloque. Un `agent.block` de reemplazo trae el `seq` ya consolidado. Pasado el
+  tope el texto se recorta sin partir caracteres y el bloque queda `truncated`.
+- Errores: se reutilizan los códigos existentes: `NOT_FOUND` (sesión o bloque), `CONFLICT` (turno en curso,
+  respuesta a algo que no está pendiente, tope de sesiones o de bloques), `INVALID_PARAMS`,
+  `PROVIDER_UNAVAILABLE` (proveedor no instalado, sin sesión iniciada, o ningún proveedor configurado).
+  Sin servicio de agentes, el despachador responde `PROVIDER_UNAVAILABLE` a todo `agent.*`.
+
+### AgentProviderPort
+
+```ts
+interface AgentProviderPort {
+  readonly id: string
+  readonly displayName: string
+  isAvailable(): Promise<boolean>
+  capabilities(): Promise<ProviderCapabilities>
+  open(options: AgentOpenOptions): Promise<AgentProviderSession> // nueva o, con `resume`, reanudada
+  warmUp?(options: { cwd: string }): Promise<void> // si `capabilities.warmup`
+}
+interface AgentProviderSession {
+  readonly providerSessionId: string
+  send(text: string): Promise<void>
+  interrupt(): Promise<void>
+  respond(r: AgentResponse): Promise<void>
+  close(): Promise<void>
+  onEvent(listener: (e: ProviderEvent) => void): Unsubscribe
+}
+```
+
+Los rechazos son `AgentProviderError` con código `UNAVAILABLE`, `INVALID_OPTIONS`, `BUSY`, `CLOSED` o
+`UNKNOWN_REQUEST`. `ProviderEvent` (zod, `agent-provider.ts`): `session-info`, `block-start`, `block-delta`,
+`block-update`, `block-end`, `permission-request`, `question-request`, `request-cancelled`, `usage`, `turn-end`,
+`error` y `exit`. El proveedor identifica sus bloques con una `ref` propia (índice de contenido, id de llamada…);
+el servicio de agentes (F2.2) asigna `BlockId`, `index`, `turn` y `seq`, crea los bloques `permission` y `question` a
+partir de las solicitudes y mapea `agent.respond` de vuelta a `respond`. Como un adaptador construye los eventos con
+salida ajena, el servicio **valida cada evento con `ProviderEvent`** y descarta (y registra) los inválidos.
+Contrato verificable (suite `runAgentProviderConformance`, contra el falso y contra cada adaptador): un `turn-end`
+exacto por `send` (también tras `interrupt`, con `stopReason: 'interrupted'`), `BUSY`/`CLOSED` en `send`,
+`interrupt` idempotente, `respond` con solicitud desconocida o repetida → `UNKNOWN_REQUEST`, `close` idempotente con un
+solo `exit`, y bloques abiertos con `block-start` antes de cualquier delta.
+
+Cómo cubre cada proveedor: Claude (`includePartialMessages`: `content_block_*` → `block-start/delta/end`;
+`tool_use`/`tool_result` → `action`; `canUseTool` → `permission-request`; `AskUserQuestion` →
+`question-request`, con `updatedInput.answers` al responder; `result` con `total_cost_usd` y `usage` → `turn-end`),
+Codex (`app-server`: items y aprobaciones), ACP/Gemini (`session/update`, `session/request_permission`, cuyas opciones
+`allow_once`/`allow_always`/`reject_once`/`reject_always` son las de `PermissionOptionKind`), Antigravity (`stream-json`) y
+Ollama (solo texto, sin permisos).
+
 ## Protocolo (v1)
 
 Todo mensaje que cruza un límite de proceso se valida con zod **al recibirlo** (el daemon valida lo que
@@ -196,11 +310,11 @@ Transporte: WebSocket con mensajes JSON de texto. Tamaño máximo de mensaje: 1 
 - Autenticación: el token va en el primer mensaje (`auth`) o en la cabecera `Sec-WebSocket-Protocol`,
   nunca en logs. Comparación en tiempo constante.
 
-Métodos de la fase 1 (terminal): `auth` (solo como primer mensaje; el daemon lo resuelve antes de despachar), `daemon.info`, `daemon.shutdown` (apagado limpio; solo clientes autenticados), `snapshot`, `events.subscribe`,
+Métodos de la fase 1 (terminal; los `agent.*` de la F2 se describen en «Agentes»): `auth` (solo como primer mensaje; el daemon lo resuelve antes de despachar), `daemon.info`, `daemon.shutdown` (apagado limpio; solo clientes autenticados), `snapshot`, `events.subscribe`,
 `workspace.{list,create,rename,close}`, `tab.{create,close,focus,move,rename}`,
 `pane.{split,close,focus,resize,swap}` (`pane.resize` admite dos formas: `{ paneId, delta }`, la frontera de un panel con su hermano directo, y `{ tabId, path, index, delta }`, la frontera entre los hijos `index` e `index+1` del split al que lleva `path`; camino ≤ 64 niveles, delta en [-1, 1], mínimo 5 % por panel; camino inexistente o que no apunta a un split → `NOT_FOUND`), `terminal.{spawn,write,resize,read,kill}`.
 Eventos: `layout.changed`, `workspace.changed`, `terminal.output`, `terminal.exit`, `pane.title`, `pane.attention`,
-`client.resync` (contrapresión, ver "Servidor del daemon").
+`client.resync` (contrapresión, ver "Servidor del daemon"); de la F2: `agent.block`, `agent.delta`, `agent.status`, `agent.session`.
 
 Detalles fijados en F0 (la fuente exacta es `packages/contracts`):
 
