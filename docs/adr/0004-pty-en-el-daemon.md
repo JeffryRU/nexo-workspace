@@ -21,3 +21,13 @@ cerrar la ventana las mataría.
 
 - Si una medición muestra que el rendimiento no alcanza, se escribe otro adaptador de `PtyPort`
   (p. ej. un proceso Rust con portable-pty) sin tocar el núcleo ni los clientes.
+
+## Notas del adaptador `pty-node` (F1.1)
+
+- `env` se mezcla sobre el entorno del anfitrión; `spawn` rechaza siempre con `PtySpawnError` (`EXECUTABLE_NOT_FOUND`,
+  `CWD_NOT_FOUND`, `INVALID_OPTIONS`, `SPAWN_FAILED`).
+- Windows: sin señales (`kill` ignora el argumento, `signal` es `null` y `exitCode` numérico); se usa el
+  `conpty.dll` incluido en node-pty porque el ConPTY del sistema provoca violaciones de acceso nativas cuando varios
+  PTYs salen a la vez; los `kill` se espacian 25 ms por la misma razón; la entrada a ConPTY va a ~25 KiB/s
+  (1 MiB tarda ~40 s) y `process.stdout.columns` del hijo no se refresca tras un `resize` (hay que consultar el handle).
+- Linux: node-pty se compila al instalar (node-gyp); `pnpm-workspace.yaml` lo permite con `allowBuilds`.
