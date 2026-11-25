@@ -225,7 +225,15 @@ export const arbRequest: fc.Arbitrary<TypedRequest> = fc.oneof(
   req('pane.focus', fc.record({ paneId: arbPaneId })),
   req(
     'pane.resize',
-    fc.record({ paneId: arbPaneId, delta: fc.double({ min: -1, max: 1, noNaN: true }) }),
+    fc.oneof(
+      fc.record({ paneId: arbPaneId, delta: fc.double({ min: -1, max: 1, noNaN: true }) }),
+      fc.record({
+        tabId: arbTabId,
+        path: fc.array(fc.nat(5), { maxLength: 6 }),
+        index: fc.nat(5),
+        delta: fc.double({ min: -1, max: 1, noNaN: true }),
+      }),
+    ),
   ),
   req('pane.swap', fc.record({ paneId: arbPaneId, otherPaneId: arbPaneId })),
   req(
