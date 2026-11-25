@@ -67,7 +67,9 @@ apps/*               raíces de composición: daemon (une core + adaptadores), w
 - `core` importa solo `contracts`. Nada de `node:*`, `fs`, `child_process`, `process`, ni del DOM.
 - `adapters/*` importan `core` y `contracts`; nunca otro adaptador ni una app.
 - `apps/*` importan lo que necesiten; ninguna app importa a otra.
-- `packages/client` (SDK tipado del protocolo) lo usan `web`, `cli` y `mcp`; solo importa `contracts`.
+- `packages/client` (SDK tipado del protocolo) lo usan `web`, `cli` y `mcp`; solo importa `contracts`. Su núcleo
+  funciona en navegador/WebView y Node (sin `node:*`); lo específico de Node vive en el subpath
+  `@nexo/client/node` (único lugar con `node:*` y `zod` permitidos, ver `tools/depcruise/rules.mjs`).
 
 ### Dominio (core)
 
@@ -202,6 +204,26 @@ Detalles fijados en F0 (la fuente exacta es `packages/contracts`):
   `terminal.read` acepta `fromOffset` (sin él devuelve lo más reciente, hasta `maxBytes`); `offset` es el final
   de `data`. Si `fromOffset` ya se descartó del búfer circular, `data` empieza en lo más antiguo disponible y el
   resultado trae `truncated: true`. El búfer nunca parte un carácter UTF-8 ni un par sustituto al recortar.
+
+### Cliente (`@nexo/client`)
+
+- `NexoClient` trabaja sobre una interfaz mínima `Transport` (`connect`, `send`, `onMessage`, `onClose`);
+  `webSocketTransport` usa el `WebSocket` global (navegador, WebView, Node 24). Autenticación por subprotocolo
+  (`['nexo.v1', 'nexo.token.<token>']`, por omisión) o por el mensaje `auth`.
+- `call(method, params, { timeoutMs, signal })`: valida `params` antes de enviar y valida respuestas y eventos
+  al recibirlos (`parseServerMessage` + esquema de `result`). Errores tipados `NexoClientError` con los códigos
+  del servidor más `TIMEOUT`, `DISCONNECTED`, `ABORTED`, `CLOSED` e `INVALID_RESPONSE`.
+- `subscribe()` y `on(evento, manejador)` tipados. `seq` repetido o desordenado se descarta; un hueco o un
+  `client.resync` emiten el evento local `resync` y, con `autoResync`, se pide `snapshot` y se entrega a
+  `onSnapshot`. Tras reconectar el `seq` empieza de nuevo (es por conexión): se re-autentica, se re-suscribe y se
+  emite `resync` con `reason: 'reconnect'`.
+- Reconexión con backoff exponencial con jitter (250 ms a 15 s por omisión; una conexión estable de 5 s lo
+  reinicia). Las llamadas pendientes al caer fallan con `DISCONNECTED`. `close()` es definitivo.
+  Estados: `connecting | open | reconnecting | closed`. Los logs del cliente nunca incluyen el token.
+- `@nexo/client/node`: `discoverDaemon()` (lee `NEXO_STATE_DIR` o el directorio por plataforma, valida `daemon.json`
+  con zod, exige archivos regulares pequeños y un token `[A-Za-z0-9_-]{16,512}`, comprueba `/health` con
+  `X-Nexo-Daemon: 1`; errores `NOT_RUNNING`, `STALE`, `CORRUPT`), `connectToDaemon()` (redescubre en cada
+  reconexión) y `ensureDaemon({ start })` (arranca con un callback inyectado y espera a `/health`).
 
 Versiones fijadas: TypeScript 6.x (dependency-cruiser aún no soporta TS 7) y solid-js 1.9
 (`@tanstack/solid-query` y `vite-plugin-solid` piden Solid 1.x). Se revisan al subir esas dependencias.
