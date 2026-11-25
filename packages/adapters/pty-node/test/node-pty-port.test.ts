@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { PtyProcess } from '@nexo/core'
 import { afterEach, describe, expect, it } from 'vitest'
-import { NodePtyPort } from '../src/node-pty-port.ts'
+import { NodePtyPort, NodePtyProcess, type PtyLike } from '../src/node-pty-port.ts'
 import { collect, IS_WINDOWS, LIVE_SCRIPT, NODE, nodeArgs, waitFor } from './helpers.ts'
 
 const port = new NodePtyPort()
@@ -146,5 +146,64 @@ describe('NodePtyPort', () => {
     const c = collect(proc)
     await c.exit
     expect(c.output()).toContain('via-path')
+  })
+})
+
+describe('NodePtyProcess con PtyLike falso', () => {
+  function fake(platform: NodeJS.Platform = 'linux') {
+    let emit: (e: { exitCode: number | undefined; signal?: number | undefined }) => void = () => {}
+    const queue: unknown[] = ['a', 'b']
+    const logs: string[] = []
+    const pty: PtyLike = {
+      pid: 1,
+      write: () => {},
+      resize: () => {},
+      kill: () => {},
+      onData: () => ({ dispose: () => {} }),
+      onExit: (l) => {
+        emit = l
+        return { dispose: () => {} }
+      },
+      _writeStream: { _writeQueue: queue },
+    }
+    const proc = new NodePtyProcess(pty, platform, (m) => logs.push(m))
+    return { proc, emit: (e: Parameters<typeof emit>[0]) => emit(e), queue, logs }
+  }
+
+  it('exitCode undefined sin señal sale con null y se registra', () => {
+    const f = fake()
+    const exits: unknown[] = []
+    f.proc.onExit((e) => exits.push(e))
+    f.emit({ exitCode: undefined })
+    expect(exits).toEqual([{ exitCode: null, signal: null }])
+    expect(f.logs).toHaveLength(1)
+  })
+
+  it('exitCode y señal no numéricos o raros se normalizan', () => {
+    const f = fake()
+    const exits: unknown[] = []
+    f.proc.onExit((e) => exits.push(e))
+    f.emit({ exitCode: Number.NaN, signal: 'x' as unknown as number })
+    expect(exits).toEqual([{ exitCode: null, signal: null }])
+  })
+
+  it('una señal válida con exitCode undefined no se registra como anomalía', () => {
+    const f = fake()
+    const exits: unknown[] = []
+    f.proc.onExit((e) => exits.push(e))
+    f.emit({ exitCode: undefined, signal: 15 })
+    expect(exits).toEqual([{ exitCode: null, signal: 'SIGTERM' }])
+    expect(f.logs).toHaveLength(0)
+  })
+
+  it('al salir vacía la cola de escrituras pendientes de node-pty', () => {
+    const f = fake('linux')
+    f.emit({ exitCode: 0 })
+    expect(f.queue).toEqual([])
+  })
+
+  it('tolera un PtyLike sin cola interna (Windows)', () => {
+    const f = fake('win32')
+    expect(() => f.emit({ exitCode: 0 })).not.toThrow()
   })
 })

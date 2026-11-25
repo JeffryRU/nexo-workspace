@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { type PtyProcess, PtySpawnError, type PtySpawnOptions } from '@nexo/core'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { NodePtyPort } from '../src/node-pty-port.ts'
 import { collect, IS_WINDOWS, LIVE_SCRIPT, NODE, nodeArgs, waitFor } from './helpers.ts'
 
@@ -264,4 +264,35 @@ describe('NodePtyPort adversarial: ciclo de vida', () => {
       expect(typeof exit.exitCode).toBe('number')
     },
   )
+})
+
+describe('escritura en ráfaga al salir', () => {
+  it('no deja errores no manejados ni ruido en stderr', async () => {
+    const errors: unknown[] = []
+    const onRejection = (e: unknown) => errors.push(e)
+    const onException = (e: unknown) => errors.push(e)
+    process.on('unhandledRejection', onRejection)
+    process.on('uncaughtException', onException)
+    // Deja pasar el margen del filtro de otras pruebas para que el espía quede bajo el filtro, no sobre él.
+    await new Promise((r) => setTimeout(r, 600))
+    const stderr = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      for (let round = 0; round < 15; round++) {
+        const proc = await start(LIVE_SCRIPT)
+        const exited = collect(proc).exit
+        proc.write('x'.repeat(65536))
+        proc.kill('SIGKILL')
+        for (let i = 0; i < 100; i++) proc.write('y'.repeat(4096))
+        await exited
+        for (let i = 0; i < 20; i++) proc.write('z')
+      }
+      await new Promise((r) => setTimeout(r, 200))
+      expect(stderr).not.toHaveBeenCalled()
+      expect(errors).toEqual([])
+    } finally {
+      stderr.mockRestore()
+      process.off('unhandledRejection', onRejection)
+      process.off('uncaughtException', onException)
+    }
+  })
 })
