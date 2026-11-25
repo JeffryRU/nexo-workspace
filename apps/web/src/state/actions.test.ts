@@ -67,9 +67,9 @@ describe('acciones', () => {
     await actions.closeTab(tid('t1'))
     await actions.splitPane(pid('p'), 'row')
     await actions.closePane(pid('p'))
-    await actions.resizePane(pid('p'), 5)
-    await actions.resizePane(pid('p'), Number.NaN)
-    await actions.resizePane(pid('p'), 0)
+    await actions.resizeDivider(tid('t1'), [0], 1, 5)
+    await actions.resizeDivider(tid('t1'), [], 0, Number.NaN)
+    await actions.resizeDivider(tid('t1'), [], 0, 0)
     await actions.swapPanes(pid('a'), pid('a'))
     await actions.swapPanes(pid('a'), pid('b'))
     await actions.resizeTerminal(xid('x'), 80, 24)
@@ -91,7 +91,12 @@ describe('acciones', () => {
       'terminal.write',
       'terminal.write',
     ])
-    expect(client.callsOf('pane.resize')[0]?.params).toEqual({ paneId: 'p', delta: 1 })
+    expect(client.callsOf('pane.resize')[0]?.params).toEqual({
+      tabId: 't1',
+      path: [0],
+      index: 1,
+      delta: 1,
+    })
   })
 
   it('newTab sin espacios no hace nada y spawn no se repite mientras está en curso', async () => {

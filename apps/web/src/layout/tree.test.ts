@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { leaf, pid, split } from '../test-helpers.ts'
 import {
   aggregateAttention,
-  dividerTarget,
+  dividerAddress,
+  dividerPercent,
+  dividersOf,
   isRow,
   neighborPane,
   paneIdsOf,
@@ -56,21 +58,46 @@ describe('neighborPane', () => {
   })
 })
 
-describe('dividerTarget', () => {
-  it('usa la hoja izquierda con signo positivo', () => {
-    expect(dividerTarget([leaf('a'), leaf('b'), leaf('c')], 0)).toEqual({ paneId: 'a', sign: 1 })
+describe('divisores', () => {
+  const grid = split(
+    'row',
+    split('column', leaf('a'), leaf('b')),
+    split('column', leaf('c'), leaf('d')),
+  )
+
+  it('una cuadrícula 2x2 tiene tres divisores, incluido el central entre subárboles', () => {
+    expect(dividersOf(grid)).toEqual([
+      { path: [], index: 0 },
+      { path: [0], index: 0 },
+      { path: [1], index: 0 },
+    ])
   })
 
-  it('usa la última hoja con signo negativo si la izquierda es un subárbol', () => {
-    const sub = split('column', leaf('x'), leaf('y'))
-    expect(dividerTarget([sub, leaf('z')], 0)).toEqual({ paneId: 'z', sign: -1 })
+  it('subárboles anidados: cada divisor lleva el camino de su split', () => {
+    const nested = split(
+      'row',
+      leaf('x'),
+      split('column', leaf('y'), split('row', leaf('z'), leaf('w'))),
+    )
+    expect(dividersOf(nested).map((d) => d.path)).toEqual([[], [1], [1, 1]])
+    expect(dividersOf(null)).toEqual([])
+    expect(dividersOf(leaf('solo'))).toEqual([])
   })
 
-  it('no hay forma de mover un divisor entre dos subárboles', () => {
-    const a = split('column', leaf('x'), leaf('y'))
-    const b = split('column', leaf('u'), leaf('v'))
-    expect(dividerTarget([a, b], 0)).toBeUndefined()
-    expect(dividerTarget([a, leaf('m'), leaf('n')], 0)).toBeUndefined()
+  it('dividerAddress copia el camino y rechaza los que pasan del límite', () => {
+    const path = [0, 1]
+    const addr = dividerAddress(path, 2)
+    expect(addr).toEqual({ path: [0, 1], index: 2 })
+    expect(addr?.path).not.toBe(path)
+    expect(dividerAddress(new Array(64).fill(0), 0)).toBeDefined()
+    expect(dividerAddress(new Array(65).fill(0), 0)).toBeUndefined()
+    expect(dividerAddress([], -1)).toBeUndefined()
+  })
+
+  it('dividerPercent acumula los hijos hasta el divisor', () => {
+    expect(dividerPercent([0.5, 0.5], 0)).toBe(50)
+    expect(dividerPercent([0.2, 0.3, 0.5], 0)).toBe(20)
+    expect(dividerPercent([0.2, 0.3, 0.5], 1)).toBe(50)
   })
 })
 

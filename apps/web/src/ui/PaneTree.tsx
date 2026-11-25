@@ -1,8 +1,8 @@
-import type { Layout, PaneId, SplitDirection } from '@nexo/contracts'
+import type { Layout, PaneId, SplitDirection, TabId } from '@nexo/contracts'
 import { createEffect, For, Match, onCleanup, Show, Switch } from 'solid-js'
 import { useModel } from '../app/model.tsx'
 import { es } from '../i18n/es.ts'
-import { type DividerTarget, dividerTarget } from '../layout/tree.ts'
+import { type DividerAddress, dividerAddress, dividerPercent } from '../layout/tree.ts'
 import { PaneView } from './PaneView.tsx'
 import './PaneTree.css'
 
@@ -10,7 +10,9 @@ export const MIN_PERCENT = 5
 const KEY_STEP = 0.02
 const KEY_STEP_BIG = 0.1
 
-export function LayoutView(props: { node: Layout }) {
+type Where = { tabId: TabId; path: readonly number[] }
+
+export function LayoutView(props: { node: Layout } & Where) {
   return (
     <Switch>
       <Match when={props.node.type === 'leaf' && props.node}>
@@ -26,6 +28,8 @@ export function LayoutView(props: { node: Layout }) {
                 ratios: number[]
               }
             }
+            tabId={props.tabId}
+            path={props.path}
           />
         )}
       </Match>
@@ -33,9 +37,11 @@ export function LayoutView(props: { node: Layout }) {
   )
 }
 
-function SplitView(props: {
-  node: { direction: SplitDirection; children: Layout[]; ratios: number[] }
-}) {
+function SplitView(
+  props: {
+    node: { direction: SplitDirection; children: Layout[]; ratios: number[] }
+  } & Where,
+) {
   let container!: HTMLDivElement
   const row = () => props.node.direction === 'row'
   return (
@@ -47,13 +53,14 @@ function SplitView(props: {
               <Divider
                 direction={props.node.direction}
                 index={i() - 1}
-                siblings={props.node.children}
+                tabId={props.tabId}
+                path={props.path}
                 ratios={props.node.ratios}
                 container={() => container}
               />
             </Show>
             <div class="split-child" style={{ flex: `${props.node.ratios[i()] ?? 1} 1 0%` }}>
-              <LayoutView node={child} />
+              <LayoutView node={child} tabId={props.tabId} path={[...props.path, i()]} />
             </div>
           </>
         )}
@@ -62,24 +69,25 @@ function SplitView(props: {
   )
 }
 
-function Divider(props: {
-  direction: SplitDirection
-  index: number
-  siblings: Layout[]
-  ratios: number[]
-  container: () => HTMLElement
-}) {
+function Divider(
+  props: {
+    direction: SplitDirection
+    index: number
+    ratios: number[]
+    container: () => HTMLElement
+  } & Where,
+) {
   const { actions, status } = useModel()
-  const target = (): DividerTarget | undefined => dividerTarget(props.siblings, props.index)
+  const target = (): DividerAddress | undefined => dividerAddress(props.path, props.index)
   const vertical = () => props.direction === 'row'
-  const percent = () => Math.round((props.ratios[props.index] ?? 0) * 100)
-  let drag: { start: number; sent: number; size: number; target: DividerTarget } | undefined
+  const percent = () => dividerPercent(props.ratios, props.index)
+  let drag: { start: number; sent: number; size: number; target: DividerAddress } | undefined
   let el!: HTMLHRElement
 
   const send = (fraction: number) => {
     const t = drag?.target ?? target()
     if (t === undefined) return
-    void actions.resizePane(t.paneId, fraction * t.sign)
+    void actions.resizeDivider(props.tabId, t.path, t.index, fraction)
   }
 
   const end = () => {
@@ -104,15 +112,13 @@ function Divider(props: {
       classList={{
         vertical: vertical(),
         horizontal: !vertical(),
-        disabled: target() === undefined,
       }}
       aria-orientation={vertical() ? 'vertical' : 'horizontal'}
       aria-label={es.pane.resizeSeparator}
       aria-valuemin={MIN_PERCENT}
       aria-valuemax={100 - MIN_PERCENT}
       aria-valuenow={percent()}
-      aria-disabled={target() === undefined ? 'true' : undefined}
-      tabIndex={target() === undefined ? -1 : 0}
+      tabIndex={0}
       onPointerDown={(e) => {
         const t = target()
         if (t === undefined || status() !== 'open' || e.button !== 0) return

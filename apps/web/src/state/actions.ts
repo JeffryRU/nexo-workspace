@@ -143,9 +143,22 @@ export function createActions(deps: {
       await run((c) => c.call('pane.close', { paneId }))
     },
 
-    async resizePane(paneId: PaneId, delta: number): Promise<void> {
+    /** Mueve el divisor entre los hijos `index` e `index + 1` del split en `path` (delta > 0 agranda el primero). */
+    async resizeDivider(
+      tabId: TabId,
+      path: readonly number[],
+      index: number,
+      delta: number,
+    ): Promise<void> {
       if (!Number.isFinite(delta) || delta === 0) return
-      await run((c) => c.call('pane.resize', { paneId, delta: Math.max(-1, Math.min(1, delta)) }))
+      await run((c) =>
+        c.call('pane.resize', {
+          tabId,
+          path: [...path],
+          index,
+          delta: Math.max(-1, Math.min(1, delta)),
+        }),
+      )
     },
 
     async swapPanes(paneId: PaneId, otherPaneId: PaneId): Promise<void> {

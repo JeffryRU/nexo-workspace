@@ -1,4 +1,10 @@
-import type { Attention, Layout, PaneId, SplitDirection } from '@nexo/contracts'
+import {
+  type Attention,
+  type Layout,
+  LIMITS,
+  type PaneId,
+  type SplitDirection,
+} from '@nexo/contracts'
 
 export type Rect = { x: number; y: number; w: number; h: number }
 export type Direction = 'left' | 'right' | 'up' | 'down'
@@ -89,24 +95,39 @@ export function neighborPane(
   return best?.id
 }
 
-export type DividerTarget = { paneId: PaneId; sign: 1 | -1 }
+/** Divisor identificado por camino de nodo: la frontera entre los hijos `index` e `index + 1` del split en `path`. */
+export type DividerAddress = { path: number[]; index: number }
 
 /**
- * `pane.resize` solo mueve la frontera de un panel con su hermano directo (el siguiente, o el anterior si
- * es el último). El divisor entre los hijos `i` e `i+1` se puede manejar si el hijo `i` es una hoja
- * (delta positivo agranda `i`) o si `i+1` es la última hoja (delta negativo agranda `i`). Si no, `undefined`.
+ * Dirección que se envía a `pane.resize` para el divisor `index` del split en `path`. Todo divisor del árbol
+ * es direccionable (entre hojas o entre subárboles); `undefined` solo si el camino pasa del límite del protocolo.
  */
-export function dividerTarget(
-  children: readonly Layout[],
-  index: number,
-): DividerTarget | undefined {
-  const left = children[index]
-  const right = children[index + 1]
-  if (left?.type === 'leaf') return { paneId: left.paneId, sign: 1 }
-  if (right?.type === 'leaf' && index + 1 === children.length - 1) {
-    return { paneId: right.paneId, sign: -1 }
+export function dividerAddress(path: readonly number[], index: number): DividerAddress | undefined {
+  if (path.length > LIMITS.maxLayoutPathDepth || index < 0) return undefined
+  return { path: [...path], index }
+}
+
+/** Todos los divisores del árbol (un split de n hijos tiene n-1), en orden de lectura. */
+export function dividersOf(layout: Layout | null): DividerAddress[] {
+  const out: DividerAddress[] = []
+  if (layout === null) return out
+  const stack: { node: Layout; path: number[] }[] = [{ node: layout, path: [] }]
+  while (stack.length > 0) {
+    const { node, path } = stack.pop() as { node: Layout; path: number[] }
+    if (node.type !== 'split') continue
+    for (let i = 0; i < node.children.length - 1; i++) out.push({ path, index: i })
+    for (let i = node.children.length - 1; i >= 0; i--) {
+      stack.push({ node: node.children[i] as Layout, path: [...path, i] })
+    }
   }
-  return undefined
+  return out
+}
+
+/** Posición (en %) del divisor `index`: lo que ocupan los hijos hasta él, dentro de su split. */
+export function dividerPercent(ratios: readonly number[], index: number): number {
+  let sum = 0
+  for (let i = 0; i <= index; i++) sum += ratios[i] ?? 0
+  return Math.round(sum * 100)
 }
 
 const ATTENTION_RANK: Record<Attention, number> = {

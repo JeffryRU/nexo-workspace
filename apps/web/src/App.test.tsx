@@ -194,8 +194,8 @@ describe('paneles y divisores', () => {
     await tick()
     const calls = client.callsOf('pane.resize').map((c) => c.params)
     expect(calls).toEqual([
-      { paneId: 'p1', delta: 0.02 },
-      { paneId: 'p1', delta: -0.1 },
+      { tabId: 't1', path: [], index: 0, delta: 0.02 },
+      { tabId: 't1', path: [], index: 0, delta: -0.1 },
     ])
   })
 
@@ -230,7 +230,7 @@ describe('paneles y divisores', () => {
     expect(sep.classList.contains('dragging')).toBe(false)
   })
 
-  it('un divisor entre dos subárboles no se puede arrastrar', async () => {
+  it('un divisor entre dos subárboles se mueve por camino de nodo', async () => {
     const tab = {
       ...mkTab('t1', ['a', 'b', 'c', 'd']),
       layout: split(
@@ -241,11 +241,17 @@ describe('paneles y divisores', () => {
     }
     const { container, client } = await mountApp(snapshotOf([mkWorkspace('w1', [tab])]))
     const sep = container.querySelector('#tabpanel-t1 .divider.vertical') as HTMLElement
-    expect(sep.getAttribute('aria-disabled')).toBe('true')
-    expect(sep.getAttribute('tabindex')).toBe('-1')
+    expect(sep.hasAttribute('aria-disabled')).toBe(false)
+    expect(sep.getAttribute('tabindex')).toBe('0')
+    expect(sep.getAttribute('aria-valuenow')).toBe('50')
     fireEvent.keyDown(sep, { key: 'ArrowRight' })
+    const inner = container.querySelectorAll('#tabpanel-t1 .divider.horizontal')[1] as HTMLElement
+    fireEvent.keyDown(inner, { key: 'ArrowDown' })
     await tick()
-    expect(client.callsOf('pane.resize')).toHaveLength(0)
+    expect(client.callsOf('pane.resize').map((c) => c.params)).toEqual([
+      { tabId: 't1', path: [], index: 0, delta: 0.02 },
+      { tabId: 't1', path: [1], index: 0, delta: 0.02 },
+    ])
   })
 
   it('enfocar con clic, dividir, intercambiar y cerrar llaman al daemon', async () => {
@@ -425,5 +431,47 @@ describe('pantallas de estado', () => {
     expect(alert.textContent).toContain('límite alcanzado')
     fireEvent.click(getByText('Descartar'))
     expect(document.querySelector('.toast')).toBeNull()
+  })
+})
+
+describe('divisores entre subárboles', () => {
+  const grid = () => {
+    const tab = {
+      ...mkTab('t1', ['a', 'b', 'c', 'd']),
+      layout: split(
+        'row',
+        split('column', leaf('a'), leaf('b')),
+        split('column', leaf('c'), leaf('d')),
+      ),
+    }
+    return snapshotOf([mkWorkspace('w1', [tab])])
+  }
+
+  it('arrastrar el central de una 2x2 envía el camino de la raíz', async () => {
+    const { container, client } = await mountApp(grid())
+    const sep = container.querySelector('#tabpanel-t1 .divider.vertical') as HTMLElement
+    ;(sep.parentElement as HTMLElement).getBoundingClientRect = () =>
+      ({ width: 1000, height: 500 }) as DOMRect
+    sep.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, clientX: 500, button: 0 }))
+    sep.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientX: 600 }))
+    sep.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, clientX: 600 }))
+    await tick()
+    const call = client.callsOf('pane.resize')[0]?.params as { delta: number }
+    expect(call).toMatchObject({ tabId: 't1', path: [], index: 0 })
+    expect(call.delta).toBeCloseTo(0.1)
+  })
+
+  it('los divisores internos llevan el camino de su subárbol', async () => {
+    const { container, client } = await mountApp(grid())
+    const seps = container.querySelectorAll('#tabpanel-t1 .divider.horizontal')
+    expect(seps).toHaveLength(2)
+    fireEvent.keyDown(seps[1] as HTMLElement, { key: 'ArrowUp' })
+    await tick()
+    expect(client.callsOf('pane.resize')[0]?.params).toEqual({
+      tabId: 't1',
+      path: [1],
+      index: 0,
+      delta: -0.02,
+    })
   })
 })

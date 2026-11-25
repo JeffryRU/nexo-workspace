@@ -30,7 +30,9 @@ export function Stage() {
                   hidden={!visible()}
                 >
                   <VisibilityContext.Provider value={visible}>
-                    <Show when={t.layout}>{(layout) => <LayoutView node={layout()} />}</Show>
+                    <Show when={t.layout}>
+                      {(layout) => <LayoutView node={layout()} tabId={t.id} path={[]} />}
+                    </Show>
                   </VisibilityContext.Provider>
                 </div>
               )
