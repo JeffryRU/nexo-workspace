@@ -16,9 +16,14 @@ export type HubDeps = {
   frame: (cb: () => void) => void
   /** Tope de caracteres pendientes por terminal; al pasarlo se descarta lo más antiguo. */
   maxPendingChars?: number
-  /** Caracteres que se entregan a xterm por fotograma en una terminal visible / oculta. */
+  /**
+   * Caracteres que se entregan a xterm por fotograma en una terminal visible / oculta. Con `hiddenBudget` 0 una
+   * terminal oculta no recibe nada: lo pendiente (acotado por `maxPendingChars`) se entrega al mostrarla.
+   */
   visibleBudget?: number
   hiddenBudget?: number
+  /** Espera antes de reintentar cerrar un hueco cuando se agotaron los reintentos seguidos (500 ms). */
+  gapRecoveryMs?: number
 }
 
 type Entry = {
@@ -35,6 +40,8 @@ type Entry = {
   needsReset: boolean
   /** Relecturas seguidas que no cerraron el hueco (evita bucles si el daemon no avanza). */
   gapRetries: number
+  /** Relectura diferida pendiente tras agotar los reintentos. */
+  recovery: ReturnType<typeof setTimeout> | undefined
 }
 
 const MAX_HELD = 256
@@ -81,6 +88,7 @@ export class TerminalHub {
     for (const id of [...this.#entries.keys()]) {
       if (!live.has(id)) {
         const e = this.#entries.get(id) as Entry
+        clearTimeout(e.recovery)
         this.#dirty.delete(e)
         this.#entries.delete(id)
       }
@@ -135,6 +143,7 @@ export class TerminalHub {
 
   dispose(): void {
     this.#disposed = true
+    for (const e of this.#entries.values()) clearTimeout(e.recovery)
     this.#entries.clear()
     this.#dirty.clear()
   }
@@ -161,6 +170,7 @@ export class TerminalHub {
       held: [],
       needsReset: false,
       gapRetries: 0,
+      recovery: undefined,
     }
   }
 
@@ -169,7 +179,12 @@ export class TerminalHub {
     const start = end - bytes
     if (end <= entry.offset) return
     if (start > entry.offset) {
-      if (entry.gapRetries >= MAX_GAP_RETRIES) return
+      if (entry.gapRetries >= MAX_GAP_RETRIES) {
+        // No se descarta para siempre: tras una ráfaga (el daemon descarta lo viejo más rápido de lo que se
+        // relee) el hueco solo se cierra cuando la salida se calma, así que se reintenta más tarde.
+        this.#scheduleRecovery(entry)
+        return
+      }
       entry.gapRetries++
       entry.held.push({ end, data })
       void this.#catchUp(entry)
@@ -178,6 +193,16 @@ export class TerminalHub {
     entry.gapRetries = 0
     this.#push(entry, start < entry.offset ? sliceFromByte(data, entry.offset - start) : data)
     entry.offset = end
+  }
+
+  #scheduleRecovery(entry: Entry): void {
+    if (entry.recovery !== undefined) return
+    entry.recovery = setTimeout(() => {
+      entry.recovery = undefined
+      if (this.#disposed || this.#entries.get(entry.id) !== entry) return
+      entry.gapRetries = 0
+      void this.#catchUp(entry)
+    }, this.#deps.gapRecoveryMs ?? 500)
   }
 
   #push(entry: Entry, data: string): void {
@@ -256,6 +281,7 @@ export class TerminalHub {
     }
     if (entry.pendingChars === 0) return
     const budget = entry.visible ? this.#visibleBudget : this.#hiddenBudget
+    if (budget <= 0) return
     let chunk = ''
     while (entry.pending.length > 0 && chunk.length < budget) {
       const next = entry.pending[0] as string

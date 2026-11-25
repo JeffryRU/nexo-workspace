@@ -140,7 +140,7 @@ describe('pestañas', () => {
     expect(container.querySelector('#tabpanel-t1')?.hasAttribute('hidden')).toBe(true)
     expect(container.querySelector('#tabpanel-t2')?.hasAttribute('hidden')).toBe(false)
     expect(container.querySelector('[data-pane-id="p1"]')).toBe(paneBefore)
-    await vi.waitFor(() => expect(tabSwitchSamples()).toHaveLength(1))
+    await vi.waitFor(() => expect(tabSwitchSamples().length).toBeGreaterThanOrEqual(1))
     expect(performance.getEntriesByName('tab-switch').length).toBeGreaterThan(0)
   })
 

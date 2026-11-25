@@ -86,6 +86,7 @@ describe('createDaemonSession', () => {
     client.snapshot = snapshotOf([withTerminal()], 1)
     await session.start()
     await tick()
+    expect(client.callsOf('terminal.read')[0]?.params).toMatchObject({ maxBytes: 256 * 1024 })
     const written: string[] = []
     session.hub.attach('x1', {
       write: (d, done) => {

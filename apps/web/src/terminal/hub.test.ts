@@ -40,6 +40,28 @@ describe('sliceFromByte', () => {
 })
 
 describe('TerminalHub', () => {
+  it('con hiddenBudget 0 una terminal oculta no recibe nada y al mostrarse recibe lo pendiente', async () => {
+    const frames = manualFrames()
+    const hub = new TerminalHub({
+      read: async () => ({ data: '', offset: 0 }),
+      frame: frames.frame,
+      hiddenBudget: 0,
+    })
+    const sink = new Sink()
+    hub.sync(['x1'])
+    await tick()
+    hub.attach('x1', sink)
+    hub.setVisible('x1', false)
+    hub.onOutput('x1', 3, 'abc')
+    frames.flush(5)
+    expect(sink.out).toBe('')
+    expect(hub.pendingCharsOf('x1')).toBe(3)
+    hub.setVisible('x1', true)
+    frames.flush()
+    expect(sink.out).toBe('abc')
+    expect(hub.pendingCharsOf('x1')).toBe(0)
+  })
+
   it('escribe la salida agrupada por fotograma', async () => {
     const { hub, frames } = setup()
     const sink = new Sink()

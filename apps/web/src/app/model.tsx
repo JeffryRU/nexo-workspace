@@ -18,11 +18,15 @@ const defaultObserve = (el: HTMLElement, cb: () => void): (() => void) => {
   return () => observer.disconnect()
 }
 
+/** Una terminal recién mostrada carga WebGL si sigue a la vista tras esta espera (ver `PaneSessionDeps`). */
+const WEBGL_DELAY_MS = 150
+
 /** Añade al estado de la sesión el registro de terminales de xterm (una por panel). */
 export function createAppModel(
   session: DaemonSession,
   xtermFactory: XtermFactory,
   frame: (cb: () => void) => void = defaultFrame,
+  options: { webglDelayMs?: number } = {},
 ): AppModel {
   const io = {
     spawn: (paneId: string, cols: number, rows: number) =>
@@ -41,6 +45,7 @@ export function createAppModel(
         io,
         frame,
         observe: defaultObserve,
+        webglDelayMs: options.webglDelayMs ?? WEBGL_DELAY_MS,
       }),
   )
   return { ...session, sessions }

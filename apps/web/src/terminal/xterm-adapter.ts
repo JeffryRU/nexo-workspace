@@ -85,7 +85,11 @@ export function createXtermHandle(): XtermHandle {
       return lines.join('\n')
     },
   }
-  if (globalThis.__NEXO_E2E__ === true) (globalThis.__NEXO_E2E_TERMS__ ??= []).push(probe)
+  if (globalThis.__NEXO_E2E__ === true) {
+    const terms = globalThis.__NEXO_E2E_TERMS__ ?? []
+    globalThis.__NEXO_E2E_TERMS__ = terms
+    terms.push(probe)
+  }
   let opened = false
   let webgl: WebglAddon | undefined
 

@@ -3,7 +3,7 @@ import { FakeXterm, manualFrames } from '../test-helpers.ts'
 import { TerminalHub } from './hub.ts'
 import { PaneSession, SessionRegistry } from './pane-session.ts'
 
-function setup() {
+function setup(webglDelayMs?: number) {
   const frames = manualFrames()
   const timers: { cb: () => void; ms: number; cleared: boolean }[] = []
   const xterm = new FakeXterm()
@@ -13,6 +13,7 @@ function setup() {
   const stopObserving = vi.fn()
   const session = new PaneSession({
     paneId: 'p1',
+    ...(webglDelayMs === undefined ? {} : { webglDelayMs }),
     xterm,
     hub,
     io,
@@ -61,6 +62,39 @@ describe('PaneSession', () => {
     session.setVisible(true)
     expect(xterm.webglLoads).toBe(2)
     expect(xterm.webglDisposals).toBe(1)
+  })
+
+  it('con espera, WebGL se carga después de pintar y solo si la terminal sigue a la vista', () => {
+    const { session, xterm, runTimers, timers } = setup(150)
+    session.mount(document.createElement('div'))
+    session.setVisible(true)
+    expect(xterm.webglActive).toBe(false)
+    expect(timers.some((t) => t.ms === 150)).toBe(true)
+    session.setVisible(false) // se ocultó antes de la espera: no se carga nunca
+    runTimers()
+    expect(xterm.webglLoads).toBe(0)
+    session.setVisible(true)
+    runTimers()
+    expect(xterm.webglActive).toBe(true)
+    expect(xterm.webglLoads).toBe(1)
+    session.setVisible(false)
+    expect(xterm.webglActive).toBe(false)
+  })
+
+  it('con espera, desmontar o liberar la sesión cancela la carga pendiente', () => {
+    const a = setup(150)
+    const host = document.createElement('div')
+    a.session.mount(host)
+    a.session.setVisible(true)
+    a.session.unmount(host)
+    a.runTimers()
+    expect(a.xterm.webglLoads).toBe(0)
+    const b = setup(150)
+    b.session.mount(document.createElement('div'))
+    b.session.setVisible(true)
+    b.session.dispose()
+    b.runTimers()
+    expect(b.xterm.webglLoads).toBe(0)
   })
 
   it('al mostrarse por primera vez pide la terminal con el tamaño ajustado', () => {

@@ -23,6 +23,7 @@ export async function mountApp(snapshot: Snapshot, client = new FakeClient()) {
       return x
     },
     frames.frame,
+    { webglDelayMs: 0 },
   )
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const view = render(() => (

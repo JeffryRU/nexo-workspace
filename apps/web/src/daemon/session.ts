@@ -35,7 +35,11 @@ export type SessionDeps = {
   frame?: (cb: () => void) => void
   /** Si se da, el snapshot inicial pasa por la caché de solid-query. */
   queryClient?: QueryClient
+  /** Caracteres por fotograma que recibe una terminal oculta (0: ninguno hasta que se muestre). */
+  hiddenBudget?: number
 }
+
+const READ_CHUNK_BYTES = 256 * 1024
 
 const defaultFrame = (cb: () => void) => {
   if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => cb())
@@ -56,10 +60,16 @@ export function createDaemonSession(deps: SessionDeps) {
 
   const hub = new TerminalHub({
     frame: deps.frame ?? defaultFrame,
+    ...(deps.hiddenBudget === undefined ? {} : { hiddenBudget: deps.hiddenBudget }),
     read: async (terminalId, fromOffset) => {
       const c = client
       if (c === undefined) throw new Error('sin cliente')
-      return c.call('terminal.read', { terminalId: TerminalId.parse(terminalId), fromOffset })
+      // Lecturas de 256 KiB: una de 1 MiB (el máximo) son tareas largas en la página al validar y trocear.
+      return c.call('terminal.read', {
+        terminalId: TerminalId.parse(terminalId),
+        fromOffset,
+        maxBytes: READ_CHUNK_BYTES,
+      })
     },
   })
 
