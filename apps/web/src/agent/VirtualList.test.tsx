@@ -113,6 +113,39 @@ describe('VirtualList', () => {
     expect(m.container.querySelector('.vlist-end')).toBeNull()
   })
 
+  it('oculto no recoloca la ventana y al mostrarse sigue el final sin remontarlo todo', () => {
+    const frames = manualFrames()
+    const [list, setList] = createSignal(ids(100))
+    const [hidden, setHidden] = createSignal(false)
+    const view = render(() => (
+      <div hidden={hidden()}>
+        <VirtualList
+          ids={list()}
+          label="Documento"
+          estimate={() => 50}
+          frame={frames.frame}
+          renderItem={(id) => <span>{id}</span>}
+        />
+      </div>
+    ))
+    const scroller = view.container.querySelector('.vlist') as HTMLElement
+    frames.flush()
+    expect(scroller.scrollTop).toBe(scroller.scrollHeight)
+    setHidden(true)
+    // Marca de posición: si algo recolocara el scroll mientras está oculta, dejaría de valer 777.
+    scroller.scrollTop = 777
+    setList(ids(105))
+    frames.flush()
+    // Sin layout no se recoloca el scroll.
+    expect(scroller.scrollTop).toBe(777)
+    // Al mostrarla, el aviso de tamaño del contenedor vuelve a seguir el final.
+    setHidden(false)
+    for (const o of observers) if (o.targets.has(scroller)) o.cb([], {} as ResizeObserver)
+    frames.flush()
+    expect(scroller.scrollTop).toBe(scroller.scrollHeight)
+    expect(view.container.querySelectorAll('.vitem').length).toBeGreaterThan(0)
+  })
+
   it('al medir un elemento por encima de la vista, compensa el scroll para que no salte', () => {
     const m = mount(ids(200))
     m.frames.flush()
