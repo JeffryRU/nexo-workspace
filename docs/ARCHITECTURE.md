@@ -236,11 +236,19 @@ Versiones fijadas: TypeScript 6.x (dependency-cruiser aún no soporta TS 7) y so
 
 Presupuestos (los mide una prueba de rendimiento en CI, con margen):
 
-- **Cambio de pestaña < 16 ms.** Las pestañas y los paneles **no se desmontan** al ocultarse
-  (`display: none` / `content-visibility`); las instancias de xterm.js persisten.
+- **Cambio de pestaña < 16 ms** (p95 con 10 terminales emitiendo salida continua; medido en `pnpm perf`).
+  Las pestañas y los paneles **no se desmontan** al ocultarse (`display: none`); las instancias de xterm.js
+  persisten. `tab-switch` mide desde el evento hasta el siguiente fotograma pintado: lo que tarda la interfaz
+  en actualizar el DOM más el trabajo del navegador en ese fotograma (estilos, distribución, pintado), sin
+  contar la espera hasta el próximo vsync (depende de la pantalla). `__NEXO_PERF__.tabSwitchRaw` sí la incluye.
 - **WebGL de xterm solo en terminales visibles:** los navegadores limitan los contextos WebGL (~16). Al
-  ocultar un panel se libera su `WebglAddon` y al mostrarlo se vuelve a cargar (el búfer de xterm se
-  conserva).
+  ocultar un panel se libera su `WebglAddon`; al mostrarlo se vuelve a cargar **150 ms después**, y solo si
+  sigue a la vista (crear el contexto y el atlas cuesta ~20 ms y no debe entrar en el cambio de pestaña). El
+  búfer de xterm se conserva.
+- **Una terminal oculta no recibe salida en xterm:** el hub la retiene (acotada a 4 M caracteres) y la entrega
+  al mostrarla. Motivo: el renderer DOM de xterm repinta todas las filas en cada desplazamiento aunque el panel
+  esté oculto, y sin layout no puede medir los glifos (no cachea), así que 9 terminales ocultas con salida
+  continua saturaban el hilo principal (cambio de pestaña p50 26 ms → 5 ms al evitarlo).
 - **Salida de PTY agrupada** en el daemon: se envía cada ~8 ms o cada 64 KiB, lo que ocurra antes. En la
   web, las escrituras a xterm y las actualizaciones del documento se agrupan por `requestAnimationFrame`.
 - **Documento virtualizado:** conversaciones largas solo dibujan los bloques visibles.
@@ -329,14 +337,15 @@ Nexo funciona al 100 % sin mascota. Una mascota es un **paquete intercambiable**
 
 ## Pruebas
 
-| Tipo                   | Dónde                                                        | Herramienta            |
-| ---------------------- | ------------------------------------------------------------ | ---------------------- |
-| Unitarias              | junto al código (`*.test.ts`)                                | Vitest                 |
-| Propiedades            | parsers, árbol de distribución, protocolo                    | fast-check             |
-| Conformidad de puertos | `packages/testkit/conformance` contra falso y adaptador real | Vitest                 |
-| Integración            | daemon real + node-pty real, Linux y Windows                 | Vitest                 |
-| Extremo a extremo      | web servida por el daemon, en navegador                      | Playwright             |
-| Rust                   | `apps/desktop`                                               | `cargo test`, `clippy` |
+| Tipo                   | Dónde                                                        | Herramienta              |
+| ---------------------- | ------------------------------------------------------------ | ------------------------ |
+| Unitarias              | junto al código (`*.test.ts`)                                | Vitest                   |
+| Propiedades            | parsers, árbol de distribución, protocolo                    | fast-check               |
+| Conformidad de puertos | `packages/testkit/conformance` contra falso y adaptador real | Vitest                   |
+| Integración            | daemon real + node-pty real, Linux y Windows                 | Vitest                   |
+| Extremo a extremo      | daemon real + web compilada (`vite preview`), en Chromium    | Playwright (`pnpm e2e`)  |
+| Rendimiento            | cambio de pestaña con 10 terminales y 20 MB de salida        | Playwright (`pnpm perf`) |
+| Rust                   | `apps/desktop`                                               | `cargo test`, `clippy`   |
 
 **Pruebas adversariales obligatorias** (`*.adversarial.test.ts`) en cada funcionalidad: entradas
 malformadas, enormes o binarias; tokens y orígenes incorrectos; carreras (cerrar un panel mientras
@@ -345,6 +354,25 @@ ruta; proveedores falsos que emiten JSON roto, se cuelgan o mueren. Un PR que ag
 su prueba adversarial no se fusiona.
 
 Cobertura mínima: `core` y `contracts` 90 %; adaptadores 80 %.
+
+**Pruebas pesadas (issue #18).** Las que arrancan procesos reales (daemon, CLI) o PTY reales
+(`*.integration.test.ts`, `cli.adversarial`, `daemon.adversarial`, `pty-node/test/**`, `discovery.adversarial`) corren
+en un proyecto de Vitest aparte, `heavy` (lista en `vitest.config.ts`), con `fileParallelism: false`: un archivo a la
+vez. En Windows, ConPTY y el arranque de procesos se ralentizan mucho bajo carga y dos suites con PTY a la vez
+llegaron a tumbar un worker. El resto sigue en paralelo.
+
+**E2E y rendimiento** (`e2e/`, fuera de `pnpm check`): `pnpm e2e` y `pnpm perf`. Cada prueba levanta su daemon (puerto
+fijo, `NEXO_STATE_DIR` temporal, `NEXO_DEV=1`) y usa la web compilada servida en 5173 (`tools/e2e-web.mjs`); la CLI
+se ejecuta como proceso hijo contra el mismo estado. El texto de las terminales se lee del búfer de xterm
+(`__NEXO_E2E_TERMS__`, que solo existe si la página se carga con `__NEXO_E2E__ = true`). Una recarga normal (F5)
+muestra «Falta el token»: el token se borra de la barra de direcciones y nunca se guarda, así que las pruebas
+recargan con la dirección completa. Si el daemon cae, la interfaz muestra «Conexión perdida. Reconectando…» y
+reintenta con espera creciente; como cada arranque del daemon genera un token nuevo, la página abierta no puede
+volver sola y hay que abrirla con el token nuevo (`pnpm dev:web` lo imprime; el shell de escritorio lo pide de
+nuevo con `daemon_info`). El daemon de la F1 no persiste el estado: tras reiniciarlo aparece vacío.
+Salida masiva: la salida de 20 MB no congela la interfaz (mayor tarea larga 70–105 ms, criterio < 150 ms; memoria de
+la página estable en ~6 MB tras recolectar) pero, al superar la capacidad de la conexión, el daemon descarta
+salida (`client.resync`) y la interfaz tarda en ponerse al día (ver el issue de seguimiento). Umbrales: local p95 < 16 ms; en CI (runners compartidos) p95 < 32 ms.
 
 ## Convenciones
 

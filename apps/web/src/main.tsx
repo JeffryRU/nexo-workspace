@@ -20,7 +20,14 @@ async function load(): Promise<void> {
     setApp({ kind: 'no-daemon', reason: result.reason, onRetry: () => void load() })
     return
   }
-  const session = createDaemonSession({ info: result.info, queryClient })
+  const session = createDaemonSession({
+    info: result.info,
+    queryClient,
+    // El renderer DOM de xterm repinta todas las filas en cada desplazamiento, también con el panel oculto
+    // (y midiendo sin layout), lo que satura el hilo principal: una terminal oculta no recibe salida hasta
+    // que se muestra (el hub acota lo pendiente).
+    hiddenBudget: 0,
+  })
   setApp({ kind: 'ready', model: createAppModel(session, createXtermHandle) })
   await session.start()
 }

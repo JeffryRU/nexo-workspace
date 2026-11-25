@@ -12,6 +12,9 @@ vi.mock('@xterm/xterm', () => ({
     rows = 24
     unicode = { activeVersion: '' }
     written: string[] = []
+    buffer = {
+      active: { length: 2, getLine: (i: number) => ({ translateToString: () => `línea ${i}` }) },
+    }
     options: unknown
     dataCb: ((d: string) => void) | undefined
     constructor(options: unknown) {
@@ -75,6 +78,22 @@ beforeEach(() => {
 })
 
 describe('createXtermHandle', () => {
+  it('solo con __NEXO_E2E__ expone el texto del búfer, y lo retira al liberar', () => {
+    const quiet = createXtermHandle()
+    expect(globalThis.__NEXO_E2E_TERMS__).toBeUndefined()
+    quiet.dispose()
+    globalThis.__NEXO_E2E__ = true
+    try {
+      const h = createXtermHandle()
+      expect(globalThis.__NEXO_E2E_TERMS__?.map((t) => t.text())).toEqual(['línea 0\nlínea 1'])
+      h.dispose()
+      expect(globalThis.__NEXO_E2E_TERMS__).toEqual([])
+    } finally {
+      globalThis.__NEXO_E2E__ = undefined
+      globalThis.__NEXO_E2E_TERMS__ = undefined
+    }
+  })
+
   it('abre la terminal una sola vez y reubica su elemento', () => {
     const h = createXtermHandle()
     const a = document.createElement('div')

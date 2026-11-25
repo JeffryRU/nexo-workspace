@@ -7,3 +7,6 @@ target
 .tgrep-agent
 *.tsbuildinfo
 /apps/desktop/src-tauri/gen
+/e2e/results
+/e2e/test-results
+/e2e/report

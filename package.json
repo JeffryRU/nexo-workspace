@@ -15,7 +15,9 @@
     "test": "vitest run --coverage",
     "depcruise": "depcruise apps packages --config .dependency-cruiser.mjs",
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm depcruise",
-    "dev:web": "node tools/dev-web.mjs"
+    "dev:web": "node tools/dev-web.mjs",
+    "e2e": "pnpm --filter @nexo/e2e exec playwright test --project e2e",
+    "perf": "pnpm --filter @nexo/e2e exec playwright test --project perf"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.9",

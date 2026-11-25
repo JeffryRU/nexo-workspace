@@ -18,6 +18,30 @@ class CountingSink implements TerminalSink {
 const tick = () => new Promise((r) => setTimeout(r, 0))
 
 describe('hub: ráfagas y datos hostiles', () => {
+  it('hiddenBudget 0: 10 MB a una terminal oculta no escriben nada y lo pendiente sigue acotado', async () => {
+    const frames = manualFrames()
+    const hub = new TerminalHub({
+      frame: frames.frame,
+      read: async () => ({ data: '', offset: 0 }),
+      maxPendingChars: 1024 * 1024,
+      hiddenBudget: 0,
+    })
+    const sink = new CountingSink()
+    hub.sync(['x1'])
+    await tick()
+    hub.attach('x1', sink)
+    hub.setVisible('x1', false)
+    const chunk = 'x'.repeat(1024 * 1024)
+    for (let i = 1; i <= 10; i++) hub.onOutput('x1', i * chunk.length, chunk)
+    frames.flush(1000)
+    expect(sink.total).toBe(0)
+    expect(hub.pendingCharsOf('x1')).toBeLessThanOrEqual(1024 * 1024)
+    hub.setVisible('x1', true)
+    frames.flush(100_000)
+    expect(hub.pendingCharsOf('x1')).toBe(0)
+    expect(sink.total).toBeLessThanOrEqual(1024 * 1024)
+  })
+
   it('10 MB a una terminal oculta: memoria acotada y entregas por fotograma pequeñas', async () => {
     const frames = manualFrames()
     const hub = new TerminalHub({
@@ -83,6 +107,46 @@ describe('hub: ráfagas y datos hostiles', () => {
     frames.flush(100)
     for (const p of pieces) expect(p).not.toMatch(/[\ud800-\udbff]$/)
     expect(pieces.join('')).toBe('😀'.repeat(10))
+  })
+
+  it('tras una ráfaga que agota los reintentos de hueco, la salida se recupera cuando se calma', async () => {
+    const frames = manualFrames()
+    const total = 'ABCDEFGHIJ'
+    let calmed = false
+    const hub = new TerminalHub({
+      frame: frames.frame,
+      gapRecoveryMs: 5,
+      // Mientras dura la ráfaga el daemon no ofrece nada nuevo; luego devuelve todo lo que falta.
+      read: async (_id, from) =>
+        calmed ? { data: total.slice(from), offset: total.length } : { data: '', offset: from },
+    })
+    const sink = {
+      out: '',
+      write(d: string, done: () => void) {
+        this.out += d
+        done()
+      },
+      reset() {},
+    }
+    hub.sync(['x1'])
+    await tick()
+    hub.attach('x1', sink)
+    hub.setVisible('x1', true)
+    // Eventos con hueco (empiezan en 5): agotan los reintentos y se descartarían para siempre.
+    for (let i = 0; i < 10; i++) {
+      hub.onOutput('x1', 10, 'FGHIJ')
+      await tick()
+    }
+    frames.flush(10)
+    expect(sink.out).toBe('')
+    calmed = true
+    await new Promise((r) => setTimeout(r, 30))
+    hub.onOutput('x1', 10, 'FGHIJ') // la salida final dispara la recuperación pendiente
+    await new Promise((r) => setTimeout(r, 60))
+    frames.flush(10)
+    expect(sink.out).toBe(total)
+    expect(hub.offsetOf('x1')).toBe(total.length)
+    hub.dispose()
   })
 
   it('offsets absurdos (muy grandes, retrocesos) no rompen ni bloquean', async () => {

@@ -1,5 +1,5 @@
 import * as fc from 'fast-check'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { measureTabSwitch, resetTabSwitchSamples, tabSwitchSamples } from '../perf.ts'
 import { FakeClient, mkTab, mkWorkspace, pid, snapshotOf, tid, wid, xid } from '../test-helpers.ts'
 import { chunkText, cleanName, createActions } from './actions.ts'
@@ -147,13 +147,37 @@ describe('acciones', () => {
 })
 
 describe('measureTabSwitch', () => {
-  it('registra la marca y la medida', () => {
+  it('registra la marca y la medida (al terminar el fotograma) y acota las muestras', async () => {
+    await new Promise((r) => setTimeout(r, 100)) // muestras pendientes de pruebas anteriores
     resetTabSwitchSamples()
     const ms = measureTabSwitch(() => {})
     expect(typeof ms).toBe('number')
-    expect(tabSwitchSamples()).toHaveLength(1)
+    await vi.waitFor(() => expect(tabSwitchSamples()).toHaveLength(1))
     for (let i = 0; i < 250; i++) measureTabSwitch(() => {})
+    await vi.waitFor(() => expect(globalThis.__NEXO_PERF__?.tabSwitchRaw.length).toBe(200))
     expect(tabSwitchSamples().length).toBeLessThanOrEqual(200)
+    await new Promise((r) => setTimeout(r, 100))
+  })
+
+  it('con requestAnimationFrame, la muestra llega tras el fotograma y suma el trabajo de pintado', async () => {
+    resetTabSwitchSamples()
+    const original = globalThis.requestAnimationFrame
+    globalThis.requestAnimationFrame = (cb: FrameRequestCallback) => {
+      setTimeout(() => cb(0), 5)
+      return 1
+    }
+    try {
+      const sync = measureTabSwitch(() => {})
+      expect(typeof sync).toBe('number')
+      expect(tabSwitchSamples()).toHaveLength(0)
+      await vi.waitFor(() => expect(tabSwitchSamples()).toHaveLength(1))
+      const raw = globalThis.__NEXO_PERF__?.tabSwitchRaw[0] ?? 0
+      // `raw` incluye la espera hasta el fotograma (5 ms simulados); `tabSwitch` no.
+      expect(raw).toBeGreaterThanOrEqual(4)
+      expect(tabSwitchSamples()[0] ?? Number.POSITIVE_INFINITY).toBeLessThan(raw)
+    } finally {
+      globalThis.requestAnimationFrame = original
+    }
   })
 
   it('ejecuta fn aunque no exista performance', () => {

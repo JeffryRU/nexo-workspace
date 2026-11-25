@@ -1,5 +1,5 @@
 import { fireEvent, render } from '@solidjs/testing-library'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { App } from './App.tsx'
 import { resetTabSwitchSamples, tabSwitchSamples } from './perf.ts'
 import { mountApp } from './test-app.tsx'
@@ -140,7 +140,7 @@ describe('pestañas', () => {
     expect(container.querySelector('#tabpanel-t1')?.hasAttribute('hidden')).toBe(true)
     expect(container.querySelector('#tabpanel-t2')?.hasAttribute('hidden')).toBe(false)
     expect(container.querySelector('[data-pane-id="p1"]')).toBe(paneBefore)
-    expect(tabSwitchSamples()).toHaveLength(1)
+    await vi.waitFor(() => expect(tabSwitchSamples().length).toBeGreaterThanOrEqual(1))
     expect(performance.getEntriesByName('tab-switch').length).toBeGreaterThan(0)
   })
 
@@ -295,6 +295,17 @@ describe('paneles y divisores', () => {
     expect(container.querySelectorAll('#tabpanel-t1 [data-pane-id]')).toHaveLength(4)
     client.emit('pane.title', { paneId: pid('p4'), title: 'vim' }, 6)
     expect(container.querySelector('[data-pane-id="p4"] .pane-title')?.textContent).toBe('vim')
+    // Una ruta de ejecutable se muestra con su nombre corto y la ruta completa en el tooltip...
+    const exe =
+      'C:\\Program Files\\WindowsApps\\Microsoft.PowerShell_7.7.0.0_x64__8wekyb3d8bbwe\\pwsh.exe'
+    client.emit('pane.title', { paneId: pid('p4'), title: exe }, 7)
+    const title = container.querySelector('[data-pane-id="p4"] .pane-title')
+    expect(title?.textContent).toBe('pwsh')
+    expect(title?.getAttribute('title')).toBe(exe)
+    // ...y un título puesto por el programa (OSC 0/2) se respeta tal cual, sin interpretarlo como HTML.
+    client.emit('pane.title', { paneId: pid('p4'), title: '<b>user@host: ~/proyecto</b>' }, 8)
+    expect(title?.textContent).toBe('<b>user@host: ~/proyecto</b>')
+    expect(container.querySelector('[data-pane-id="p4"] .pane-title b')).toBeNull()
     expect(tid('t1')).toBe('t1')
   })
 })

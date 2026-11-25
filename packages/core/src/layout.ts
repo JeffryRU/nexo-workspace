@@ -46,18 +46,28 @@ export function leaves(layout: Layout): PaneId[] {
   return out
 }
 
-/** Camino (índices de hijo desde la raíz) hasta la hoja `paneId`, o `null` si no está. */
+/**
+ * Camino (índices de hijo desde la raíz) hasta la hoja `paneId`, o `null` si no está. Cada nodo guarda solo
+ * su padre y su índice; copiar el camino en cada nodo era cuadrático en árboles profundos.
+ */
 export function pathOf(layout: Layout, paneId: PaneId): number[] | null {
-  const stack: { node: Layout; path: number[] }[] = [{ node: layout, path: [] }]
-  while (stack.length > 0) {
-    const item = stack.pop()
-    if (item === undefined) break
-    if (item.node.type === 'leaf') {
-      if (item.node.paneId === paneId) return item.path
-    } else {
-      for (let i = item.node.children.length - 1; i >= 0; i--) {
-        stack.push({ node: item.node.children[i] as Layout, path: [...item.path, i] })
+  const nodes: Layout[] = [layout]
+  const parents: number[] = [-1]
+  const indexes: number[] = [-1]
+  for (let at = 0; at < nodes.length; at++) {
+    const node = nodes[at] as Layout
+    if (node.type === 'leaf') {
+      if (node.paneId !== paneId) continue
+      const path: number[] = []
+      for (let cur = at; parents[cur] !== -1; cur = parents[cur] as number) {
+        path.push(indexes[cur] as number)
       }
+      return path.reverse()
+    }
+    for (let i = 0; i < node.children.length; i++) {
+      nodes.push(node.children[i] as Layout)
+      parents.push(at)
+      indexes.push(i)
     }
   }
   return null

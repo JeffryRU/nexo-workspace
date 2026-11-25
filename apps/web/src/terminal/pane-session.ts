@@ -20,6 +20,11 @@ export type PaneSessionDeps = {
   clearTimer?: (handle: unknown) => void
   observe: (el: HTMLElement, cb: () => void) => () => void
   resizeDebounceMs?: number
+  /**
+   * Espera antes de cargar WebGL en una terminal que acaba de mostrarse (0 = de inmediato). Crear el contexto
+   * y el atlas de glifos cuesta ~20 ms: se paga después de pintar la pestaña y solo si se queda a la vista.
+   */
+  webglDelayMs?: number
 }
 
 const DEFAULT_SIZE = { cols: 80, rows: 24 }
@@ -43,6 +48,7 @@ export class PaneSession {
   #host: HTMLElement | undefined
   #spawnRequested = false
   #disposed = false
+  #webglTimer: unknown
 
   constructor(deps: PaneSessionDeps) {
     this.#d = deps
@@ -73,6 +79,7 @@ export class PaneSession {
     this.#stopObserving?.()
     this.#stopObserving = undefined
     this.#host = undefined
+    this.#cancelWebgl()
     this.xterm.setWebgl(false)
     this.xterm.unmount()
   }
@@ -88,12 +95,34 @@ export class PaneSession {
   #applyVisible(): void {
     if (this.#host === undefined) return
     if (!this.#visible) {
+      this.#cancelWebgl()
       this.xterm.setWebgl(false)
       return
     }
     this.xterm.fit()
-    this.xterm.setWebgl(true)
+    this.#scheduleWebgl()
     this.#maybeSpawn()
+  }
+
+  #scheduleWebgl(): void {
+    const delay = this.#d.webglDelayMs ?? 0
+    if (delay <= 0) {
+      this.xterm.setWebgl(true)
+      return
+    }
+    if (this.#webglTimer !== undefined || this.xterm.webglActive) return
+    const timer = this.#d.timer ?? ((cb, ms) => setTimeout(cb, ms))
+    this.#webglTimer = timer(() => {
+      this.#webglTimer = undefined
+      if (!this.#disposed && this.#visible && this.#host !== undefined) this.xterm.setWebgl(true)
+    }, delay)
+  }
+
+  #cancelWebgl(): void {
+    if (this.#webglTimer === undefined) return
+    const clear = this.#d.clearTimer ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>))
+    clear(this.#webglTimer)
+    this.#webglTimer = undefined
   }
 
   /** El panel (re)apunta a una terminal del daemon, o a ninguna. */
@@ -207,6 +236,7 @@ export class PaneSession {
     this.#disposed = true
     this.#stopObserving?.()
     this.#detachHub?.()
+    this.#cancelWebgl()
     if (this.#resizeTimer !== undefined) {
       const clear = this.#d.clearTimer ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>))
       clear(this.#resizeTimer)

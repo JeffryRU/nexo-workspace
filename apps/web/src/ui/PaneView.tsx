@@ -3,6 +3,7 @@ import { createMemo, Show } from 'solid-js'
 import { useModel } from '../app/model.tsx'
 import { es } from '../i18n/es.ts'
 import { findPaneTab } from '../state/store.ts'
+import { paneTitle } from '../terminal/title.ts'
 import { AttentionDot } from './parts.tsx'
 import { TerminalView } from './TerminalView.tsx'
 import './PaneView.css'
@@ -12,6 +13,7 @@ export function PaneView(props: { paneId: PaneId }) {
   const located = createMemo(() => findPaneTab(store.state, props.paneId))
   const pane = () => located()?.tab.panes.find((p) => p.id === props.paneId)
   const focused = () => located()?.tab.focusedPaneId === props.paneId
+  const title = () => paneTitle(pane()?.title ?? '')
   const swapping = () => ui.swapSource() !== undefined
 
   const swap = () => {
@@ -30,14 +32,14 @@ export function PaneView(props: { paneId: PaneId }) {
           class="pane"
           classList={{ focused: focused(), 'swap-source': ui.swapSource() === props.paneId }}
           data-pane-id={props.paneId}
-          aria-label={p().title}
+          aria-label={title().label}
           onPointerDown={() => void actions.focusPane(props.paneId)}
           onFocusIn={() => void actions.focusPane(props.paneId)}
         >
           <header class="pane-header">
             <AttentionDot attention={p().attention} />
-            <span class="pane-title ellipsis" title={p().title}>
-              {p().title}
+            <span class="pane-title ellipsis" title={title().full}>
+              {title().label}
             </span>
             <span class="pane-actions">
               <button
