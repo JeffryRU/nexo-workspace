@@ -1,10 +1,16 @@
 import { PaneId, TerminalId } from '@nexo/contracts'
 import { createContext, useContext } from 'solid-js'
+import { AgentPaneModel } from '../agent/pane-model.ts'
+import { AgentRegistry } from '../agent/registry.ts'
 import type { DaemonSession } from '../daemon/session.ts'
 import { PaneSession, SessionRegistry } from '../terminal/pane-session.ts'
 import type { XtermFactory } from '../terminal/xterm-adapter.ts'
 
-export type AppModel = DaemonSession & { sessions: SessionRegistry }
+export type AppModel = DaemonSession & {
+  sessions: SessionRegistry
+  agents: AgentRegistry
+  frame: (cb: () => void) => void
+}
 
 const defaultFrame = (cb: () => void) => {
   if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => cb())
@@ -48,7 +54,16 @@ export function createAppModel(
         webglDelayMs: options.webglDelayMs ?? WEBGL_DELAY_MS,
       }),
   )
-  return { ...session, sessions }
+  const agents = new AgentRegistry(
+    (paneId) =>
+      new AgentPaneModel({
+        paneId,
+        getClient: () => session.agentClient(),
+        frame,
+        onError: (message) => session.ui.showError(message),
+      }),
+  )
+  return { ...session, sessions, agents, frame }
 }
 
 const Context = createContext<AppModel>()

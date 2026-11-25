@@ -9,7 +9,8 @@ Estado: **F2 en curso**. Terminales, daemon, CLI, web y escritorio (F0 y F1) est
 va el modelo normalizado de agentes: bloques, protocolo `agent.*` y `AgentProviderPort` con su falso (F2.1), el servicio de agentes de
 `core` (F2.2) y el adaptador `provider-claude` (F2.3, Claude Agent SDK; se autentica con
 `ANTHROPIC_API_KEY` o `CLAUDE_CODE_OAUTH_TOKEN` del entorno del daemon, ver «Proveedor Claude» en
-`docs/ARCHITECTURE.md`); aún no hay panel de agente (ver [`docs/ROADMAP.md`](docs/ROADMAP.md)).
+`docs/ARCHITECTURE.md`), el daemon, el cliente y la CLI de agentes (F2.4) y el panel de agente de la interfaz web
+(F2.5; ver [`docs/ROADMAP.md`](docs/ROADMAP.md)).
 
 ## Requisitos
 
@@ -75,6 +76,14 @@ nexo agent send <id> "hola"
 nexo agent attach <id>
 ```
 
+**En la interfaz.** El botón ✦ de la barra de pestañas (o `Alt+Shift+A`) abre una pestaña de agente; `Alt+Shift+E` (o ✦ en la
+cabecera del panel) divide el panel actual con un agente. El panel muestra la conversación como un documento
+virtualizado (Markdown seguro, razonamiento y acciones plegables con diff y salida, permisos y preguntas en línea,
+plan, errores y uso), y un redactor con chips de proveedor, modelo, esfuerzo, permisos y carpeta (se fijan al enviar el
+primer mensaje). Intro envía, Mayús+Intro hace un salto de línea, Esc interrumpe; en un permiso pendiente, `1`-`4`
+eligen la opción y `Alt+Mayús+↓/↑` saltan entre los pendientes. Para probarlo sin gastar nada: `NEXO_AGENT_PROVIDERS=fake pnpm dev:web`
+(responde `Eco: …`; las palabras `permiso`, `pregunta`, `largo` y `lento` provocan cada caso).
+
 Sin credenciales el agente responde con un bloque de error que explica las dos opciones. `NEXO_CLAUDE_EXECUTABLE`
 apunta a otro ejecutable de Claude Code (por omisión se usa el que trae el SDK). Para probar sin gastar nada, el
 daemon acepta `NEXO_AGENT_PROVIDERS=fake` (proveedor determinista de pruebas; `nexo agent new --provider fake`);
@@ -88,7 +97,7 @@ packages/core        dominio, árbol de distribución, casos de uso y puertos (s
 packages/testkit     falsos de los puertos, generadores fast-check y suites de conformidad
 packages/client      SDK tipado del protocolo (esqueleto)
 apps/daemon          raíz de composición (esqueleto)
-apps/web             interfaz SolidJS + Vite (esqueleto)
+apps/web             interfaz SolidJS + Vite (terminales y panel de agente)
 apps/cli            CLI `nexo`
 apps/mcp            cliente MCP (esqueleto)
 ```

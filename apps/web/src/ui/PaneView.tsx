@@ -1,5 +1,6 @@
 import type { PaneId } from '@nexo/contracts'
 import { createMemo, Show } from 'solid-js'
+import { AgentPanel } from '../agent/AgentPanel.tsx'
 import { useModel } from '../app/model.tsx'
 import { es } from '../i18n/es.ts'
 import { findPaneTab } from '../state/store.ts'
@@ -13,7 +14,11 @@ export function PaneView(props: { paneId: PaneId }) {
   const located = createMemo(() => findPaneTab(store.state, props.paneId))
   const pane = () => located()?.tab.panes.find((p) => p.id === props.paneId)
   const focused = () => located()?.tab.focusedPaneId === props.paneId
-  const title = () => paneTitle(pane()?.title ?? '')
+  const isAgent = () => pane()?.kind === 'agent'
+  const title = () => {
+    const t = paneTitle(pane()?.title ?? '')
+    return isAgent() && t.label === '' ? { label: es.agent.paneTitle, full: es.agent.paneTitle } : t
+  }
   const swapping = () => ui.swapSource() !== undefined
 
   const swap = () => {
@@ -54,6 +59,15 @@ export function PaneView(props: { paneId: PaneId }) {
               <button
                 type="button"
                 class="icon-button subtle"
+                title={es.agent.splitWithAgent}
+                aria-label={es.agent.splitWithAgent}
+                onClick={() => void actions.splitAgent(props.paneId, 'row')}
+              >
+                ✦
+              </button>
+              <button
+                type="button"
+                class="icon-button subtle"
                 title={es.pane.splitDown}
                 aria-label={es.pane.splitDown}
                 onClick={() => void actions.splitPane(props.paneId, 'column')}
@@ -82,14 +96,28 @@ export function PaneView(props: { paneId: PaneId }) {
               </button>
             </span>
           </header>
-          <TerminalView
-            paneId={props.paneId}
-            terminalId={p().terminalId}
-            exit={
-              p().terminalId === undefined ? undefined : store.state.exits[p().terminalId as string]
+          <Show
+            when={p().kind === 'agent'}
+            fallback={
+              <TerminalView
+                paneId={props.paneId}
+                terminalId={p().terminalId}
+                exit={
+                  p().terminalId === undefined
+                    ? undefined
+                    : store.state.exits[p().terminalId as string]
+                }
+                focused={focused()}
+              />
             }
-            focused={focused()}
-          />
+          >
+            <AgentPanel
+              paneId={props.paneId}
+              sessionId={p().agentSessionId}
+              defaultCwd={located()?.workspace.cwd}
+              focused={focused()}
+            />
+          </Show>
         </section>
       )}
     </Show>

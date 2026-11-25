@@ -59,12 +59,19 @@ export function createActions(deps: {
   const { store, ui } = deps
   const spawning = new Set<string>()
 
-  async function run<T>(fn: (c: CallClient) => Promise<T>): Promise<T | undefined> {
+  /** `quietMissing`: un `NOT_FOUND` (la terminal ya no existe) no es un error para el usuario. */
+  async function run<T>(
+    fn: (c: CallClient) => Promise<T>,
+    options: { quietMissing?: boolean } = {},
+  ): Promise<T | undefined> {
     const client = deps.client()
     if (client === undefined) return undefined
     try {
       return await fn(client)
     } catch (error) {
+      if (options.quietMissing === true && (error as { code?: unknown }).code === 'NOT_FOUND') {
+        return undefined
+      }
       const message = error instanceof Error ? error.message : String(error)
       ui.showError(format(es.errors.generic, { message }))
       return undefined
@@ -103,6 +110,26 @@ export function createActions(deps: {
     async newTab(workspaceId: WorkspaceId | undefined = currentWorkspaceId()): Promise<void> {
       if (workspaceId === undefined) return
       await run((c) => c.call('tab.create', { workspaceId }))
+    },
+
+    /** Pestaña nueva con un panel de agente (`tab.create` no admite `kind`: se divide y se cierra el panel inicial). */
+    async newAgentTab(workspaceId: WorkspaceId | undefined = currentWorkspaceId()): Promise<void> {
+      if (workspaceId === undefined) return
+      const created = await run((c) => c.call('tab.create', { workspaceId }))
+      const initial = created?.tab.panes[0]
+      if (initial === undefined) return
+      const split = await run((c) =>
+        c.call('pane.split', { paneId: initial.id, direction: 'row', kind: 'agent' }),
+      )
+      if (split === undefined) return
+      await run((c) => c.call('pane.close', { paneId: initial.id }))
+      await actions.focusPane(split.pane.id)
+    },
+
+    /** Divide un panel y deja un panel de agente al lado. */
+    async splitAgent(paneId: PaneId, direction: SplitDirection): Promise<void> {
+      const split = await run((c) => c.call('pane.split', { paneId, direction, kind: 'agent' }))
+      if (split !== undefined) await actions.focusPane(split.pane.id)
     },
 
     async renameTab(tabId: TabId, title: string): Promise<void> {
@@ -171,7 +198,7 @@ export function createActions(deps: {
       if (spawning.has(paneId)) return
       spawning.add(paneId)
       try {
-        await run((c) => c.call('terminal.spawn', { paneId, cols, rows }))
+        await run((c) => c.call('terminal.spawn', { paneId, cols, rows }), { quietMissing: true })
       } finally {
         spawning.delete(paneId)
       }
@@ -179,12 +206,16 @@ export function createActions(deps: {
 
     async write(terminalId: TerminalId, data: string): Promise<void> {
       for (const part of chunkText(data, WRITE_CHUNK_CHARS)) {
-        await run((c) => c.call('terminal.write', { terminalId, data: part }))
+        await run((c) => c.call('terminal.write', { terminalId, data: part }), {
+          quietMissing: true,
+        })
       }
     },
 
     async resizeTerminal(terminalId: TerminalId, cols: number, rows: number): Promise<void> {
-      await run((c) => c.call('terminal.resize', { terminalId, cols, rows }))
+      await run((c) => c.call('terminal.resize', { terminalId, cols, rows }), {
+        quietMissing: true,
+      })
     },
   }
   return actions

@@ -94,6 +94,15 @@ export function TabBar() {
       >
         +
       </button>
+      <button
+        type="button"
+        class="icon-button"
+        title={`${es.agent.newTab} (${ui.keymap['agent.new-tab'][0] ?? ''})`}
+        aria-label={es.agent.newTab}
+        onClick={() => void actions.newAgentTab()}
+      >
+        ✦
+      </button>
     </div>
   )
 }

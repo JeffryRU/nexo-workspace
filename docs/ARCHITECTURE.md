@@ -610,6 +610,62 @@ Implementación de la F1.6 (`apps/web/src`):
 - **Desarrollo:** `pnpm dev:web` arranca el daemon (`NEXO_DEV=1`, puerto efímero, estado en un directorio temporal)
   y Vite en 5173, e imprime la URL con el token.
 
+### Panel de agente (F2.5)
+
+Un panel con `kind: 'agent'` pinta `AgentPanel` (`apps/web/src/agent/`) en lugar de una terminal. Se crea desde la
+interfaz con ✦ en la barra de pestañas o `Alt+Shift+A` (`tab.create` + `pane.split { kind: 'agent' }` + cerrar el panel
+inicial, igual que la CLI) y con ✦ en la cabecera de un panel o `Alt+Shift+E` (divide el panel con un agente).
+
+- **Estado.** `AgentPaneModel` (uno por panel, en `AppModel.agents`, liberado al cerrarse el panel) envuelve a
+  `AgentDocument`: abre la sesión de `pane.agentSessionId` con el cliente actual (el documento se recompone solo
+  tras reconectar). Los eventos del documento no tocan la interfaz directamente: se acumulan y **se vuelcan una vez por
+  `requestAnimationFrame`**, y cada bloque tiene su propia señal de Solid, así que un delta solo reactualiza su bloque
+  (una ráfaga de 3 000 deltas es un solo fotograma). El estado de plegado de cada bloque vive en el modelo, no en el
+  componente, para sobrevivir a la virtualización.
+- **Virtualización** (`VirtualModel` + `VirtualList`). Alturas variables: cada bloque arranca con una estimación y pasa a su
+  medida real (`ResizeObserver`); las sumas acumuladas se recalculan de forma perezosa y la ventana se halla por búsqueda
+  binaria (5 000 bloques: decenas de nodos en el DOM). Anclaje al final mientras llega contenido salvo que el usuario haya
+  subido (umbral 32 px; aparece «Ir al final»); si cambia la altura de un bloque por encima de la vista se compensa el
+  `scrollTop` para que no salte. Un panel oculto (pestaña no activa) no mide (altura 0 se ignora) ni se reajusta. Es un `feed`
+  ARIA con `aria-posinset`/`aria-setsize` porque casi todos los bloques no están en el DOM.
+- **Markdown seguro** (`markdown.tsx`). `marked` solo se usa como **analizador** (`Lexer.lex`); las fichas se convierten en nodos
+  de Solid, de modo que no existe ninguna cadena HTML ni `innerHTML`. El HTML crudo (en bloque o en línea) se muestra como texto;
+  las imágenes **nunca se cargan** (se muestra `[Imagen: alt]`); un enlace solo se activa si `safeHref` lo acepta (URL absoluta
+  `http`, `https` o `mailto`, sin credenciales; los caracteres invisibles que los navegadores ignoran dentro del esquema se quitan
+  antes de comprobar), con `rel="noopener noreferrer nofollow"` y el destino real en el `title`. Los bloques de código no se
+  resaltan (decisión de tamaño; solo etiqueta de lenguaje y botón de copiar). Límites: más de 256 KiB, anidamiento de más de 24
+  niveles o un fallo del analizador → texto plano; hasta 12 000 caracteres se analiza el texto entero y por encima se parte
+  en trozos por líneas en blanco (sin cortar bloques de código vallados) porque el énfasis de `marked` es cuadrático con
+  entradas patológicas: un trozo sin código de más de 8 000 caracteres se muestra como texto. Los trozos ya terminados conservan
+  su ficha, así que mientras el texto crece solo se repinta el final.
+- **Salida de herramientas** (`ansi.ts`). Solo se reconoce SGR (negrita, tenue, cursiva, subrayado, 16 colores como clases
+  `ansi-fg-N`; 256 colores y 24 bits se consumen sin efecto); se descartan cursor, borrado, OSC (títulos, enlaces), DCS y todo
+  control (salvo `\n` y `\t`); `\r` suelto reescribe la línea. Se pintan como mucho las últimas 1 500 líneas (y 2 000 de un diff).
+  El diff unificado (`diff.ts`) se clasifica línea a línea (añadida, borrada, hunk, cabecera).
+- **Bloques.** `user` (burbuja de texto), `text` (Markdown, cursor mientras no está completo, aviso si está recortado), `reasoning`
+  (plegado), `action` (plegable: estado `pending`/`running`/`ok`/`error`, tipo, título, código de salida y duración; cuerpo con ruta,
+  entrada, diff, salida), `permission` (opciones en línea: clic, teclas `1`-`9`, flechas/Inicio/Fin mueven el foco; resuelto muestra
+  la opción elegida), `question` (radio o casillas, texto libre si se permite, validación con `validateAnswers` antes de habilitar
+  «Responder»), `plan`, `error` (`role="alert"`) y `usage` (tokens, costo, duración). Con la sesión en `error` o cerrada los
+  permisos y las preguntas quedan deshabilitados.
+- **Teclado y accesibilidad.** `Alt+Mayús+↓/↑` salta entre los permisos y preguntas pendientes (desplaza el documento hasta el bloque
+  y lo enfoca); un aviso bajo el documento cuenta los pendientes; una región `status` anuncia el estado de la sesión. Los atajos
+  globales siguen funcionando desde el redactor (las teclas sin modificador no).
+- **Redactor.** Intro envía, Mayús+Intro (o una composición de IME) salta de línea, Esc interrumpe; el botón ■ aparece mientras
+  `working` o `needs-input`. Solo se puede enviar en `idle`/`done` (si no, el daemon responde `CONFLICT`); en `error` o cerrada el
+  redactor se deshabilita. Antes de existir la sesión muestra los chips de proveedor, modelo, esfuerzo, permisos y carpeta: salen de
+  `agent.providers`, que **se pide con `@tanstack/solid-query` solo mientras hace falta elegir** (panel sin sesión), con caché de
+  5 minutos y un plazo de 60 s (Claude real puede tardar más de 10 s), sin bloquear el redactor; el primer envío hace
+  `agent.create` (con esas elecciones, que quedan fijas) y luego `agent.send`. Con sesión, los chips son de solo lectura.
+- **Pruebas.** Unitarias y adversariales (Markdown hostil con XSS, `javascript:`/`data:`, HTML, imágenes remotas, citas
+  anidadas y entradas patológicas; ANSI hostil; documentos de 5 000 bloques; ráfagas de 3 000 deltas; bloques truncados), propiedades
+  con fast-check (`safeHref`, `stripAnsi`, `VirtualModel`, `parseDiff`, Markdown inerte) y E2E con el daemon y el proveedor falso
+  (`e2e/agent.spec.ts`: conversación, permiso, pregunta, interrupción). `NEXO_CAPTURAS=1 pnpm e2e -g capturas` regenera
+  `docs/capturas/f2-5-*.png`.
+- **Para la F2.6** (atención en la barra y notificaciones): el estado de atención ya llega a `Pane.attention` por `pane.attention`
+  (barra lateral y pestañas ya pintan el punto); el panel además conoce `status` y `pendingIds()` del modelo de su panel
+  (`app.agents.get(paneId)`), que es lo que haría falta para contar pendientes por pestaña.
+
 ## Shell de escritorio (apps/desktop, F1.7)
 
 Tauri 2 (`pnpm --filter @nexo/desktop dev`; en desarrollo carga Vite en 5173, en `build` `apps/web/dist`). Módulos Rust

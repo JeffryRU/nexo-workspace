@@ -57,6 +57,12 @@ export function runShortcut(action: ShortcutAction, model: AppModel): void {
     case 'pane.split-down':
       if (focused !== undefined) void actions.splitPane(focused as PaneId, 'column')
       return
+    case 'agent.new-tab':
+      void actions.newAgentTab(workspace?.id)
+      return
+    case 'agent.split-right':
+      if (focused !== undefined) void actions.splitAgent(focused as PaneId, 'row')
+      return
     case 'tab.next':
       cycle(1)
       return
