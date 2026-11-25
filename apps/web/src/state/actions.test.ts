@@ -144,6 +144,32 @@ describe('acciones', () => {
     expect(ui.error()).toBeUndefined()
   })
 
+  it('una terminal que ya no existe (NOT_FOUND) no se muestra como error; otros fallos sí', async () => {
+    const { actions, client, ui } = setup()
+    const missing = Object.assign(new Error('terminal inexistente'), { code: 'NOT_FOUND' })
+    for (const method of ['terminal.spawn', 'terminal.write', 'terminal.resize']) {
+      client.handlers.set(method, () => {
+        throw missing
+      })
+    }
+    await actions.spawn(pid('a'), 80, 24)
+    await actions.write(xid('x1'), 'hola')
+    await actions.resizeTerminal(xid('x1'), 80, 24)
+    expect(ui.error()).toBeUndefined()
+    // El mismo NOT_FOUND en una acción que no es de terminal sí se avisa.
+    client.handlers.set('tab.close', () => {
+      throw missing
+    })
+    await actions.closeTab(tid('t1'))
+    expect(ui.error()).toContain('inexistente')
+    ui.dismissError()
+    client.handlers.set('terminal.resize', () => {
+      throw new Error('otro fallo')
+    })
+    await actions.resizeTerminal(xid('x1'), 80, 24)
+    expect(ui.error()).toContain('otro fallo')
+  })
+
   it('sin cliente (reconectando) las acciones no hacen nada ni fallan', async () => {
     const store = createAppStore()
     const actions = createActions({ client: () => undefined, store, ui: createUiState() })
