@@ -68,7 +68,14 @@ test('cambiar de pestaña con 10 terminales activas: p95 < 16 ms', async ({ stac
   const samples = await app.evaluate(() => globalThis.__NEXO_PERF__)
   const work = summarize(samples?.tabSwitch ?? [])
   const raw = summarize(samples?.tabSwitchRaw ?? [])
-  const result = { tabs: TABS, switches: SWITCHES, emitMs: EMIT_MS, limitP95Ms: TAB_SWITCH_P95_MS, work, raw }
+  const result = {
+    tabs: TABS,
+    switches: SWITCHES,
+    emitMs: EMIT_MS,
+    limitP95Ms: TAB_SWITCH_P95_MS,
+    work,
+    raw,
+  }
   save('tab-switch', result)
   console.log(`tab-switch (ms): ${JSON.stringify(result)}`)
 
