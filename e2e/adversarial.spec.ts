@@ -59,7 +59,10 @@ test.describe('adversarial', () => {
     const seen: string[] = []
     app.on('console', (m) => seen.push(m.text()))
     app.on('pageerror', (e) => seen.push(String(e)))
-    app.on('request', (r) => seen.push(r.url()))
+    app.on('request', (r) => {
+      // La navegación inicial lleva el token en la dirección (la abre quien la escribe); no cuenta.
+      if (!r.isNavigationRequest()) seen.push(r.url())
+    })
 
     await app.goto(`http://localhost:5173/?port=${stack.port}&t=${wrong}`)
     await expect(app.getByRole('alert').or(app.getByRole('status')).first()).toBeVisible()
@@ -80,31 +83,21 @@ test.describe('adversarial', () => {
   test('30 paneles en una pestaña siguen siendo usables', async ({ stack, app }) => {
     const first = await stack.newTab('muchos', ECHO_SCRIPT)
     const panes = [first.paneId]
-    // Una columna de 5 filas y, en cada fila, 5 divisiones a la derecha: 30 paneles en total.
-    for (let r = 1; r < 5; r++) {
-      const p = await stack.json<{ paneId: string }>([
-        'split',
-        first.paneId,
-        '--down',
-        '--',
-        process.execPath,
-        '-e',
-        ECHO_SCRIPT,
-      ])
-      panes.push(p.paneId)
-    }
-    for (const row of [...panes]) {
-      for (let c = 0; c < 5; c++) {
-        const p = await stack.json<{ paneId: string }>([
+    // Cada ronda divide todos los paneles una vez (derecha, abajo, derecha...): reparto parecido al de una
+    // cuadrícula, hasta llegar a 30 paneles.
+    for (let round = 0; panes.length < 30; round++) {
+      for (const id of [...panes]) {
+        if (panes.length >= 30) break
+        const created = await stack.json<{ paneId: string }>([
           'split',
-          row,
-          '--right',
+          id,
+          round % 2 === 0 ? '--right' : '--down',
           '--',
           process.execPath,
           '-e',
           ECHO_SCRIPT,
         ])
-        panes.push(p.paneId)
+        panes.push(created.paneId)
       }
     }
     expect(panes).toHaveLength(30)

@@ -166,6 +166,7 @@ export async function bufferText(page: Page, paneId: string): Promise<string | n
 
 declare global {
   // Misma declaración que apps/web (solo existe con `__NEXO_E2E__`).
+  var __NEXO_PERF__: { tabSwitch: number[]; tabSwitchRaw: number[] } | undefined
   var __NEXO_E2E__: boolean | undefined
   var __NEXO_E2E_TERMS__: { element: HTMLElement; text: () => string }[] | undefined
 }

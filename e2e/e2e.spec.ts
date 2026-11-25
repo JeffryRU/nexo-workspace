@@ -70,24 +70,34 @@ test.describe('CLI y ventana sobre el mismo daemon', () => {
     await expect(app.getByRole('tab')).toHaveCount(0)
   })
 
-  test('el daemon se cae: la interfaz muestra «Reconectando» y se recupera al reiniciarlo', async ({
+  test('el daemon se cae: la interfaz muestra «Reconectando»; con el daemon nuevo hace falta abrirla con su token', async ({
     stack,
     app,
   }) => {
     const created = await stack.newTab('antes', ECHO_SCRIPT)
     await app.goto(stack.url())
     await expectTerminal(app, created.paneId, 'LISTO')
+    const oldToken = stack.token
 
     await stack.killDaemon()
-    await expect(app.getByRole('status').filter({ hasText: 'Reconectando' }).first()).toBeVisible()
+    const banner = app.getByRole('status').filter({ hasText: 'Reconectando' })
+    await expect(banner.first()).toBeVisible()
 
-    // Mismo directorio de estado y mismo puerto: el cliente reintenta con espera creciente y vuelve solo.
+    // Hoy: cada arranque del daemon genera un token nuevo, así que la página abierta (con el token viejo)
+    // sigue reintentando sin poder volver; no se recupera sola. Se recupera abriéndola con el token nuevo.
     await stack.startDaemon()
-    await expect(app.getByRole('status').filter({ hasText: 'Reconectando' })).toHaveCount(0, {
-      timeout: 60_000,
-    })
-    // El daemon de la F1 no persiste el estado: la interfaz refleja el daemon nuevo (sin pestañas) y
-    // vuelve a ser operable.
+    expect(stack.token).not.toBe(oldToken)
+    await sleep(3000)
+    await expect(
+      app
+        .getByRole('status')
+        .filter({ hasText: /Reconectando|Sin conexión/ })
+        .first(),
+    ).toBeVisible()
+
+    await app.goto(stack.url())
+    await expect(app.getByRole('status').filter({ hasText: 'Reconectando' })).toHaveCount(0)
+    // El daemon de la F1 no persiste el estado: el nuevo arranca vacío y vuelve a ser operable.
     await expect(app.getByRole('tab')).toHaveCount(0)
     const again = await stack.newTab('despues', ECHO_SCRIPT)
     await expect(app.getByRole('tab', { name: 'despues' })).toBeVisible()

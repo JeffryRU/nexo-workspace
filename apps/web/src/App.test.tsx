@@ -295,6 +295,17 @@ describe('paneles y divisores', () => {
     expect(container.querySelectorAll('#tabpanel-t1 [data-pane-id]')).toHaveLength(4)
     client.emit('pane.title', { paneId: pid('p4'), title: 'vim' }, 6)
     expect(container.querySelector('[data-pane-id="p4"] .pane-title')?.textContent).toBe('vim')
+    // Una ruta de ejecutable se muestra con su nombre corto y la ruta completa en el tooltip...
+    const exe =
+      'C:\\Program Files\\WindowsApps\\Microsoft.PowerShell_7.7.0.0_x64__8wekyb3d8bbwe\\pwsh.exe'
+    client.emit('pane.title', { paneId: pid('p4'), title: exe }, 7)
+    const title = container.querySelector('[data-pane-id="p4"] .pane-title')
+    expect(title?.textContent).toBe('pwsh')
+    expect(title?.getAttribute('title')).toBe(exe)
+    // ...y un título puesto por el programa (OSC 0/2) se respeta tal cual, sin interpretarlo como HTML.
+    client.emit('pane.title', { paneId: pid('p4'), title: '<b>user@host: ~/proyecto</b>' }, 8)
+    expect(title?.textContent).toBe('<b>user@host: ~/proyecto</b>')
+    expect(container.querySelector('[data-pane-id="p4"] .pane-title b')).toBeNull()
     expect(tid('t1')).toBe('t1')
   })
 })

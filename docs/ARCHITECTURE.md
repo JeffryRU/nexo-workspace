@@ -367,8 +367,12 @@ se ejecuta como proceso hijo contra el mismo estado. El texto de las terminales 
 (`__NEXO_E2E_TERMS__`, que solo existe si la página se carga con `__NEXO_E2E__ = true`). Una recarga normal (F5)
 muestra «Falta el token»: el token se borra de la barra de direcciones y nunca se guarda, así que las pruebas
 recargan con la dirección completa. Si el daemon cae, la interfaz muestra «Conexión perdida. Reconectando…» y
-reintenta con espera creciente hasta volver; el daemon de la F1 no persiste el estado, así que tras reiniciarlo
-aparece vacío. Umbrales: local p95 < 16 ms; en CI (runners compartidos) p95 < 32 ms.
+reintenta con espera creciente; como cada arranque del daemon genera un token nuevo, la página abierta no puede
+volver sola y hay que abrirla con el token nuevo (`pnpm dev:web` lo imprime; el shell de escritorio lo pide de
+nuevo con `daemon_info`). El daemon de la F1 no persiste el estado: tras reiniciarlo aparece vacío.
+Salida masiva: la salida de 20 MB no congela la interfaz (mayor tarea larga 70–105 ms, criterio < 150 ms; memoria de
+la página estable en ~6 MB tras recolectar) pero, al superar la capacidad de la conexión, el daemon descarta
+salida (`client.resync`) y la interfaz tarda en ponerse al día (ver el issue de seguimiento). Umbrales: local p95 < 16 ms; en CI (runners compartidos) p95 < 32 ms.
 
 ## Convenciones
 
