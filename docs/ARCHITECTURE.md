@@ -154,6 +154,10 @@ Todo en `packages/core`, sin I/O; el daemon (F1.3) solo los conecta con adaptado
   Windows `%LOCALAPPDATA%\Nexo`) con `token` (600) y `daemon.json`, ambos escritos de forma atómica (temporal +
   `rename`). Al salir (SIGINT, SIGTERM, SIGHUP y SIGBREAK, que en Windows cubren el cierre de la consola, y
   `beforeExit`) mata todas las terminales, cierra las conexiones y borra `daemon.json`, `token` y el cerrojo.
+- **Shell por omisión:** si `terminal.spawn` llega sin `cmd`, el daemon (`apps/daemon/src/shell.ts`) decide: `NEXO_SHELL`
+  (ejecutable existente, se toma entero: no se separan argumentos; si no existe se avisa en el log y se ignora); Windows
+  `pwsh.exe` si está en el PATH, si no `powershell.exe`; Linux `$SHELL` (absoluta y existente) o `/bin/sh`. Core lo recibe
+  inyectado (`TerminalServiceConfig.defaultCommand`); la CLI y la web no mandan `cmd` por omisión.
 - **Logs:** pasan por el redactor (`Authorization`/`Bearer`, `sk-…`, `?t=`/`token=`, el subprotocolo
   `nexo.token.…`, campos con nombre sensible y el token del daemon, literal y codificado). Nunca se registra el token.
 
@@ -258,7 +262,7 @@ Implementación de la F1.6 (`apps/web/src`):
 
 - **Conexión** (`daemon/`): `getDaemonInfo()` tiene dos fuentes que se eligen en tiempo de ejecución: navegador/dev
   (lee `?port=&t=`, borra el token de la barra con `history.replaceState` y solo lo guarda en memoria, nunca en
-  localStorage) y Tauri (`window.__TAURI__` presente → `invoke('daemon_info')`, pendiente de F1.7).
+  localStorage) y Tauri (`window.__TAURI__` presente → `invoke('daemon_info')`, F1.7).
   `createDaemonSession` conecta, se suscribe, pide `snapshot` (por `@tanstack/solid-query`) y, con `autoResync`,
   reconstruye el estado en cada `resync`.
 - **Estado** (`state/`): reductor puro `reduce(estado, evento)` + store de Solid con `reconcile`; ignora `seq` ya
@@ -278,6 +282,26 @@ Implementación de la F1.6 (`apps/web/src`):
   divisor entre dos subárboles (p. ej. una cuadrícula 2×2) no se puede arrastrar todavía y se muestra deshabilitado.
 - **Desarrollo:** `pnpm dev:web` arranca el daemon (`NEXO_DEV=1`, puerto efímero, estado en un directorio temporal)
   y Vite en 5173, e imprime la URL con el token.
+
+## Shell de escritorio (apps/desktop, F1.7)
+
+Tauri 2 (`pnpm --filter @nexo/desktop dev`; en desarrollo carga Vite en 5173, en `build` `apps/web/dist`). Módulos Rust
+pequeños y probados con `cargo test` (`apps/desktop/src-tauri/src`):
+
+- `state_dir`: misma resolución que el daemon (`NEXO_STATE_DIR`, Linux XDG, Windows `%LOCALAPPDATA%Nexo`).
+- `discovery` + `health`: lee y valida `daemon.json` y `token` con los mismos límites que `@nexo/client/node` y
+  comprueba `GET /health` con `X-Nexo-Daemon: 1` mediante un cliente HTTP/1.1 mínimo sobre `TcpStream` (sin crates).
+- `launcher`: si no hay daemon vivo lo lanza **desacoplado** (Windows `CREATE_NO_WINDOW | DETACHED_PROCESS`; Unix
+  `setsid`) con `node apps/daemon/src/main.ts` (`NEXO_NODE`, `NEXO_DAEMON_ENTRY`, `NEXO_START_TIMEOUT_MS`), salida a
+  `daemon.log`, y espera a `/health`. En debug pone `NEXO_DEV=1` para aceptar el Origin de Vite. Node como sidecar: F6.
+- `navigation`: solo la interfaz propia navega; `http(s)` externo va al navegador del sistema; el resto se bloquea.
+- `settings`: `NEXO_SHORTCUT` (atajo global, por omisión `Ctrl+Alt+Space`; `none` lo desactiva) y
+  `NEXO_CLOSE_TO_TRAY=0` (cerrar la ventana la cierra de verdad).
+- Comando `daemon_info` → `{ port, token }`; el token nunca se registra. Instancia única (la segunda ejecución enfoca
+  la ventana), bandeja (Mostrar, Ocultar, Salir; salir no detiene el daemon) y cerrar oculta a la bandeja.
+- Seguridad: CSP con `connect-src ws://127.0.0.1:*` y nada externo, capability sin permisos (solo comandos propios),
+  sin `shell`/`fs` abiertos a la página. El WebView envía `Origin` `http://tauri.localhost` (o `https://`) en Windows y
+  `tauri://localhost` en Linux, todos permitidos por el daemon.
 
 ## Compañeros (mascotas)
 
