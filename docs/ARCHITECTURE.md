@@ -55,7 +55,7 @@ packages/contracts   esquemas zod del protocolo y del dominio compartido (sin de
         ▲
 packages/core        dominio + casos de uso + puertos (interfaces). Sin Node, sin I/O.
         ▲
-packages/adapters/*  implementan los puertos: pty-node, provider-claude, provider-codex, provider-acp,
+packages/adapters/*  implementan los puertos: pty-node, pty-host, provider-claude, provider-codex, provider-acp,
                      provider-antigravity, provider-ollama, store-fs, notifier, fs-sandbox, ...
         ▲
 apps/*               raíces de composición: daemon (une core + adaptadores), web, cli, mcp, desktop
@@ -121,11 +121,16 @@ Todo en `packages/core`, sin I/O; el daemon (F1.3) solo los conecta con adaptado
 ### Servidor del daemon (F1.3)
 
 `apps/daemon` (`pnpm --filter @nexo/daemon start`, Node 24 ejecuta el TS directamente) compone core con
-`@nexo/adapter-pty-node` y adaptadores propios en `apps/daemon/src/adapters/` (reloj real, `UuidIds` con
+`@nexo/adapter-pty-node`, `@nexo/adapter-pty-host` y adaptadores propios en `apps/daemon/src/adapters/` (reloj real, `UuidIds` con
 `crypto.randomUUID`, bus en memoria, logger JSON con redactor de secretos).
 
 - **Entorno** (validado con zod al arrancar): `NEXO_PORT` (4317; 0 = efímero), `NEXO_DEV`, `NEXO_STATE_DIR`,
-  `NEXO_LOG_LEVEL`, `NEXO_MAX_CONNECTIONS` (128), `NEXO_AUTH_TIMEOUT_MS` (5000).
+  `NEXO_LOG_LEVEL`, `NEXO_MAX_CONNECTIONS` (128), `NEXO_AUTH_TIMEOUT_MS` (5000), `NEXO_PTY_MODE` (`host` | `direct`; por omisión
+  `host` en Windows y `direct` en Linux/macOS).
+- **PTY aislados (issue #15, ADR 0004).** En modo `host`, node-pty corre en un proceso hijo (`@nexo/adapter-pty-host`, `child_process.fork` + IPC con
+  mensajes zod validados en ambos extremos). Si el código nativo de ConPTY se cae, muere solo el host: cada terminal afectada recibe
+  `terminal.exit` con `signal: "HOST_CRASH"` (y `exitCode` null), el daemon sigue vivo y el host se relanza para las terminales nuevas con
+  backoff exponencial y un tope (5 caídas rápidas seguidas abren el circuito 30 s; `terminal.spawn` falla con un error claro).
 - **Puerto ocupado:** si responde un daemon de Nexo (`GET /health` con la cabecera `X-Nexo-Daemon: 1`), el proceso
   sale con el mensaje "Nexo ya está corriendo" (código 0); si no, error claro (`PortInUseError`, código 1).
   Un cerrojo `daemon.lock` (`pid:nonce`, creado con `wx`) impide dos daemons sobre el mismo directorio de estado
@@ -376,7 +381,7 @@ su prueba adversarial no se fusiona.
 Cobertura mínima: `core` y `contracts` 90 %; adaptadores 80 %.
 
 **Pruebas pesadas (issue #18).** Las que arrancan procesos reales (daemon, CLI) o PTY reales
-(`*.integration.test.ts`, `cli.adversarial`, `daemon.adversarial`, `pty-node/test/**`, `discovery.adversarial`) corren
+(`*.integration.test.ts`, `cli.adversarial`, `daemon.adversarial`, `pty-node/test/**`, `pty-host/test/**`, `discovery.adversarial`) corren
 en un proyecto de Vitest aparte, `heavy` (lista en `vitest.config.ts`), con `fileParallelism: false`: un archivo a la
 vez. En Windows, ConPTY y el arranque de procesos se ralentizan mucho bajo carga y dos suites con PTY a la vez
 llegaron a tumbar un worker. El resto sigue en paralelo.

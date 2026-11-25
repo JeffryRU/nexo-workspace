@@ -12,7 +12,10 @@ export type PtySpawnOptions = {
 
 /**
  * Salida de un proceso. En Linux, un proceso matado por señal da `exitCode` null y `signal` con su
- * nombre; en Windows (ConPTY) no hay señales: `signal` siempre es null y `exitCode` es numérico.
+ * nombre; en Windows (ConPTY) no hay señales: `signal` es null y `exitCode` es numérico.
+ *
+ * Excepción: con el adaptador `pty-host`, si el proceso host murió (crash nativo) la terminal sale con
+ * `exitCode` null y `signal: "HOST_CRASH"`; no es una señal real del sistema.
  */
 export type PtyExit = { exitCode: number | null; signal: string | null }
 
