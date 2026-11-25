@@ -325,6 +325,8 @@ describe('TerminalService (adversarial): límites e ids', () => {
       tab: () => base.tab(),
       pane: () => base.pane(),
       terminal: () => 'siempre-igual' as TerminalId,
+      agentSession: () => base.agentSession(),
+      block: () => base.block(),
     }
     const t = await bootHarness({ ids: stuck })
     const second = t.workspaces.split({ paneId: t.paneId, direction: 'row' }).pane

@@ -1,3 +1,4 @@
+export * from './agent-service.ts'
 export * from './dispatcher.ts'
 export * from './errors.ts'
 export * from './layout.ts'
