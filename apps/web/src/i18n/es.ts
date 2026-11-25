@@ -58,6 +58,20 @@ export const es = {
     'needs-input': 'Necesita tu respuesta',
     done: 'Terminado',
     error: 'Con error',
+    pendingCount: '{count} pendiente(s)',
+    documentTitle: '({count}) Nexo Workspace',
+  },
+  notifications: {
+    label: 'Notificaciones',
+    on: 'Notificaciones activadas',
+    off: 'Notificaciones desactivadas',
+    blocked: 'Notificaciones bloqueadas por el sistema',
+    toggleHint: 'Avisa cuando la ventana no tiene foco y un agente necesita algo',
+    denied:
+      'El sistema no permitió las notificaciones. Actívalas en los ajustes del navegador o del sistema.',
+    unsupported: 'Este entorno no admite notificaciones del sistema.',
+    title: { 'needs-input': 'Necesita tu respuesta', error: 'Con error', done: 'Terminado' },
+    group: '{count} paneles necesitan atención',
   },
   search: {
     label: 'Buscar en la terminal',
@@ -86,6 +100,7 @@ export const es = {
     'agent.new-tab': 'Nueva pestaña de agente',
     'agent.split-right': 'Dividir con un agente a la derecha',
     'terminal.search': 'Buscar en la terminal',
+    'attention.next': 'Ir al siguiente panel que necesita atención',
     'help.toggle': 'Mostrar esta ayuda',
   },
   agent: {
@@ -122,7 +137,8 @@ export const es = {
     },
     permissionFor: 'Permiso: {title}',
     permissionOptions: 'Opciones del permiso',
-    permissionHint: 'Pulsa 1-4 para elegir; las flechas mueven el foco.',
+    permissionHint: 'Pulsa {keys} para elegir; las flechas mueven el foco.',
+    permissionAlways: { accepted: 'Permitido siempre', rejected: 'Rechazado siempre' },
     permissionState: {
       pending: 'Pendiente',
       accepted: 'Permitido',

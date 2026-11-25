@@ -147,12 +147,210 @@ test.describe('panel de agente', () => {
   })
 })
 
+type FakeNotice = { title: string; body: string; tag: string }
+type NoticeApi = { __notices: FakeNotice[]; __noticeClicks: (() => void)[]; __blurred: boolean }
+
+/**
+ * Sustituye la API `Notification` por una falsa que anota lo que se mostraría (un navegador sin cabeza no puede
+ * mostrar avisos del sistema) y deja simular que la ventana pierde o recupera el foco.
+ */
+async function installFakeNotifications(app: Page): Promise<void> {
+  await app.addInitScript(() => {
+    const w = globalThis as unknown as NoticeApi & { Notification: unknown }
+    w.__notices = []
+    w.__noticeClicks = []
+    w.__blurred = false
+    document.hasFocus = () => !w.__blurred
+    class FakeNotification {
+      static permission = 'default'
+      static async requestPermission() {
+        FakeNotification.permission = 'granted'
+        return 'granted'
+      }
+      onclick: (() => void) | null = null
+      constructor(title: string, options?: { body?: string; tag?: string }) {
+        w.__notices.push({ title, body: options?.body ?? '', tag: options?.tag ?? '' })
+        w.__noticeClicks.push(() => this.onclick?.())
+      }
+      close() {}
+    }
+    Object.defineProperty(w, 'Notification', { value: FakeNotification, configurable: true })
+  })
+}
+
+/** La ventana pierde (`false`) o recupera (`true`) el foco, como lo verían el navegador y el WebView. */
+async function setWindowFocus(app: Page, focused: boolean): Promise<void> {
+  await app.evaluate((f) => {
+    ;(globalThis as unknown as NoticeApi).__blurred = !f
+    window.dispatchEvent(new Event(f ? 'focus' : 'blur'))
+  }, focused)
+}
+
+const notices = (app: Page) =>
+  app.evaluate(() => (globalThis as unknown as NoticeApi).__notices.map((n) => ({ ...n })))
+
+const pause = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/** Con una terminal («base») y una pestaña de agente, el agente es la segunda. */
+const agentTab = (app: Page) => app.getByRole('tab').nth(1)
+const baseTab = (app: Page) => app.getByRole('tab', { name: 'base' })
+const agentTabWrap = (app: Page) => app.locator('.tablist .tab-wrap').nth(1)
+
+test.describe('acciones con diff y salida ANSI', () => {
+  test('editar: la acción edit muestra su diff unificado con líneas añadidas y borradas', async ({
+    stack,
+    app,
+  }) => {
+    await openAgentTab(stack, app)
+    await say(app, 'editar')
+    await expect(app.locator('.blk-text').last()).toContainText('Edición aplicada')
+    await app.locator('.blk-action .fold-head').click()
+    const diff = app.locator('.blk-action .diff')
+    await expect(diff.locator('.diff-stats .add')).toHaveText('+1')
+    await expect(diff.locator('.diff-stats .del')).toHaveText('−1')
+    await expect(diff.locator('.diff-add')).toContainText('const port = 4317')
+    await expect(diff.locator('.diff-del')).toContainText('const port = 3000')
+    await expect(diff.locator('.diff-hunk')).toContainText('@@ -1,4 +1,4 @@')
+  })
+
+  test('ansi: los colores se traducen a clases y las secuencias de control no se ven', async ({
+    stack,
+    app,
+  }) => {
+    await openAgentTab(stack, app)
+    await say(app, 'ansi')
+    await expect(app.locator('.blk-text').last()).toContainText('Salida con colores')
+    await app.locator('.blk-action .fold-head').click()
+    const out = app.locator('.blk-action pre.output')
+    await expect(out.locator('.ansi-fg-1')).toHaveText('error')
+    await expect(out.locator('.ansi-fg-2.ansi-bold')).toHaveText('ok')
+    await expect(out.locator('.ansi-fg-3.ansi-dim')).toHaveText('aviso')
+    const text = (await out.textContent()) ?? ''
+    expect(text).not.toContain('[')
+    expect(text).toContain('error: falló')
+  })
+})
+
+test.describe('atención en la barra y en las pestañas', () => {
+  test('un permiso pendiente se ve en la pestaña, la barra y el título; el atajo lleva al panel', async ({
+    stack,
+    app,
+  }) => {
+    await openAgentTab(stack, app)
+    await say(app, 'permiso')
+    await expect(app.locator('section.perm.pending')).toBeVisible()
+    // Se aleja a la terminal: la pestaña del agente queda en segundo plano pidiendo respuesta.
+    await baseTab(app).click()
+    const tab = agentTabWrap(app)
+    await expect(tab).toHaveAttribute('data-attention', 'needs-input')
+    await expect(tab.locator('.attention-count')).toHaveText('1')
+    await expect(app.locator('.tab-row .attention-dot[data-attention="needs-input"]')).toHaveCount(
+      1,
+    )
+    await expect(app.locator('.ws-row .attention-count')).toHaveText('1')
+    await expect(app).toHaveTitle('(1) Nexo Workspace')
+    // Alt+Mayús+N salta al panel que necesita atención.
+    await app.locator('.xterm').first().click()
+    await app.keyboard.press('Alt+Shift+N')
+    await expect(agentTab(app)).toHaveAttribute('aria-selected', 'true')
+    await expect(app.locator('section.perm.pending')).toBeVisible()
+    await app.getByRole('button', { name: /Permitir/ }).click()
+    await expect(app.locator('.blk-text').last()).toContainText('Permiso concedido')
+    await expect(app).toHaveTitle('Nexo Workspace')
+  })
+
+  test('terminado: se queda marcado en la pestaña hasta enfocar el panel', async ({
+    stack,
+    app,
+  }) => {
+    await openAgentTab(stack, app)
+    await say(app, 'lento 120')
+    await baseTab(app).click()
+    const tab = agentTabWrap(app)
+    await expect(tab).toHaveAttribute('data-attention', 'done', { timeout: 30_000 })
+    await expect(app).toHaveTitle('(1) Nexo Workspace')
+    // Al volver al panel con la ventana a la vista el aviso desaparece.
+    await agentTab(app).click()
+    await expect(tab).toHaveAttribute('data-attention', 'idle')
+    await expect(app).toHaveTitle('Nexo Workspace')
+  })
+
+  test('mientras trabaja la pestaña muestra working y al interrumpir vuelve a reposo', async ({
+    stack,
+    app,
+  }) => {
+    await openAgentTab(stack, app)
+    await say(app, 'largo')
+    await baseTab(app).click()
+    await expect(agentTabWrap(app)).toHaveAttribute('data-attention', 'working')
+    await agentTab(app).click()
+    await app.getByRole('button', { name: 'Interrumpir' }).click()
+    await expect(agentTabWrap(app)).toHaveAttribute('data-attention', 'idle')
+  })
+})
+
+test.describe('notificaciones del sistema', () => {
+  test('con la ventana sin foco avisa una vez, su clic enfoca el panel y responder no hace spam', async ({
+    stack,
+    app,
+  }) => {
+    await installFakeNotifications(app)
+    await openAgentTab(stack, app)
+    await app.getByRole('button', { name: 'Notificaciones desactivadas' }).click()
+    await expect(app.getByRole('button', { name: 'Notificaciones activadas' })).toBeVisible()
+    // Primer mensaje (crea la sesión) y se vuelve a la terminal; luego la ventana pierde el foco.
+    await say(app, 'hola')
+    await expect(app.locator('.usage')).toBeVisible()
+    await pause(500)
+    await baseTab(app).click()
+    await setWindowFocus(app, false)
+    await agentTab(app).click()
+    await say(app, 'pregunta')
+    await expect(app.locator('form.ask.pending')).toBeVisible()
+    await baseTab(app).click()
+    await expect.poll(async () => (await notices(app)).length, { timeout: 20_000 }).toBe(1)
+    const [n] = await notices(app)
+    expect(n?.title).toBe('Necesita tu respuesta')
+    expect(n?.body).toContain('e2e')
+    expect(n?.tag.startsWith('nexo-pane-')).toBe(true)
+    await app.evaluate(() => (globalThis as unknown as NoticeApi).__noticeClicks[0]?.())
+    await expect(agentTab(app)).toHaveAttribute('aria-selected', 'true')
+    const form = app.locator('form.ask.pending')
+    await expect(form).toBeVisible()
+    // Responder y terminar el turno dentro de la espera por panel no dispara otro aviso.
+    await form.getByLabel('B', { exact: true }).check()
+    await form.getByRole('button', { name: 'Responder' }).click()
+    await expect(app.locator('.blk-text').last()).toContainText('Elegiste: B')
+    await pause(2500)
+    expect(await notices(app)).toHaveLength(1)
+  })
+
+  test('con la ventana a la vista o el ajuste apagado no avisa', async ({ stack, app }) => {
+    await installFakeNotifications(app)
+    await openAgentTab(stack, app)
+    // Ajuste apagado y ventana sin foco: nada.
+    await setWindowFocus(app, false)
+    await say(app, 'lento 10')
+    await expect(app.locator('.usage')).toBeVisible()
+    await pause(2500)
+    expect(await notices(app)).toHaveLength(0)
+    // Ajuste encendido y ventana a la vista: tampoco.
+    await app.getByRole('button', { name: 'Notificaciones desactivadas' }).click()
+    await expect(app.getByRole('button', { name: 'Notificaciones activadas' })).toBeVisible()
+    await setWindowFocus(app, true)
+    await say(app, 'lento 10')
+    await expect(app.locator('.usage')).toHaveCount(2)
+    await pause(2500)
+    expect(await notices(app)).toHaveLength(0)
+  })
+})
+
 // Capturas de la documentación: `NEXO_CAPTURAS=1 pnpm e2e -g capturas` las regenera en docs/capturas.
 const OUT = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'capturas')
 
 test.describe('capturas', () => {
   test.skip(process.env.NEXO_CAPTURAS === undefined, 'solo con NEXO_CAPTURAS=1')
-  const shot = async (app: Page, name: string) => {
+  const shot = async (app: Page, name: string, prefix = 'f2-5') => {
     // La carpeta real es la del entorno donde corre la prueba: se sustituye por una neutra en la captura.
     await app.evaluate(() => {
       for (const el of document.querySelectorAll('.chip.fixed.ellipsis'))
@@ -162,7 +360,7 @@ test.describe('capturas', () => {
       }
     })
     mkdirSync(OUT, { recursive: true })
-    await app.screenshot({ path: join(OUT, `f2-5-${name}.png`) })
+    await app.screenshot({ path: join(OUT, `${prefix}-${name}.png`) })
   }
 
   test('capturas del panel de agente', async ({ stack, app }) => {
@@ -202,5 +400,30 @@ test.describe('capturas', () => {
     await say(app, 'pregunta')
     await expect(app.locator('form.ask.pending')).toBeVisible()
     await shot(app, 'pregunta')
+  })
+
+  test('capturas de la atención, el diff y la salida ANSI (F2.6)', async ({ stack, app }) => {
+    await app.setViewportSize({ width: 1280, height: 800 })
+    await openAgentTab(stack, app)
+    await say(app, 'editar')
+    await expect(app.locator('.blk-text').last()).toContainText('Edición aplicada')
+    await app.locator('.blk-action .fold-head').click()
+    await expect(app.locator('.blk-action .diff')).toBeVisible()
+    await shot(app, 'diff', 'f2-6')
+    await app.locator('.blk-action .fold-head').click()
+
+    await say(app, 'ansi')
+    await expect(app.locator('.blk-text').last()).toContainText('Salida con colores')
+    await app.locator('.blk-action').last().locator('.fold-head').click()
+    await expect(app.locator('.blk-action pre.output').last()).toBeVisible()
+    await shot(app, 'ansi', 'f2-6')
+
+    // Un permiso pendiente con la terminal a la vista: punto de alerta, contador y título con el número.
+    await say(app, 'permiso')
+    await expect(app.locator('section.perm.pending')).toBeVisible()
+    await baseTab(app).click()
+    await expect(agentTabWrap(app)).toHaveAttribute('data-attention', 'needs-input')
+    await expect(app).toHaveTitle('(1) Nexo Workspace')
+    await shot(app, 'atencion', 'f2-6')
   })
 })

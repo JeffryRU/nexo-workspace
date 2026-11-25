@@ -11,7 +11,7 @@ import {
 } from '@nexo/contracts'
 import { es, format } from '../i18n/es.ts'
 import { measureTabSwitch } from '../perf.ts'
-import { type AppStore, findPaneTab, findWorkspace } from './store.ts'
+import { type AppStore, activeTabOf, findPaneTab, findWorkspace } from './store.ts'
 import type { UiState } from './ui.ts'
 
 export type CallClient = {
@@ -160,6 +160,18 @@ export function createActions(deps: {
       if (found === undefined || found.tab.focusedPaneId === paneId) return
       store.setFocusedPane(paneId)
       await run((c) => c.call('pane.focus', { paneId }))
+    },
+
+    /** Lleva al usuario a un panel: abre su espacio y su pestaña y lo enfoca (cualquiera que esté a la vista). */
+    async revealPane(paneId: PaneId): Promise<void> {
+      const found = findPaneTab(store.snapshot(), paneId)
+      if (found === undefined) return
+      const visible =
+        currentWorkspaceId() === found.workspace.id &&
+        activeTabOf(found.workspace)?.id === found.tab.id
+      const switching = visible ? undefined : actions.selectTab(found.workspace.id, found.tab.id)
+      await actions.focusPane(paneId)
+      await switching
     },
 
     async splitPane(paneId: PaneId, direction: SplitDirection): Promise<void> {

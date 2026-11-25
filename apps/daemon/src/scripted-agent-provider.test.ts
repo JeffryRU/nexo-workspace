@@ -29,6 +29,37 @@ describe('ScriptedAgentProvider', () => {
     })
   })
 
+  it('editar emite una acción edit con diff unificado', async () => {
+    const { events } = await collect('editar')
+    const end = events.find((e) => e.type === 'block-end' && e.block?.type === 'action')
+    expect(end).toMatchObject({
+      block: { kind: 'edit', status: 'ok', diff: { path: 'src/app.ts' } },
+    })
+    const patch = (end as { block: { diff: { patch: string } } }).block.diff.patch
+    expect(patch).toContain('@@ -1,4 +1,4 @@')
+    expect(patch).toContain('+const port = 4317')
+  })
+
+  it('ansi emite una acción exec con salida coloreada', async () => {
+    const { events } = await collect('ansi')
+    const end = events.find((e) => e.type === 'block-end' && e.block?.type === 'action')
+    expect(end).toMatchObject({ block: { kind: 'exec', status: 'ok', exitCode: 0 } })
+    expect((end as { block: { output: string } }).block.output).toContain('\u001b[31m')
+  })
+
+  it('bloques n emite n bloques de texto completos y se acota', async () => {
+    const { events } = await collect('bloques 250')
+    expect(events.filter((e) => e.type === 'block-end')).toHaveLength(250)
+    const huge = await collect('bloques 99999999')
+    expect(huge.events.filter((e) => e.type === 'block-end')).toHaveLength(9000)
+  })
+
+  it('charla n emite n párrafos de 10 trozos', async () => {
+    const { events } = await collect('charla 3')
+    expect(events.filter((e) => e.type === 'block-end')).toHaveLength(3)
+    expect(events.filter((e) => e.type === 'block-delta')).toHaveLength(30)
+  })
+
   it('lento n emite n trozos', async () => {
     const { events } = await collect('lento 7')
     expect(events.filter((e) => e.type === 'block-delta')).toHaveLength(7)

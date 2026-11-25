@@ -5,12 +5,13 @@ Codex, Gemini, Antigravity, modelos locales) y terminales reales en pestañas y 
 multiplexor. Un daemon es la única fuente de verdad; la ventana, la CLI y el servidor MCP son clientes
 iguales: cerrar la ventana no mata agentes ni terminales.
 
-Estado: **F2 en curso**. Terminales, daemon, CLI, web y escritorio (F0 y F1) están hechos. De la F2 (agente Claude Code)
+Estado: **F2 completa**. Terminales, daemon, CLI, web y escritorio (F0 y F1) están hechos. De la F2 (agente Claude Code)
 va el modelo normalizado de agentes: bloques, protocolo `agent.*` y `AgentProviderPort` con su falso (F2.1), el servicio de agentes de
 `core` (F2.2) y el adaptador `provider-claude` (F2.3, Claude Agent SDK; se autentica con
 `ANTHROPIC_API_KEY` o `CLAUDE_CODE_OAUTH_TOKEN` del entorno del daemon, ver «Proveedor Claude» en
-`docs/ARCHITECTURE.md`), el daemon, el cliente y la CLI de agentes (F2.4) y el panel de agente de la interfaz web
-(F2.5; ver [`docs/ROADMAP.md`](docs/ROADMAP.md)).
+`docs/ARCHITECTURE.md`), el daemon, el cliente y la CLI de agentes (F2.4) el panel de agente de la interfaz web
+(F2.5) y la atención en la barra con notificaciones del sistema y mediciones de rendimiento del agente (F2.6; ver
+[`docs/ROADMAP.md`](docs/ROADMAP.md)).
 
 ## Requisitos
 
@@ -82,7 +83,17 @@ virtualizado (Markdown seguro, razonamiento y acciones plegables con diff y sali
 plan, errores y uso), y un redactor con chips de proveedor, modelo, esfuerzo, permisos y carpeta (se fijan al enviar el
 primer mensaje). Intro envía, Mayús+Intro hace un salto de línea, Esc interrumpe; en un permiso pendiente, `1`-`4`
 eligen la opción y `Alt+Mayús+↓/↑` saltan entre los pendientes. Para probarlo sin gastar nada: `NEXO_AGENT_PROVIDERS=fake pnpm dev:web`
-(responde `Eco: …`; las palabras `permiso`, `pregunta`, `largo` y `lento` provocan cada caso).
+(responde `Eco: …`; las palabras `permiso`, `pregunta`, `largo`, `lento`, `editar` (diff), `ansi` (salida con colores) y
+`bloques [n]` y `charla [n]` provocan cada caso).
+
+**Atención y notificaciones.** Cada pestaña, espacio y panel muestra el estado del agente (`working` pulsa; `needs-input` lleva un
+contador de permisos y preguntas pendientes; `done` se queda hasta que enfocas el panel; `error`), y el título de la ventana lleva
+el número de paneles que reclaman atención. `Alt+Shift+N` salta al siguiente panel que lo necesita, en cualquier pestaña o
+espacio. El interruptor «Notificaciones» del pie activa los avisos del sistema (se piden permisos con ese clic) cuando la ventana
+no tiene el foco; en el escritorio usan el plugin oficial de Tauri. Se agrupan y se limita su frecuencia. Detalle en
+`docs/ARCHITECTURE.md` («Atención y notificaciones (F2.6)»).
+
+![Atención en la barra y en las pestañas](docs/capturas/f2-6-atencion.png)
 
 Sin credenciales el agente responde con un bloque de error que explica las dos opciones. `NEXO_CLAUDE_EXECUTABLE`
 apunta a otro ejecutable de Claude Code (por omisión se usa el que trae el SDK). Para probar sin gastar nada, el

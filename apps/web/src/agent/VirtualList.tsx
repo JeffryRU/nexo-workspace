@@ -66,7 +66,15 @@ export function VirtualList(props: Props) {
   })
   const visible = createMemo(() => model.slice(win().start, win().end))
 
+  /**
+   * Una pestaña oculta (`hidden`, `display: none`) no tiene layout: `scrollHeight` es 0 y mover el scroll llevaría la
+   * ventana al principio del documento. Al mostrarla de nuevo habría que montar otra vez ~50 bloques de golpe (lo que
+   * encarecía el cambio de pestaña con agentes activos). Mientras está oculta se deja la ventana donde estaba.
+   */
+  const isHidden = () => scroller.closest('[hidden]') !== null
+
   const toEnd = () => {
+    if (isHidden()) return
     scroller.scrollTop = scroller.scrollHeight
     lastTop = scroller.scrollTop
     setScrollTop(lastTop)
@@ -74,6 +82,10 @@ export function VirtualList(props: Props) {
 
   const flush = () => {
     scheduled = false
+    if (isHidden()) {
+      pendingAdjust = 0
+      return
+    }
     if (dirtyHeights) {
       dirtyHeights = false
       setVersion((v) => v + 1)

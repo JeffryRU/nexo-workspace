@@ -17,6 +17,11 @@ import {
  * - `lento [n]`: n trozos (30 por omisión) de "palabra " cada `chunkMs`; sirve para cortar a mitad de respuesta.
  * - `permiso`: pide permiso para una acción; sigue según la respuesta.
  * - `pregunta`: pregunta A o B; responde con la elección.
+ * - `editar`: una acción `edit` con un diff unificado (sin pedir permiso).
+ * - `ansi`: una acción `exec` cuya salida lleva colores ANSI (SGR) y otras secuencias.
+ * - `charla [n]`: n párrafos cortos (20 por omisión, hasta 5 000) de 10 trozos cada uno: una conversación larga y continua, sin
+ *   un único bloque enorme (a diferencia de `lento 10000`).
+ * - `bloques [n]`: n bloques de texto completos (100 por omisión, hasta 9 000) para documentos largos.
  * - cualquier otro: `Eco: <texto>`.
  */
 export type ScriptedProviderOptions = {
@@ -33,6 +38,21 @@ const CAPABILITIES: ProviderCapabilities = {
   warmup: true,
   streaming: true,
 }
+
+const EDIT_PATCH = [
+  '--- a/src/app.ts',
+  '+++ b/src/app.ts',
+  '@@ -1,4 +1,4 @@',
+  ' import { start } from "./start"',
+  '-const port = 3000',
+  '+const port = 4317',
+  ' start(port)',
+  '',
+].join('\n')
+
+/** Rojo, verde en negrita, amarillo tenue y una secuencia de cursor que la interfaz debe descartar. */
+const ANSI_OUTPUT =
+  '\u001b[31merror\u001b[0m: falló\n\u001b[1;32mok\u001b[0m: pasó\n\u001b[2;33maviso\u001b[0m\u001b[2K fin\n'
 
 const PERMISSION_OPTIONS: PermissionOption[] = [
   { id: 'allow', label: 'Permitir', kind: 'allow-once' },
@@ -154,6 +174,29 @@ export class ScriptedSession implements AgentProviderSession {
       )
       return
     }
+    if (word === 'charla') {
+      const n = Math.min(5000, Math.max(1, Number(text.split(/\s+/)[1] ?? 20) || 20))
+      for (let i = 1; i <= n; i++) {
+        await this.#text(
+          Array.from({ length: 10 }, () => 'palabra '),
+          epoch,
+          this.#chunkMs,
+        )
+      }
+      return
+    }
+    if (word === 'bloques') {
+      const n = Math.min(9000, Math.max(1, Number(text.split(/\s+/)[1] ?? 100) || 100))
+      for (let i = 1; i <= n; i++) {
+        const ref = `text-${++this.#n}`
+        const body = `Bloque ${i} de ${n}: **texto** de relleno para medir el desplazamiento.`
+        this.#emit({ type: 'block-start', ref, block: { type: 'text', text: '', complete: false } })
+        this.#emit({ type: 'block-end', ref, block: { type: 'text', text: body, complete: true } })
+        // Cede el turno de vez en cuando: una ráfaga de miles de eventos no debe ahogar el daemon.
+        if (i % 100 === 0) await this.#delay(0, epoch)
+      }
+      return
+    }
     if (word === 'permiso') {
       const ref = `call-${++this.#n}`
       const requestId = `req-${this.#n}`
@@ -176,6 +219,31 @@ export class ScriptedSession implements AgentProviderSession {
           : { ...draft, status: 'error', output: 'rechazado', exitCode: 1 },
       })
       await this.#text([allowed ? 'Permiso concedido' : 'Permiso rechazado'], epoch)
+      return
+    }
+    if (word === 'editar' || word === 'ansi') {
+      const ref = `call-${++this.#n}`
+      const draft =
+        word === 'editar'
+          ? ({
+              type: 'action',
+              kind: 'edit',
+              tool: 'Edit',
+              title: 'Editar src/app.ts',
+              path: 'src/app.ts',
+            } as const)
+          : ({ type: 'action', kind: 'exec', tool: 'Bash', title: 'npm test' } as const)
+      this.#emit({ type: 'block-start', ref, block: { ...draft, status: 'running' } })
+      await this.#delay(this.#chunkMs, epoch)
+      this.#emit({
+        type: 'block-end',
+        ref,
+        block:
+          word === 'editar'
+            ? { ...draft, status: 'ok', diff: { path: 'src/app.ts', patch: EDIT_PATCH } }
+            : { ...draft, status: 'ok', output: ANSI_OUTPUT, exitCode: 0 },
+      })
+      await this.#text([word === 'editar' ? 'Edición aplicada' : 'Salida con colores'], epoch)
       return
     }
     if (word === 'pregunta') {

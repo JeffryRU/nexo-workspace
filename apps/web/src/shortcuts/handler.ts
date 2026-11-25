@@ -69,6 +69,11 @@ export function runShortcut(action: ShortcutAction, model: AppModel): void {
     case 'tab.prev':
       cycle(-1)
       return
+    case 'attention.next': {
+      const target = model.attention.next(focused)
+      if (target !== undefined) void actions.revealPane(target.paneId as PaneId)
+      return
+    }
     case 'terminal.search':
       ui.setSearchOpen(!ui.searchOpen())
       return

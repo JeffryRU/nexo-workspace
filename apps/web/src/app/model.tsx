@@ -2,13 +2,20 @@ import { PaneId, TerminalId } from '@nexo/contracts'
 import { createContext, useContext } from 'solid-js'
 import { AgentPaneModel } from '../agent/pane-model.ts'
 import { AgentRegistry } from '../agent/registry.ts'
+import { type AttentionModel, createAttentionModel } from '../attention/model.ts'
+import { createNotifications, type Notifications } from '../attention/notifications.ts'
+import { type Notifier, nullNotifier } from '../attention/notifier.ts'
 import type { DaemonSession } from '../daemon/session.ts'
+import { createSettings, type Settings, type SettingsStorage } from '../state/settings.ts'
 import { PaneSession, SessionRegistry } from '../terminal/pane-session.ts'
 import type { XtermFactory } from '../terminal/xterm-adapter.ts'
 
 export type AppModel = DaemonSession & {
   sessions: SessionRegistry
   agents: AgentRegistry
+  attention: AttentionModel
+  settings: Settings
+  notifications: Notifications
   frame: (cb: () => void) => void
 }
 
@@ -32,7 +39,13 @@ export function createAppModel(
   session: DaemonSession,
   xtermFactory: XtermFactory,
   frame: (cb: () => void) => void = defaultFrame,
-  options: { webglDelayMs?: number } = {},
+  options: {
+    webglDelayMs?: number
+    /** Notificaciones del sistema (por omisión, ninguna). */
+    notifier?: Notifier
+    /** Dónde se guardan los ajustes (por omisión, solo en memoria). */
+    storage?: SettingsStorage | undefined
+  } = {},
 ): AppModel {
   const io = {
     spawn: (paneId: string, cols: number, rows: number) =>
@@ -63,7 +76,14 @@ export function createAppModel(
         onError: (message) => session.ui.showError(message),
       }),
   )
-  return { ...session, sessions, agents, frame }
+  const attention = createAttentionModel({ store: session.store, agents })
+  const settings = createSettings(options.storage)
+  const notifications = createNotifications({
+    notifier: options.notifier ?? nullNotifier,
+    settings,
+    showError: (message) => session.ui.showError(message),
+  })
+  return { ...session, sessions, agents, attention, settings, notifications, frame }
 }
 
 const Context = createContext<AppModel>()

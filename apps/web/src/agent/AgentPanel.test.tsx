@@ -157,13 +157,36 @@ describe('panel de agente: permisos', () => {
         blocks.permission(0, { state: 'accepted', selectedOptionId: 'once' }),
         blocks.permission(1, { state: 'rejected', selectedOptionId: 'no' }),
         blocks.permission(2, { state: 'cancelled' }),
+        blocks.permission(3, { state: 'accepted', selectedOptionId: 'always' }),
+        blocks.permission(4, { state: 'rejected', selectedOptionId: 'never' }),
       ],
     })
     expect(h.container.querySelectorAll('.perm-option')).toHaveLength(0)
     const results = [...h.container.querySelectorAll('.perm-result')].map((e) => e.textContent)
-    expect(results[0]).toBe('Permitido: Permitir una vez')
-    expect(results[1]).toBe('Rechazado: Rechazar')
+    expect(results[0]).toBe('Permitido')
+    expect(results[1]).toBe('Rechazado')
     expect(results[2]).toBe('Cancelado')
+    expect(results[3]).toBe('Permitido siempre')
+    expect(results[4]).toBe('Rechazado siempre')
+  })
+
+  it('la pista de teclas usa el número real de opciones', async () => {
+    const two = [
+      { id: 'allow', label: 'Permitir', kind: 'allow-once' },
+      { id: 'deny', label: 'Rechazar', kind: 'reject-once' },
+    ]
+    const h = await mountAgent({
+      blocks: [blocks.permission(0, { options: two })],
+      session: { status: 'needs-input' },
+    })
+    expect(text(h.container.querySelector('.perm .hint'))).toContain('Pulsa 1-2 ')
+    const one = await mountAgent({
+      blocks: [blocks.permission(0, { options: [two[0]] })],
+      session: { status: 'needs-input' },
+    })
+    expect(text(one.container.querySelector('.perm .hint'))).toContain('Pulsa 1 ')
+    const four = await mountAgent({ blocks: pendingPerm(), session: { status: 'needs-input' } })
+    expect(text(four.container.querySelector('.perm .hint'))).toContain('Pulsa 1-4 ')
   })
 
   it('Alt+Mayús+↓ lleva el foco al siguiente permiso pendiente', async () => {
