@@ -42,15 +42,18 @@ async function canConnect(port: number): Promise<boolean> {
 export class Stack {
   readonly dir: string
   readonly port: number
+  readonly #env: Record<string, string>
   #daemon: ChildProcess | undefined
 
-  private constructor(dir: string, port: number) {
+  private constructor(dir: string, port: number, env: Record<string, string>) {
     this.dir = dir
     this.port = port
+    this.#env = env
   }
 
-  static async start(): Promise<Stack> {
-    const stack = new Stack(await mkdtemp(join(tmpdir(), 'nexo-e2e-')), await freePort())
+  /** `env` añade o cambia variables del daemon (p. ej. `NEXO_AGENT_PROVIDERS`, `NEXO_OLLAMA_URL`). */
+  static async start(env: Record<string, string> = {}): Promise<Stack> {
+    const stack = new Stack(await mkdtemp(join(tmpdir(), 'nexo-e2e-')), await freePort(), env)
     await stack.startDaemon()
     return stack
   }
@@ -79,6 +82,7 @@ export class Stack {
         NEXO_LOG_LEVEL: 'error',
         // Proveedor de agente determinista (sin red ni modelo) para las pruebas del panel de agente.
         NEXO_AGENT_PROVIDERS: 'fake',
+        ...this.#env,
       },
       stdio: 'ignore',
       windowsHide: true,

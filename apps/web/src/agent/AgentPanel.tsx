@@ -9,6 +9,7 @@ import { VirtualList, type VirtualListApi } from './VirtualList.tsx'
 import './agent.css'
 
 const PROVIDERS_TIMEOUT_MS = 60_000
+const PROVIDERS_RETRY_MS = 10_000
 const PROVIDERS_STALE_MS = 5 * 60_000
 
 /** Panel de un agente: documento virtualizado, avisos de lo pendiente y redactor. */
@@ -40,7 +41,9 @@ export function AgentPanel(props: {
     },
     enabled:
       app.status() === 'open' && props.sessionId === undefined && agent.sessionId === undefined,
-    staleTime: PROVIDERS_STALE_MS,
+    // Con un proveedor caído (p. ej. Ollama sin arrancar) se vuelve a preguntar pronto, al enfocar la ventana.
+    staleTime: (query) =>
+      query.state.data?.some((p) => !p.available) === true ? PROVIDERS_RETRY_MS : PROVIDERS_STALE_MS,
   }))
   const providersState = createMemo(() => ({
     loading: providers.isPending && !providers.isError,

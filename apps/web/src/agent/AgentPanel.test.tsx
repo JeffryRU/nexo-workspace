@@ -462,6 +462,60 @@ describe('panel de agente sin sesión', () => {
     expect(h.container.querySelector<HTMLButtonElement>('.send')?.disabled).toBe(true)
   })
 
+  it('un proveedor no disponible se ve deshabilitado con su motivo y no se puede elegir', async () => {
+    const down = {
+      ...FAKE_PROVIDER,
+      id: 'ollama',
+      name: 'Ollama',
+      available: false,
+      reason: 'Ollama no responde en http://127.0.0.1:11434',
+    }
+    const h = await mountAgent({ withSession: false, providers: [down, FAKE_PROVIDER] })
+    const select = h.container.querySelector<HTMLSelectElement>('select[aria-label="Proveedor"]')
+    const options = [...(select?.options ?? [])]
+    expect(options.map((o) => [o.value, o.disabled, o.textContent])).toEqual([
+      ['ollama', true, 'Ollama (no disponible)'],
+      ['fake', false, 'Proveedor falso'],
+    ])
+    expect(options[0]?.title).toBe('Ollama no responde en http://127.0.0.1:11434')
+    expect(select?.value).toBe('fake')
+    expect(text(h.container.querySelector('.chips [role="note"]'))).toContain(
+      'Ollama: Ollama no responde en http://127.0.0.1:11434',
+    )
+  })
+
+  it('con todos no disponibles muestra el selector deshabilitado, los motivos y no deja enviar', async () => {
+    const h = await mountAgent({
+      withSession: false,
+      providers: [{ ...FAKE_PROVIDER, available: false, reason: 'no está instalado' }],
+    })
+    const select = h.container.querySelector<HTMLSelectElement>('select[aria-label="Proveedor"]')
+    expect([...(select?.options ?? [])].every((o) => o.disabled)).toBe(true)
+    expect(text(h.container.querySelector('.chips'))).toContain('no está instalado')
+    expect(h.container.querySelector('select[aria-label="Modelo"]')).toBeNull()
+  })
+
+  it('los esfuerzos conocidos se muestran con su nombre en español', async () => {
+    const ollama = {
+      ...FAKE_PROVIDER,
+      id: 'ollama',
+      name: 'Ollama',
+      capabilities: {
+        ...FAKE_PROVIDER.capabilities,
+        efforts: ['think', 'no-think', 'raro'],
+        models: [],
+      },
+    }
+    const h = await mountAgent({ withSession: false, providers: [ollama] })
+    const effort = h.container.querySelector<HTMLSelectElement>('select[aria-label="Esfuerzo"]')
+    expect([...(effort?.options ?? [])].map((o) => o.textContent)).toEqual([
+      'Esfuerzo predeterminado',
+      'Razonar',
+      'Sin razonar',
+      'raro',
+    ])
+  })
+
   it('un fallo al cargar los proveedores se muestra con reintento, sin bloquear el redactor', async () => {
     const h = await mountAgent({ withSession: false, providersFail: true })
     expect(h.container.querySelector('.chips [role="alert"]')?.textContent).toContain(

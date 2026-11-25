@@ -1,8 +1,10 @@
 import { mkdirSync } from 'node:fs'
+import { createServer, type Server } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Page } from '@playwright/test'
-import { ECHO_SCRIPT, expect, type Stack, test } from './stack.ts'
+import { ECHO_SCRIPT, expect, Stack, test } from './stack.ts'
 
 declare global {
   var __pwned: unknown
@@ -345,6 +347,94 @@ test.describe('notificaciones del sistema', () => {
   })
 })
 
+/** Servidor HTTP que imita lo que usa el proveedor Ollama: `/api/tags` y `/api/chat` en NDJSON. */
+async function fakeOllama(): Promise<{ url: string; server: Server; chats: unknown[] }> {
+  const chats: unknown[] = []
+  const server = createServer((req, res) => {
+    if (req.url === '/api/tags') {
+      res.end(JSON.stringify({ models: [{ name: 'llama3.2:latest' }, { name: 'qwen3:8b' }] }))
+      return
+    }
+    let body = ''
+    req.on('data', (d: Buffer) => {
+      body += d.toString('utf8')
+    })
+    req.on('end', () => {
+      chats.push(JSON.parse(body))
+      const line = (o: unknown) => `${JSON.stringify(o)}
+`
+      res.setHeader('content-type', 'application/x-ndjson')
+      res.write(
+        line({
+          message: { role: 'assistant', content: '', thinking: 'Pienso la respuesta.' },
+          done: false,
+        }),
+      )
+      res.write(line({ message: { role: 'assistant', content: 'Hola desde ' }, done: false }))
+      res.write(line({ message: { role: 'assistant', content: 'Ollama.' }, done: false }))
+      res.end(line({ message: { content: '' }, done: true, prompt_eval_count: 9, eval_count: 4 }))
+    })
+  })
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
+  return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, server, chats }
+}
+
+test.describe('proveedor Ollama (servidor falso)', () => {
+  test('se elige proveedor, modelo y esfuerzo según agent.providers y la conversación funciona', async ({
+    app,
+  }) => {
+    const ollama = await fakeOllama()
+    const stack = await Stack.start({
+      NEXO_AGENT_PROVIDERS: 'fake,ollama',
+      NEXO_OLLAMA_URL: ollama.url,
+    })
+    try {
+      await openAgentTab(stack, app)
+      await app.getByLabel('Proveedor').selectOption('ollama')
+      await expect(app.getByLabel('Modelo')).toHaveValue('llama3.2:latest')
+      await expect(app.getByLabel('Modelo').locator('option')).toHaveText([
+        'llama3.2:latest',
+        'qwen3:8b',
+      ])
+      await app.getByLabel('Modelo').selectOption('qwen3:8b')
+      await app.getByLabel('Esfuerzo').selectOption('think')
+      await say(app, 'hola')
+      await expect(app.locator('.blk-text')).toContainText('Hola desde Ollama.')
+      await expect(app.locator('.blk-reasoning')).toBeVisible()
+      await expect(app.locator('.usage')).toBeVisible()
+      await expect(app.locator('.chip.fixed').first()).toHaveText('ollama')
+      expect(ollama.chats[0]).toMatchObject({ model: 'qwen3:8b', think: true, stream: true })
+      await say(app, 'otra')
+      await expect(app.locator('.blk-text')).toHaveCount(2)
+      expect((ollama.chats[1] as { messages: unknown[] }).messages).toHaveLength(3)
+    } finally {
+      await stack.dispose()
+      ollama.server.close()
+    }
+  })
+
+  test('si Ollama no responde se ve deshabilitado con su motivo y queda el proveedor por omisión', async ({
+    app,
+  }) => {
+    const stack = await Stack.start({
+      NEXO_AGENT_PROVIDERS: 'fake,ollama',
+      NEXO_OLLAMA_URL: 'http://127.0.0.1:1',
+    })
+    try {
+      await openAgentTab(stack, app)
+      const option = app.getByLabel('Proveedor').locator('option[value="ollama"]')
+      await expect(option).toBeDisabled()
+      await expect(option).toHaveText('Ollama (no disponible)')
+      await expect(app.getByRole('note')).toContainText('Ollama no responde en http://127.0.0.1:1')
+      await expect(app.getByLabel('Proveedor')).toHaveValue('fake')
+      await say(app, 'sigue funcionando')
+      await expect(app.locator('.blk-text')).toContainText('Eco: sigue funcionando')
+    } finally {
+      await stack.dispose()
+    }
+  })
+})
+
 // Capturas de la documentación: `NEXO_CAPTURAS=1 pnpm e2e -g capturas` las regenera en docs/capturas.
 const OUT = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'capturas')
 
@@ -400,6 +490,40 @@ test.describe('capturas', () => {
     await say(app, 'pregunta')
     await expect(app.locator('form.ask.pending')).toBeVisible()
     await shot(app, 'pregunta')
+  })
+
+  test('capturas del selector de proveedor y modelo (F3.1)', async ({ app }) => {
+    await app.setViewportSize({ width: 1280, height: 800 })
+    const ollama = await fakeOllama()
+    const stack = await Stack.start({
+      NEXO_AGENT_PROVIDERS: 'fake,ollama',
+      NEXO_OLLAMA_URL: ollama.url,
+    })
+    try {
+      await openAgentTab(stack, app)
+      await app.getByLabel('Proveedor').selectOption('ollama')
+      await app.getByLabel('Modelo').selectOption('qwen3:8b')
+      await app.getByLabel('Esfuerzo').selectOption('think')
+      await shot(app, 'selector', 'f3-1')
+      await say(app, 'hola')
+      await expect(app.locator('.usage')).toBeVisible()
+      await shot(app, 'conversacion', 'f3-1')
+    } finally {
+      await stack.dispose()
+      ollama.server.close()
+    }
+    const down = await Stack.start({
+      NEXO_AGENT_PROVIDERS: 'fake,ollama',
+      NEXO_OLLAMA_URL: 'http://127.0.0.1:1',
+    })
+    try {
+      await app.goto('about:blank')
+      await openAgentTab(down, app)
+      await expect(app.getByRole('note')).toBeVisible()
+      await shot(app, 'no-disponible', 'f3-1')
+    } finally {
+      await down.dispose()
+    }
   })
 
   test('capturas de la atención, el diff y la salida ANSI (F2.6)', async ({ stack, app }) => {

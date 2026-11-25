@@ -1,6 +1,6 @@
 import type { PermissionMode, ProviderInfo } from '@nexo/contracts'
 import { createMemo, For, Show } from 'solid-js'
-import { es } from '../i18n/es.ts'
+import { es, format } from '../i18n/es.ts'
 import type { AgentPaneModel } from './pane-model.ts'
 
 export type ProvidersState = {
@@ -9,6 +9,10 @@ export type ProvidersState = {
   providers: readonly ProviderInfo[]
   retry: () => void
 }
+
+/** Nombre legible de un esfuerzo; los que no conocemos se muestran tal cual. */
+const effortName = (value: string): string =>
+  (es.agent.effortNames as Readonly<Record<string, string>>)[value] ?? value
 
 /** Alto del redactor en líneas: crece con el texto hasta un tope. */
 export function composerRows(text: string, max = 8): number {
@@ -30,7 +34,9 @@ export function Composer(props: {
   const m = props.model
   let area!: HTMLTextAreaElement
 
-  const available = () => props.providers.providers.filter((p) => p.available)
+  const all = () => props.providers.providers
+  const available = () => all().filter((p) => p.available)
+  const unavailable = () => all().filter((p) => !p.available)
   const provider = createMemo(() => {
     const chosen = m.provider.get()
     return available().find((p) => p.id === chosen) ?? available()[0]
@@ -93,7 +99,7 @@ export function Composer(props: {
   const select = (
     label: string,
     value: () => string,
-    options: () => { value: string; label: string }[],
+    options: () => { value: string; label: string; disabled?: boolean; title?: string }[],
     onChange: (v: string) => void,
   ) => (
     <select
@@ -103,7 +109,13 @@ export function Composer(props: {
       value={value()}
       onChange={(e) => onChange(e.currentTarget.value)}
     >
-      <For each={options()}>{(o) => <option value={o.value}>{o.label}</option>}</For>
+      <For each={options()}>
+        {(o) => (
+          <option value={o.value} disabled={o.disabled} title={o.title}>
+            {o.label}
+          </option>
+        )}
+      </For>
     </select>
   )
 
@@ -167,14 +179,23 @@ export function Composer(props: {
                 </span>
               }
             >
-              <Show
-                when={provider()}
-                fallback={<span class="chip error">{es.agent.noProviders}</span>}
-              >
+              <Show when={all().length > 0}>
                 {select(
                   es.agent.chipProvider,
                   () => provider()?.id ?? '',
-                  () => available().map((p) => ({ value: p.id, label: p.name })),
+                  () => [
+                    ...(provider() === undefined
+                      ? [{ value: '', label: '—', disabled: true }]
+                      : []),
+                    ...all().map((p) => ({
+                      value: p.id,
+                      label: p.available
+                        ? p.name
+                        : format(es.agent.providerUnavailable, { name: p.name }),
+                      disabled: !p.available,
+                      ...(p.available || p.reason === undefined ? {} : { title: p.reason }),
+                    })),
+                  ],
                   (v) => {
                     m.provider.set(v)
                     m.modelChoice.set(undefined)
@@ -182,6 +203,18 @@ export function Composer(props: {
                     m.permissionMode.set(undefined)
                   },
                 )}
+              </Show>
+              <For each={unavailable()}>
+                {(p) => (
+                  <span class="chip error" role="note" title={p.reason}>
+                    {p.name}: {p.reason ?? es.agent.providerUnavailableNoReason}
+                  </span>
+                )}
+              </For>
+              <Show when={provider() === undefined}>
+                <span class="chip error">{es.agent.noProviders}</span>
+              </Show>
+              <Show when={provider()}>
                 <Show when={(caps()?.models.length ?? 0) > 0}>
                   {select(
                     es.agent.chipModel,
@@ -205,7 +238,7 @@ export function Composer(props: {
                     () => m.effort.get() ?? '',
                     () => [
                       { value: '', label: es.agent.defaultEffort },
-                      ...efforts().map((x) => ({ value: x, label: x })),
+                      ...efforts().map((x) => ({ value: x, label: effortName(x) })),
                     ],
                     (v) => m.effort.set(v === '' ? undefined : v),
                   )}

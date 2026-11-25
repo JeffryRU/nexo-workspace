@@ -536,6 +536,11 @@ button:disabled {
 .chip.error {
   color: var(--danger);
 }
+/* El motivo de un proveedor no disponible puede ser largo: ocupa la fila y se parte en líneas. */
+.chip.error[role="note"] {
+  max-width: 100%;
+  border-radius: 8px;
+}
 .chip.loading {
   color: var(--fg-muted);
   animation: chip-pulse 1.2s ease-in-out infinite;
