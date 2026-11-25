@@ -1,4 +1,4 @@
-import { Attention, PaneKind } from '@nexo/contracts'
+import { Attention, Block, PaneKind } from '@nexo/contracts'
 import { z } from 'zod'
 
 /**
@@ -96,3 +96,55 @@ export const ErrorOutput = z.strictObject({
     message: z.string(),
   }),
 })
+
+const AgentSessionView = z.strictObject({
+  id: Id,
+  provider: z.string(),
+  paneId: Id,
+  status: Attention,
+  turn: z.int().nonnegative(),
+  cwd: z.string(),
+  permissionMode: z.string(),
+  title: z.string().optional(),
+  model: z.string().optional(),
+  effort: z.string().optional(),
+})
+
+export const AgentLsOutput = z.strictObject({ sessions: z.array(AgentSessionView) })
+
+export const AgentNewOutput = z.strictObject({
+  workspaceId: Id,
+  tabId: Id,
+  paneId: Id,
+  sessionId: Id,
+  provider: z.string(),
+  createdWorkspace: z.boolean(),
+})
+
+export const AgentSendOutput = z.strictObject({
+  sessionId: Id,
+  blockId: Id,
+  index: z.int().nonnegative(),
+  turn: z.int().positive(),
+})
+
+export const AgentActionOutput = z.strictObject({
+  ok: z.literal(true),
+  action: z.enum(['interrupt', 'close', 'respond']),
+  sessionId: Id,
+  blockId: Id.optional(),
+})
+
+/** Una línea por evento con `agent attach --json`: los bloques completos y los deltas de texto. */
+export const AgentAttachLine = z.discriminatedUnion('event', [
+  z.strictObject({ sessionId: Id, event: z.literal('block'), block: Block }),
+  z.strictObject({
+    sessionId: Id,
+    event: z.literal('delta'),
+    blockId: Id,
+    field: z.enum(['text', 'output']),
+    text: z.string(),
+  }),
+  z.strictObject({ sessionId: Id, event: z.literal('status'), status: Attention }),
+  z.strictObject({ sessionId: Id, event: z.literal('removed') }),
+])

@@ -2,6 +2,13 @@ import type { MethodName, MethodParams, MethodResult } from '@nexo/contracts'
 import { type ClientOptions, NexoClient } from './client.ts'
 import { type WebSocketTransportOptions, webSocketTransport } from './transport.ts'
 
+export { type AgentApi, agentApi } from './agent-api.ts'
+export {
+  AgentDocument,
+  type AgentDocumentClient,
+  type AgentDocumentEvent,
+  type AgentDocumentOptions,
+} from './agent-document.ts'
 export { type BackoffOptions, backoffDelay } from './backoff.ts'
 export {
   type CallOptions,

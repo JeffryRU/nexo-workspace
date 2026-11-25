@@ -1,7 +1,17 @@
 import { z } from 'zod'
-import { Attention, LayoutSchema, Pane, PaneId, TabId, TerminalId, WorkspaceId } from './domain.ts'
+import { AgentDelta, AgentSession, Block } from './agent.ts'
+import {
+  AgentSessionId,
+  Attention,
+  LayoutSchema,
+  Pane,
+  PaneId,
+  TabId,
+  TerminalId,
+  WorkspaceId,
+} from './domain.ts'
 import { LIMITS } from './limits.ts'
-import { DisplayText } from './text.ts'
+import { DisplayText, lineText } from './text.ts'
 
 /** Pestaña resumida (sin distribución ni paneles) para `workspace.changed`. */
 export const TabSummary = z.strictObject({ id: TabId, title: DisplayText })
@@ -56,6 +66,26 @@ export const events = {
     reason: z.literal('backpressure'),
     dropped: z.int().positive(),
   }),
+  /** Un bloque nuevo o uno que reemplaza al de su `id` (el cliente hace upsert por `block.id`). */
+  'agent.block': z.strictObject({ sessionId: AgentSessionId, block: Block }),
+  /**
+   * Texto añadido a un bloque en streaming. `seq` cuenta los deltas del bloque; un cliente aplica el
+   * siguiente al `block.seq` que tiene, ignora los repetidos y ante un hueco pide `agent.snapshot`.
+   */
+  'agent.delta': AgentDelta,
+  /** Cambio de estado de atención de una sesión (también alimenta `pane.attention`). */
+  'agent.status': z.strictObject({
+    sessionId: AgentSessionId,
+    status: Attention,
+    updatedAt: z.int().nonnegative(),
+    /** Motivo breve si `status` es `error` o `needs-input`. */
+    reason: lineText(LIMITS.maxErrorMessageLength).optional(),
+  }),
+  /** Alta o cambio de la sesión (modelo real, ficha, título...) o su cierre (`removed: true`). */
+  'agent.session': z.union([
+    z.strictObject({ session: AgentSession }),
+    z.strictObject({ sessionId: AgentSessionId, removed: z.literal(true) }),
+  ]),
 } as const
 
 export type EventName = keyof typeof events

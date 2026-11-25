@@ -12,6 +12,10 @@ export const WorkspaceId = idSchema.brand<'WorkspaceId'>()
 export const TabId = idSchema.brand<'TabId'>()
 export const PaneId = idSchema.brand<'PaneId'>()
 export const TerminalId = idSchema.brand<'TerminalId'>()
+export const AgentSessionId = idSchema.brand<'AgentSessionId'>()
+export const BlockId = idSchema.brand<'BlockId'>()
+export type AgentSessionId = z.infer<typeof AgentSessionId>
+export type BlockId = z.infer<typeof BlockId>
 export type WorkspaceId = z.infer<typeof WorkspaceId>
 export type TabId = z.infer<typeof TabId>
 export type PaneId = z.infer<typeof PaneId>
@@ -111,6 +115,8 @@ export const Pane = z.strictObject({
   kind: PaneKind,
   title: DisplayText,
   terminalId: TerminalId.optional(),
+  /** Sesión de agente del panel (`kind: 'agent'`), si ya se abrió una. */
+  agentSessionId: AgentSessionId.optional(),
   attention: Attention,
 })
 export type Pane = z.infer<typeof Pane>

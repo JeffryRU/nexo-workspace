@@ -9,7 +9,11 @@ import { FakeClient, FakeXterm, manualFrames } from './test-helpers.ts'
 export const info = { port: 4317, token: 'AbCdEfGhIjKlMnOpQrStUvWxYz012345' }
 
 /** Monta la aplicación completa con cliente y xterm falsos. */
-export async function mountApp(snapshot: Snapshot, client = new FakeClient()) {
+export async function mountApp(
+  snapshot: Snapshot,
+  client = new FakeClient(),
+  options: Parameters<typeof createAppModel>[3] = {},
+) {
   client.snapshot = snapshot
   const frames = manualFrames()
   const xterms = new Map<number, FakeXterm>()
@@ -23,7 +27,7 @@ export async function mountApp(snapshot: Snapshot, client = new FakeClient()) {
       return x
     },
     frames.frame,
-    { webglDelayMs: 0 },
+    { webglDelayMs: 0, ...options },
   )
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const view = render(() => (

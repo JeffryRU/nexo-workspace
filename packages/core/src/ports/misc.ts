@@ -1,4 +1,6 @@
 import type {
+  AgentSessionId,
+  BlockId,
   EventData,
   EventName,
   PaneId,
@@ -28,6 +30,8 @@ export interface IdPort {
   tab(): TabId
   pane(): PaneId
   terminal(): TerminalId
+  agentSession(): AgentSessionId
+  block(): BlockId
 }
 
 export type PersistedState = { version: 1; workspaces: Workspace[] }
@@ -83,14 +87,4 @@ export type RunResult = {
 /** Procesos sin PTY (git, `claude --version`...). Siempre `cmd` + `args[]`, nunca cadena de shell. */
 export interface ProcessLauncherPort {
   run(options: RunOptions): Promise<RunResult>
-}
-
-/**
- * Proveedor de agente (Claude Code, Codex, ...).
- * TODO(F2): definir sesiones, deltas de texto, permisos y preguntas; por ahora solo identidad y
- * disponibilidad.
- */
-export interface AgentProviderPort {
-  readonly id: string
-  isAvailable(): Promise<boolean>
 }

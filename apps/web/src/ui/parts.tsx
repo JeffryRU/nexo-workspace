@@ -1,7 +1,7 @@
 import type { Attention } from '@nexo/contracts'
 import { createMemo, type JSX, onMount, Show } from 'solid-js'
 import { useModel } from '../app/model.tsx'
-import { es } from '../i18n/es.ts'
+import { es, format } from '../i18n/es.ts'
 import { activeTabOf } from '../state/store.ts'
 import './parts.css'
 
@@ -14,6 +14,39 @@ export function AttentionDot(props: { attention: Attention }) {
       aria-label={es.attention[props.attention]}
       title={es.attention[props.attention]}
     />
+  )
+}
+
+/** Contador de pendientes (permisos y preguntas esperando respuesta); no se pinta con 0. */
+export function AttentionCount(props: { count: number }) {
+  return (
+    <Show when={props.count > 0}>
+      <span
+        class="attention-count"
+        role="img"
+        aria-label={format(es.attention.pendingCount, { count: props.count })}
+        title={format(es.attention.pendingCount, { count: props.count })}
+      >
+        {props.count > 99 ? '99+' : props.count}
+      </span>
+    </Show>
+  )
+}
+
+/** Interruptor de las notificaciones del sistema (activar pide el permiso: cuelga de este clic). */
+export function NotificationToggle() {
+  const { notifications } = useModel()
+  return (
+    <button
+      type="button"
+      class="status-toggle"
+      data-state={notifications.state()}
+      aria-pressed={notifications.state() === 'on'}
+      title={es.notifications.toggleHint}
+      onClick={() => void notifications.toggle()}
+    >
+      {es.notifications[notifications.state()]}
+    </button>
   )
 }
 

@@ -33,6 +33,8 @@ function repeatingIds(kind: 'workspace' | 'tab' | 'pane'): IdPort {
     tab: () => (kind === 'tab' ? fixed.tab : base.tab()),
     pane: () => (kind === 'pane' ? fixed.pane : base.pane()),
     terminal: () => base.terminal(),
+    agentSession: () => base.agentSession(),
+    block: () => base.block(),
   }
 }
 
@@ -158,6 +160,8 @@ describe('WorkspaceService (adversarial): ids repetidos y límites', () => {
       tab: () => base.tab(),
       pane: () => base.pane(),
       terminal: () => 'igual' as TerminalId,
+      agentSession: () => base.agentSession(),
+      block: () => base.block(),
     }
     const t = await bootHarness({ ids })
     const second = t.workspaces.split({ paneId: t.paneId, direction: 'row' }).pane

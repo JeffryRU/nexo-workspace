@@ -1,3 +1,4 @@
+import { type AgentSession, AgentSessionId, type Block, BlockId, PaneId } from '@nexo/contracts'
 import type { Transport } from './transport.ts'
 
 export type Request = { v: 1; id: string; method: string; params: unknown }
@@ -105,3 +106,51 @@ export class FakeServer {
 }
 
 export const tick = (): Promise<void> => new Promise((resolve) => setImmediate(resolve))
+
+export const SID = AgentSessionId.parse('agent-session-00000001')
+
+export const session = (over: Partial<AgentSession> = {}): AgentSession => ({
+  id: SID,
+  provider: 'fake',
+  paneId: PaneId.parse('pane-00000001'),
+  permissionMode: 'ask',
+  cwd: '/w',
+  status: 'idle',
+  turn: 1,
+  blockCount: 0,
+  createdAt: 1,
+  updatedAt: 1,
+  ...over,
+})
+
+export function textBlock(n: number, text = '', over: Record<string, unknown> = {}): Block {
+  return {
+    id: BlockId.parse(`block-${String(n).padStart(8, '0')}`),
+    index: n,
+    turn: 1,
+    seq: 0,
+    createdAt: 1,
+    type: 'text',
+    text,
+    complete: false,
+    ...over,
+  } as Block
+}
+
+/** Servidor falso de `agent.snapshot` con páginas de `pageLen` bloques. */
+export function snapshotServer(server: FakeServer, blocks: () => Block[], pageLen = 2): Request[] {
+  const requests: Request[] = []
+  server.handler = (req): Reply | undefined => {
+    if (req.method !== 'agent.snapshot') return undefined
+    requests.push(req)
+    const p = req.params as { fromIndex?: number }
+    const from = p.fromIndex ?? 0
+    const all = blocks().filter((b) => b.index >= from)
+    const page = all.slice(0, pageLen)
+    const next = all.length > pageLen ? (all[pageLen]?.index ?? null) : null
+    return {
+      result: { session: session({ blockCount: blocks().length }), blocks: page, nextIndex: next },
+    }
+  }
+  return requests
+}

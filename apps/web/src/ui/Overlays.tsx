@@ -105,7 +105,10 @@ const HELP_ORDER = [
   'pane.focus-down',
   'tab.next',
   'tab.prev',
+  'agent.new-tab',
+  'agent.split-right',
   'terminal.search',
+  'attention.next',
   'help.toggle',
 ] as const satisfies readonly ShortcutAction[]
 

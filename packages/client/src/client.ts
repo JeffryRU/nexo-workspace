@@ -40,7 +40,16 @@ export type ClientOptions = {
   random?: () => number
 }
 
-export type CallOptions = { timeoutMs?: number; signal?: AbortSignal }
+export type CallOptions<R = unknown> = {
+  timeoutMs?: number
+  signal?: AbortSignal
+  /**
+   * Se llama con el resultado ya validado, de forma síncrona y antes de entregar el siguiente mensaje del
+   * servidor. Sirve para aplicar un `agent.snapshot` en su posición exacta respecto de los eventos: los que
+   * llegaron antes son anteriores a él y los que llegan después, posteriores.
+   */
+  onResult?: (result: R) => void
+}
 
 type EventHandler<E extends EventName> = (data: EventData<E>, seq: number) => void
 type AnyHandler = (...args: never[]) => void
@@ -50,6 +59,7 @@ type Pending = {
   resolve: (value: unknown) => void
   reject: (error: NexoClientError) => void
   cleanup: () => void
+  onResult: ((result: never) => void) | undefined
 }
 
 const DEFAULT_RECONNECT: ReconnectOptions = { baseMs: 250, maxMs: 15_000, stableMs: 5_000 }
@@ -105,7 +115,7 @@ export class NexoClient {
   call<M extends MethodName>(
     method: M,
     params: MethodParams<M>,
-    options: CallOptions = {},
+    options: CallOptions<MethodResult<M>> = {},
   ): Promise<MethodResult<M>> {
     if (this.#state === 'closed') {
       return Promise.reject(new NexoClientError('CLOSED', 'el cliente está cerrado'))
@@ -341,7 +351,7 @@ export class NexoClient {
   #request<M extends MethodName>(
     method: M,
     params: MethodParams<M>,
-    options: CallOptions,
+    options: CallOptions<MethodResult<M>>,
   ): Promise<MethodResult<M>> {
     const transport = this.#transport
     if (transport === undefined) {
@@ -377,6 +387,7 @@ export class NexoClient {
         method,
         resolve: resolve as (value: unknown) => void,
         reject,
+        onResult: options.onResult as ((result: never) => void) | undefined,
         cleanup: () => {
           clearTimeout(timer)
           options.signal?.removeEventListener('abort', onAbort)
@@ -403,6 +414,13 @@ export class NexoClient {
     if (p === undefined) return
     this.#pending.delete(id)
     p.cleanup()
+    if (p.onResult !== undefined) {
+      try {
+        p.onResult(value as never)
+      } catch (error) {
+        this.#log('error', `onResult lanzó: ${String(error)}`)
+      }
+    }
     p.resolve(value)
   }
 

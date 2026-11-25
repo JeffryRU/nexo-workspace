@@ -1,8 +1,12 @@
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createClaudeProvider } from '@nexo/adapter-provider-claude'
 import { PtyHostPort } from '@nexo/adapter-pty-host'
 import { NodePtyPort } from '@nexo/adapter-pty-node'
 import {
+  type AgentProviderPort,
+  AgentService,
+  type AgentServiceConfig,
   createDispatcher,
   type EventBusPort,
   LayoutService,
@@ -15,9 +19,12 @@ import {
 } from '@nexo/core'
 import { MemoryEventBus } from './adapters/event-bus.ts'
 import { JsonLogger, type LogLevel } from './adapters/logger.ts'
+import { ScriptedAgentProvider } from './adapters/scripted-agent-provider.ts'
 import { SystemClock } from './adapters/system-clock.ts'
 import { UuidIds } from './adapters/uuid-ids.ts'
+import { watchAgentPanes } from './agent-warmup.ts'
 import { generateToken } from './auth.ts'
+import type { AgentProviderName } from './config.ts'
 import { probeDaemon } from './probe.ts'
 import { createRedactor } from './redact.ts'
 import { DaemonServer, type ServerOptions, type ServerStats } from './server.ts'
@@ -73,6 +80,15 @@ export type DaemonOptions = {
    * ConPTY no tumba el daemon); `direct` los crea en el propio daemon. Por omisión: `host` en Windows.
    */
   ptyMode?: 'host' | 'direct'
+  /**
+   * Proveedores de agente. Por omisión se registra solo `claude`. Una lista de nombres (`NEXO_AGENT_PROVIDERS`)
+   * elige entre los incluidos (`claude`, `fake`); también se pueden inyectar puertos ya construidos.
+   * El primero es el que se precalienta. Una lista vacía deja el daemon sin agentes.
+   */
+  agentProviders?: readonly (AgentProviderName | AgentProviderPort)[]
+  /** Ejecutable de Claude Code (por omisión, el del SDK). */
+  claudeExecutable?: string
+  agents?: AgentServiceConfig
   /** Se llama (tras responder) cuando un cliente pide `daemon.shutdown`; por omisión detiene el daemon. */
   onShutdownRequested?: (stop: () => Promise<void>) => void
   terminal?: TerminalServiceConfig
@@ -159,7 +175,30 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     panes: layout,
     config: { defaultCommand: { cmd: shell.cmd }, ...options.terminal },
   })
-  const workspaces = new WorkspaceService({ layout, terminals })
+  const providers = (options.agentProviders ?? ['claude']).map((p) =>
+    typeof p === 'string' ? createProvider(p) : p,
+  )
+  if (providers.some((p) => p.id === 'fake')) {
+    logger.warn('proveedor de agente de prueba activo (fake): no es para uso normal')
+  }
+  const agentService =
+    providers.length === 0
+      ? undefined
+      : new AgentService({
+          providers,
+          bus,
+          clock,
+          ids,
+          panes: layout,
+          logger,
+          ...(options.agents === undefined ? {} : { config: options.agents }),
+        })
+  const stopWarmup = watchAgentPanes({ bus, panes: layout, provider: providers[0], logger })
+  const workspaces = new WorkspaceService({
+    layout,
+    terminals,
+    ...(agentService === undefined ? {} : { agents: agentService }),
+  })
   const identity = { version: DAEMON_VERSION, pid: process.pid, startedAt }
 
   const webRoot =
@@ -167,6 +206,17 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       ? undefined
       : (options.webRoot ??
         fileURLToPath(new URL(join('..', '..', 'web', 'dist'), import.meta.url)))
+
+  function createProvider(name: AgentProviderName): AgentProviderPort {
+    if (name === 'fake') return new ScriptedAgentProvider()
+    return createClaudeProvider({
+      env: childBaseEnv(),
+      log: (entry) => logger[entry.level](`claude: ${entry.message}`),
+      ...(options.claudeExecutable === undefined
+        ? {}
+        : { pathToClaudeCodeExecutable: options.claudeExecutable }),
+    })
+  }
 
   const server = new DaemonServer({
     port: options.port ?? 4317,
@@ -180,6 +230,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       createDispatcher({
         workspaces,
         terminals,
+        ...(agentService === undefined ? {} : { agents: agentService.handlers }),
         snapshot: new SnapshotService({ layout, identity, currentSeq: hooks.currentSeq }),
         subscribe: hooks.subscribe,
         shutdown: () => {
@@ -197,7 +248,13 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   let stopped: Promise<void> | undefined
   const stop = (): Promise<void> => {
     stopped ??= (async () => {
+      stopWarmup()
       terminals.shutdown()
+      await agentService
+        ?.closeAll()
+        .catch((error: unknown) =>
+          logger.error('fallo al cerrar las sesiones de agente', { error }),
+        )
       hostPort?.dispose()
       await server.close()
       await removeDiscovery(paths).catch(() => {})
@@ -236,7 +293,9 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       stop,
     }
   } catch (error) {
+    stopWarmup()
     terminals.shutdown()
+    await agentService?.closeAll().catch(() => {})
     hostPort?.dispose()
     await server.close().catch(() => {})
     await lock.release().catch(() => {})

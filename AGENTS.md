@@ -41,3 +41,8 @@ pnpm lint         # Biome (lint + formato + orden de imports)
 pnpm format       # Biome, aplica el formato
 pnpm depcruise
 ```
+
+En máquinas lentas o compartidas (un VPS con otras cargas) los plazos de las pruebas pueden quedarse cortos sin
+que haya un fallo real. `NEXO_TEST_TIMEOUT_SCALE=3 pnpm check` multiplica por 3 los plazos de Vitest (los de
+`vitest.config.ts` y los de las ayudas de las pruebas de integración de la CLI). Vale 1 por omisión y el CI no lo
+usa; no sirve para esconder una prueba lenta de verdad, solo para compensar la máquina.

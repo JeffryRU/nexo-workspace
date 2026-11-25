@@ -78,15 +78,19 @@ describe('pty-host adversarial: caída del host', () => {
     const messages: string[] = []
     const stamps: number[] = []
     for (let i = 0; i < 4; i++) {
-      stamps.push(Date.now())
+      if (i === 0) stamps.push(Date.now())
       const error = await spawnFake(port).catch((e: unknown) => e)
       expect(error).toBeInstanceOf(PtySpawnError)
       messages.push((error as Error).message)
+      stamps.push(Date.now())
     }
     expect(messages.slice(0, 3).every((m) => m.includes('pty host'))).toBe(true)
     expect(messages[3]).toMatch(/se cayó 3 veces seguidas; no se reintenta/)
-    // El backoff espacia los intentos: el 3.º espera al menos 40 + 80 ms desde el 1.º.
-    expect((stamps[2] ?? 0) - (stamps[0] ?? 0)).toBeGreaterThanOrEqual(100)
+    // El backoff espacia los intentos: hasta terminar el 3.º intento pasan al menos 40 + 80 ms desde antes del
+    // 1.º. Se mide al terminar el 3.º (el 2.º espera 40 ms; el 3.º, 80), no al empezarlo: antes solo se
+    // medía el primer retardo y el margen salía del tiempo de arranque del proceso. Date.now() tiene
+    // resolución de 1 ms y el temporizador puede disparar ~1 ms antes, de ahí los 4 ms de tolerancia.
+    expect((stamps[3] ?? 0) - (stamps[0] ?? 0)).toBeGreaterThanOrEqual(120 - 4)
     expect(lines.filter((l) => l.level === 'error').length).toBeGreaterThanOrEqual(3)
     expect(port.consecutiveHostFailures).toBe(3)
 

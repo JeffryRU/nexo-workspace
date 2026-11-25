@@ -18,6 +18,7 @@ import {
   WorkspaceId,
 } from '@nexo/contracts'
 import * as fc from 'fast-check'
+import { arbAgentEvent, arbAgentRequest } from './arbitraries-agent.ts'
 
 const arbIdString = fc.stringMatching(/^[A-Za-z0-9_-]{1,32}$/)
 
@@ -191,6 +192,7 @@ function req<M extends MethodName>(
 
 /** Peticiones válidas de cualquier método del registro. */
 export const arbRequest: fc.Arbitrary<TypedRequest> = fc.oneof(
+  arbAgentRequest,
   req('daemon.info', fc.constant({})),
   req('daemon.shutdown', fc.constant({})),
   req('snapshot', fc.constant({})),
@@ -268,6 +270,7 @@ function ev<E extends EventName>(
 }
 
 export const arbEvent: fc.Arbitrary<TypedEvent> = fc.oneof(
+  arbAgentEvent,
   ev(
     'layout.changed',
     fc.record({ workspaceId: arbWorkspaceId, tab: arbTab }).map(({ workspaceId, tab }) => ({
@@ -295,7 +298,7 @@ export const arbEvent: fc.Arbitrary<TypedEvent> = fc.oneof(
 )
 
 /** true si algún objeto anidado tiene una clave propia `__proto__` (el protocolo la rechaza). */
-function hasProtoKey(value: unknown): boolean {
+export function hasProtoKey(value: unknown): boolean {
   const stack: unknown[] = [value]
   while (stack.length > 0) {
     const current = stack.pop()

@@ -3,6 +3,12 @@ import { LayoutSchema, LIMITS, parseRequest, parseServerMessage } from './index.
 
 const polluted = () => ({}) as Record<string, unknown>
 
+// Aserción de rendimiento: en máquinas lentas se escala con NEXO_TEST_TIMEOUT_SCALE (1 por omisión; ver AGENTS.md).
+const rawScale = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process
+  ?.env?.NEXO_TEST_TIMEOUT_SCALE
+const scaleEnv = Number(rawScale ?? '1')
+const TIMEOUT_SCALE = Number.isFinite(scaleEnv) && scaleEnv >= 1 ? Math.min(scaleEnv, 20) : 1
+
 describe('adversarial: tamaño y anidamiento', () => {
   it('JSON gigante -> PAYLOAD_TOO_LARGE sin parsear', () => {
     const big = `{"v":1,"id":"a","method":"snapshot","params":{"x":"${'a'.repeat(LIMITS.maxMessageBytes)}"}}`
@@ -19,7 +25,7 @@ describe('adversarial: tamaño y anidamiento', () => {
     const started = Date.now()
     const r = parseRequest(text)
     expect(r.ok).toBe(false)
-    expect(Date.now() - started).toBeLessThan(2000)
+    expect(Date.now() - started).toBeLessThan(2000 * TIMEOUT_SCALE)
     expect(() => parseServerMessage('['.repeat(500_000))).not.toThrow()
   })
 
