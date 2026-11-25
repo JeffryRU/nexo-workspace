@@ -19,6 +19,7 @@ import {
  * - `pregunta`: pregunta A o B; responde con la elección.
  * - `editar`: una acción `edit` con un diff unificado (sin pedir permiso).
  * - `ansi`: una acción `exec` cuya salida lleva colores ANSI (SGR) y otras secuencias.
+ * - `bloques [n]`: n bloques de texto completos (100 por omisión, hasta 9 000) para documentos largos.
  * - cualquier otro: `Eco: <texto>`.
  */
 export type ScriptedProviderOptions = {
@@ -169,6 +170,18 @@ export class ScriptedSession implements AgentProviderSession {
         epoch,
         this.#chunkMs,
       )
+      return
+    }
+    if (word === 'bloques') {
+      const n = Math.min(9000, Math.max(1, Number(text.split(/\s+/)[1] ?? 100) || 100))
+      for (let i = 1; i <= n; i++) {
+        const ref = `text-${++this.#n}`
+        const body = `Bloque ${i} de ${n}: **texto** de relleno para medir el desplazamiento.`
+        this.#emit({ type: 'block-start', ref, block: { type: 'text', text: '', complete: false } })
+        this.#emit({ type: 'block-end', ref, block: { type: 'text', text: body, complete: true } })
+        // Cede el turno de vez en cuando: una ráfaga de miles de eventos no debe ahogar el daemon.
+        if (i % 100 === 0) await this.#delay(0, epoch)
+      }
       return
     }
     if (word === 'permiso') {
