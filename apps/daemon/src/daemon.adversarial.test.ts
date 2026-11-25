@@ -673,7 +673,7 @@ describe('HTTP', () => {
   it('no filtra el token por HTTP ni expone daemon.json', async () => {
     const root = await web()
     const d = await boot({ webRoot: root })
-    for (const p of ['/token', '/daemon.json', '/health?t=' + d.token]) {
+    for (const p of ['/token', '/daemon.json', `/health?t=${d.token}`]) {
       const r = await get(d.port, p)
       expect(r.body).not.toContain(d.token)
     }
@@ -684,7 +684,7 @@ describe('HTTP', () => {
   it('sin web, todo lo que no es /health es 404; métodos raros no rompen', async () => {
     const d = await boot()
     expect((await get(d.port, '/')).status).toBe(404)
-    expect((await get(d.port, '/' + 'a'.repeat(100000))).status).toBeGreaterThanOrEqual(400)
+    expect((await get(d.port, `/${'a'.repeat(100000)}`)).status).toBeGreaterThanOrEqual(400)
     expect(await health(d)).toBe(200)
   })
 })
