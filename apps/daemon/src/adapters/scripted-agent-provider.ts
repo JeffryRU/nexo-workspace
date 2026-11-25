@@ -45,15 +45,11 @@ const EDIT_PATCH = [
   '+const port = 4317',
   ' start(port)',
   '',
-].join('
-')
+].join('\n')
 
 /** Rojo, verde en negrita, amarillo tenue y una secuencia de cursor que la interfaz debe descartar. */
 const ANSI_OUTPUT =
-  '[31merror[0m: falló
-[1;32mok[0m: pasó
-[2;33maviso[0m[2K fin
-'
+  '\u001b[31merror\u001b[0m: falló\n\u001b[1;32mok\u001b[0m: pasó\n\u001b[2;33maviso\u001b[0m\u001b[2K fin\n'
 
 const PERMISSION_OPTIONS: PermissionOption[] = [
   { id: 'allow', label: 'Permitir', kind: 'allow-once' },
