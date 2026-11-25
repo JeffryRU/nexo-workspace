@@ -61,6 +61,7 @@ describe('protocolo IPC del pty host: eventos', () => {
       { t: 'data', id: 1, data: 'x' },
       { t: 'exit', id: 1, exitCode: 0, signal: null },
       { t: 'exit', id: 1, exitCode: 0, signal: 15 },
+      { t: 'exit', id: 1, exitCode: null, signal: null },
     ]) {
       expect(parseHostEvent(msg).ok).toBe(true)
     }

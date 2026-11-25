@@ -49,6 +49,9 @@ const SCRIPTS = {
     "for (let i = 0; i < 300; i++) console.log('linea ' + i + ' ' + 'y'.repeat(80)); process.exit(0)",
 }
 
+// Últimos bytes de stdout/stderr del hijo que se muestran cuando una ronda falla.
+const TAIL_BYTES = 4096
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 function arg(name, fallback) {
@@ -71,6 +74,12 @@ async function runRound(variantName, terminals) {
     })
   }
 
+  // Traza del adaptador en stderr (la recoge el orquestador si la ronda falla).
+  const write = (level) => (message, fields) =>
+    console.error(
+      `[${level}] ${message} ${JSON.stringify(fields ?? {}, (_k, x) => (x instanceof Error ? x.stack : x))}`,
+    )
+  const logger = { debug() {}, info: write('info'), warn: write('warn'), error: write('error') }
   let closePort = () => {}
   let spawnOne
   if (v.adapter) {
@@ -78,7 +87,7 @@ async function runRound(variantName, terminals) {
       v.adapter === 'host'
         ? await import('../../packages/adapters/pty-host/src/index.ts')
         : await import('../../packages/adapters/pty-node/src/index.ts')
-    const port = v.adapter === 'host' ? new mod.PtyHostPort() : new mod.NodePtyPort()
+    const port = v.adapter === 'host' ? new mod.PtyHostPort({ logger }) : new mod.NodePtyPort()
     closePort = () => port.dispose?.()
     spawnOne = async (script) => {
       const p = await port.spawn({
@@ -121,6 +130,7 @@ async function runRound(variantName, terminals) {
   let hostCrashed = false
   const procs = []
   const done = []
+  const exited = new Set()
   for (let i = 0; i < terminals; i++) {
     const script =
       mode === 'exit'
@@ -137,6 +147,7 @@ async function runRound(variantName, terminals) {
     done.push(
       new Promise((resolve) =>
         p.onExit((exit) => {
+          exited.add(i)
           if (exit?.signal === 'HOST_CRASH') hostCrashed = true
           resolve()
         }),
@@ -155,7 +166,10 @@ async function runRound(variantName, terminals) {
   await Promise.race([
     Promise.all(done),
     sleep(20000).then(() => {
-      throw new Error('timeout esperando exits')
+      const missing = procs.map((_, i) => i).filter((i) => !exited.has(i))
+      throw new Error(
+        `timeout esperando exits: sin exit las terminales [${missing}] de ${procs.length}`,
+      )
     }),
   ])
   closePort()
@@ -188,7 +202,7 @@ function runChild(variantName, terminals, timeoutMs) {
       if (code === 0 && out.includes('ROUND_OK'))
         resolve({ kind: 'ok', hostCrashed: out.includes('HOST_CRASHED') })
       else if (timedOut) resolve({ kind: 'hang', code, signal })
-      else resolve({ kind: 'crash', code, signal, tail: out.slice(-300) })
+      else resolve({ kind: 'crash', code, signal, tail: out.slice(-TAIL_BYTES) })
     })
   })
 }
@@ -221,9 +235,16 @@ async function main() {
         if (res.kind === 'ok') {
           ok++
           if (res.hostCrashed) hostCrashes++
-        } else if (res.kind === 'hang') hang++
-        else {
+        } else if (res.kind === 'hang') {
+          hang++
+          console.error(`--- ronda colgada (${name}) ---`)
+        } else {
           crash++
+          console.error(
+            `--- ronda fallida (${name}) code=${res.code} signal=${res.signal}; últimos ${TAIL_BYTES} B de salida del hijo ---
+${res.tail}
+--- fin ---`,
+          )
           const k = `code=${res.code} signal=${res.signal}`
           codes.set(k, (codes.get(k) ?? 0) + 1)
         }

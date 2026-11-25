@@ -7,7 +7,10 @@ export type PtyLike = {
   resize(cols: number, rows: number): void
   kill(signal?: string): void
   onData(listener: (data: string) => void): unknown
-  onExit(listener: (e: { exitCode: number; signal?: number | undefined }) => void): unknown
+  /** `exitCode` puede faltar en tiempo de ejecución aunque node-pty lo tipe como número. */
+  onExit(
+    listener: (e: { exitCode: number | undefined; signal?: number | undefined }) => void,
+  ): unknown
 }
 
 export type HostSpawnOptions = {
@@ -87,7 +90,16 @@ export function createHostHandler(deps: HostDeps): (raw: unknown) => void {
           pty.onExit((e) => {
             entry.exited = true
             terminals.delete(msg.id)
-            deps.send({ t: 'exit', id: msg.id, exitCode: e.exitCode, signal: e.signal ?? null })
+            // node-pty (ConPTY) puede llamar a onExit sin código ni señal numéricos; si el evento se enviara
+            // así, el daemon lo descartaría por inválido y la terminal nunca saldría (issue #37).
+            const exitCode =
+              typeof e.exitCode === 'number' && Number.isSafeInteger(e.exitCode) ? e.exitCode : null
+            const signal =
+              typeof e.signal === 'number' && Number.isSafeInteger(e.signal) ? e.signal : null
+            if (exitCode === null && signal === null) {
+              deps.log(`la terminal ${msg.id} salió sin código de salida (${String(e.exitCode)})`)
+            }
+            deps.send({ t: 'exit', id: msg.id, exitCode, signal })
           })
         } catch (error) {
           deps.send({
