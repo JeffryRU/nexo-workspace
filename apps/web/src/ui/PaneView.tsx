@@ -10,7 +10,7 @@ import { TerminalView } from './TerminalView.tsx'
 import './PaneView.css'
 
 export function PaneView(props: { paneId: PaneId }) {
-  const { store, ui, actions } = useModel()
+  const { store, ui, actions, attention } = useModel()
   const located = createMemo(() => findPaneTab(store.state, props.paneId))
   const pane = () => located()?.tab.panes.find((p) => p.id === props.paneId)
   const focused = () => located()?.tab.focusedPaneId === props.paneId
@@ -37,12 +37,13 @@ export function PaneView(props: { paneId: PaneId }) {
           class="pane"
           classList={{ focused: focused(), 'swap-source': ui.swapSource() === props.paneId }}
           data-pane-id={props.paneId}
+          data-attention={attention.paneAttention(props.paneId, p().attention)}
           aria-label={title().label}
           onPointerDown={() => void actions.focusPane(props.paneId)}
           onFocusIn={() => void actions.focusPane(props.paneId)}
         >
           <header class="pane-header">
-            <AttentionDot attention={p().attention} />
+            <AttentionDot attention={attention.paneAttention(props.paneId, p().attention)} />
             <span class="pane-title ellipsis" title={title().full}>
               {title().label}
             </span>

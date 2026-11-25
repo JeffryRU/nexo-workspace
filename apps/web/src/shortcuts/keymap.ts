@@ -21,6 +21,7 @@ export type ShortcutAction =
   | 'agent.new-tab'
   | 'agent.split-right'
   | 'terminal.search'
+  | 'attention.next'
   | 'help.toggle'
 
 /** Combinaciones por acción, p. ej. `Alt+Shift+T`. Editable: es un mapa plano. */
@@ -49,6 +50,7 @@ export const DEFAULT_KEYMAP: KeyMap = {
   'agent.new-tab': ['Alt+Shift+A'],
   'agent.split-right': ['Alt+Shift+E'],
   'terminal.search': ['Ctrl+Shift+F'],
+  'attention.next': ['Alt+Shift+N'],
   'help.toggle': ['Ctrl+Shift+P', '?'],
 }
 

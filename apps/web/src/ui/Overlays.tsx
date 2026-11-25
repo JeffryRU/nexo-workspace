@@ -108,6 +108,7 @@ const HELP_ORDER = [
   'agent.new-tab',
   'agent.split-right',
   'terminal.search',
+  'attention.next',
   'help.toggle',
 ] as const satisfies readonly ShortcutAction[]
 

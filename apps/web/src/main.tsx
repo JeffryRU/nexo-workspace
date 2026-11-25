@@ -3,8 +3,10 @@ import { createSignal } from 'solid-js'
 import { render } from 'solid-js/web'
 import { App, type AppProps } from './App.tsx'
 import { createAppModel } from './app/model.tsx'
+import { detectNotifier } from './attention/notifier.ts'
 import { detectSource } from './daemon/info.ts'
 import { createDaemonSession } from './daemon/session.ts'
+import { browserStorage } from './state/settings.ts'
 import { createXtermHandle } from './terminal/xterm-adapter.ts'
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -29,7 +31,13 @@ async function load(): Promise<void> {
     // que se muestra (el hub acota lo pendiente).
     hiddenBudget: 0,
   })
-  setApp({ kind: 'ready', model: createAppModel(session, createXtermHandle) })
+  setApp({
+    kind: 'ready',
+    model: createAppModel(session, createXtermHandle, undefined, {
+      notifier: detectNotifier(window as unknown as Parameters<typeof detectNotifier>[0]),
+      storage: browserStorage(window),
+    }),
+  })
   await session.start()
 }
 

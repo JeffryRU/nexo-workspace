@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/solid-query'
 import { createEffect, createMemo, Match, onCleanup, onMount, Show, Switch } from 'solid-js'
 import { type AppModel, ModelProvider } from './app/model.tsx'
+import { useAttentionEffects } from './attention/effects.ts'
 import type { InfoFailure } from './daemon/info.ts'
 import { es } from './i18n/es.ts'
 import { paneIdsOf } from './layout/tree.ts'
@@ -13,6 +14,7 @@ import {
   SearchBar,
   Toast,
 } from './ui/Overlays.tsx'
+import { NotificationToggle } from './ui/parts.tsx'
 import { Sidebar } from './ui/Sidebar.tsx'
 import { Stage } from './ui/Stage.tsx'
 import { TabBar } from './ui/TabBar.tsx'
@@ -49,6 +51,7 @@ function Workbench(props: { model: AppModel }) {
   // Hasta tener el primer snapshot no hay nada que mostrar salvo el estado de la conexión.
   const everOpened = createMemo<boolean>((was) => was || status() === 'open', false)
 
+  useAttentionEffects(props.model)
   onMount(() => {
     const stop = installShortcuts(props.model)
     onCleanup(stop)
@@ -85,6 +88,7 @@ function Workbench(props: { model: AppModel }) {
           <SearchBar />
           <footer class="statusbar">
             <span>{es.appName}</span>
+            <NotificationToggle />
             <Show when={info.data}>{(d) => <span class="muted">v{d().version}</span>}</Show>
           </footer>
         </div>
