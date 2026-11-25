@@ -205,6 +205,9 @@ importers:
 
   apps/daemon:
     dependencies:
+      '@nexo/adapter-provider-claude':
+        specifier: workspace:*
+        version: link:../../packages/adapters/provider-claude
       '@nexo/adapter-pty-host':
         specifier: workspace:*
         version: link:../../packages/adapters/pty-host
@@ -224,6 +227,9 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
     devDependencies:
+      '@nexo/client':
+        specifier: workspace:*
+        version: link:../../packages/client
       '@nexo/testkit':
         specifier: workspace:*
         version: link:../../packages/testkit
