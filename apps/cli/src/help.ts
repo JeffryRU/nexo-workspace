@@ -40,7 +40,7 @@ o (pestañas y espacios) su nombre.
 ${GLOBALS}
 
 Códigos de salida: 0 ok, 1 error de uso, 2 no encontrado, 3 daemon no disponible, 4 error del daemon.
-Entorno: NEXO_STATE_DIR, NEXO_SHELL, NEXO_DAEMON_ENTRY, NEXO_START_TIMEOUT_MS, NEXO_DEBUG=1.
+Entorno: NEXO_STATE_DIR, NEXO_DAEMON_ENTRY, NEXO_START_TIMEOUT_MS, NEXO_DEBUG=1.
 Ayuda de un comando: nexo <comando> --help
 `
 
@@ -53,8 +53,8 @@ Muestra el árbol de espacios -> pestañas -> paneles con terminal, título y es
 
 Crea una pestaña con un panel y una terminal. Si el espacio no existe, lo crea.
 Sin --workspace usa el espacio de la carpeta actual (o --cwd), y si no hay, crea uno.
-Sin comando abre el shell por omisión (NEXO_SHELL; en Windows pwsh.exe o powershell.exe;
-en Linux $SHELL o /bin/sh).
+Sin comando abre el shell por omisión, que elige el daemon (NEXO_SHELL en el entorno del
+daemon; en Windows pwsh.exe o powershell.exe; en Linux $SHELL o /bin/sh).
 
   --workspace <nombre|id>  espacio de destino (se crea si no existe)
   --cwd <ruta>             carpeta de trabajo de la terminal

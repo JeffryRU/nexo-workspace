@@ -1,4 +1,4 @@
-import { accessSync, constants, statSync } from 'node:fs'
+import { accessSync, constants, lstatSync, statSync } from 'node:fs'
 import { delimiter, isAbsolute, join, resolve } from 'node:path'
 
 function isFile(path: string, platform: NodeJS.Platform): boolean {
@@ -6,7 +6,16 @@ function isFile(path: string, platform: NodeJS.Platform): boolean {
     if (!statSync(path).isFile()) return false
     if (platform !== 'win32') accessSync(path, constants.X_OK)
     return true
-  } catch {
+  } catch (error) {
+    // Los alias de ejecución de Windows (`WindowsApps\pwsh.exe`) son puntos de reanálisis que `statSync`
+    // no puede seguir (EACCES) pero que CreateProcess sí ejecuta.
+    if (platform === 'win32' && (error as NodeJS.ErrnoException).code === 'EACCES') {
+      try {
+        return !lstatSync(path).isDirectory()
+      } catch {
+        return false
+      }
+    }
     return false
   }
 }

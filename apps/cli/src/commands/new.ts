@@ -5,7 +5,6 @@ import type { ClientLike, Ctx } from '../context.ts'
 import { CliError, classifyError, usageError } from '../errors.ts'
 import { resolveRef } from '../resolve.ts'
 import { NewOutput } from '../schemas.ts'
-import { defaultShell } from '../shell.ts'
 
 const DEFAULT_COLS = 120
 const DEFAULT_ROWS = 30
@@ -16,18 +15,10 @@ export function terminalSize(ctx: Ctx): { cols: number; rows: number } {
   return { cols: clamp(ctx.io.columns, DEFAULT_COLS), rows: clamp(ctx.io.rows, DEFAULT_ROWS) }
 }
 
-/** Comando a lanzar: lo que va tras `--` o el shell por omisión. */
-export function commandToRun(ctx: Ctx, after: readonly string[]): { cmd: string; args: string[] } {
+/** Comando a lanzar: lo que va tras `--`; sin él el daemon elige el shell por omisión. */
+export function commandToRun(after: readonly string[]): { cmd?: string; args?: string[] } {
   const [cmd, ...args] = after
-  if (cmd !== undefined) return { cmd, args }
-  return {
-    cmd: defaultShell({
-      env: ctx.deps.env,
-      platform: ctx.deps.platform,
-      commandExists: ctx.deps.commandExists,
-    }),
-    args: [],
-  }
+  return cmd === undefined ? {} : { cmd, args }
 }
 
 function samePath(a: string, b: string, platform: NodeJS.Platform): boolean {
@@ -51,7 +42,7 @@ export async function newCommand(ctx: Ctx, args: string[]): Promise<void> {
   const cwd = resolve(ctx.deps.cwd(), cwdOption ?? '.')
   const name = str(parsed, 'name')
   const wsRef = str(parsed, 'workspace')
-  const run = commandToRun(ctx, after)
+  const run = commandToRun(after)
 
   const client = await ctx.client()
   const { workspaces } = await client.call('workspace.list', {})
@@ -89,8 +80,7 @@ export async function newCommand(ctx: Ctx, args: string[]): Promise<void> {
       throw new CliError('DAEMON_ERROR', 'el daemon creó una pestaña sin paneles')
     const { terminalId } = await client.call('terminal.spawn', {
       paneId: pane.id,
-      cmd: run.cmd,
-      args: run.args,
+      ...run,
       cwd,
       ...terminalSize(ctx),
     })

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Ventana principal: solo puede invocar los comandos propios (daemon_info); sin fs, shell ni opener desde la página.",
+  "windows": ["main"],
+  "permissions": []
+}

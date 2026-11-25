@@ -22,7 +22,7 @@ export async function splitCommand(ctx: Ctx, args: string[]): Promise<void> {
   if (right === down) throw usageError(`indica exactamente una de --right o --down (uso: ${USAGE})`)
   const cwdOption = str(parsed, 'cwd')
   if (cwdOption === '') throw usageError('--cwd no puede estar vacío')
-  const run = commandToRun(ctx, after)
+  const run = commandToRun(after)
 
   validateRef(ref)
   const client = await ctx.client()
@@ -36,8 +36,7 @@ export async function splitCommand(ctx: Ctx, args: string[]): Promise<void> {
   try {
     const { terminalId } = await client.call('terminal.spawn', {
       paneId: pane.id,
-      cmd: run.cmd,
-      args: run.args,
+      ...run,
       ...(cwdOption === undefined ? {} : { cwd: resolve(ctx.deps.cwd(), cwdOption) }),
       ...terminalSize(ctx),
     })
