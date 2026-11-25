@@ -2,6 +2,8 @@ import { utf8ByteLength } from '@nexo/contracts'
 import { indexAfterBytes, indexOfSuffixWithin, skipBytes } from './utf8.ts'
 
 export const DEFAULT_RING_CAPACITY = 2 * 1024 * 1024
+/** Los trozos pequeños se unen al anterior para no acumular millones de cadenas diminutas. */
+const MERGE_BELOW = 16 * 1024
 
 export type RingReadOptions = {
   /** Offset absoluto desde el que leer. Sin él, lo más reciente (hasta `maxBytes`). */
@@ -25,6 +27,8 @@ export type RingReadResult = {
 export class RingBuffer {
   readonly capacity: number
   #chunks: string[] = []
+  /** Bytes de cada trozo, en paralelo a `#chunks`. */
+  #sizes: number[] = []
   #size = 0
   #total = 0
 
@@ -58,9 +62,17 @@ export class RingBuffer {
       const chunk = data.slice(indexOfSuffixWithin(data, this.capacity))
       this.#chunks = [chunk]
       this.#size = utf8ByteLength(chunk)
+      this.#sizes = [this.#size]
       return
     }
-    this.#chunks.push(data)
+    const last = this.#chunks.length - 1
+    if (last >= 0 && (this.#sizes[last] as number) < MERGE_BELOW) {
+      this.#chunks[last] += data
+      this.#sizes[last] = (this.#sizes[last] as number) + bytes
+    } else {
+      this.#chunks.push(data)
+      this.#sizes.push(bytes)
+    }
     this.#size += bytes
     this.#trim()
   }
@@ -69,13 +81,15 @@ export class RingBuffer {
     while (this.#size > this.capacity) {
       const excess = this.#size - this.capacity
       const first = this.#chunks[0] as string
-      const firstBytes = utf8ByteLength(first)
+      const firstBytes = this.#sizes[0] as number
       if (firstBytes <= excess) {
         this.#chunks.shift()
+        this.#sizes.shift()
         this.#size -= firstBytes
       } else {
         const { index, skipped } = skipBytes(first, excess)
         this.#chunks[0] = first.slice(index)
+        this.#sizes[0] = firstBytes - skipped
         this.#size -= skipped
       }
     }
@@ -85,6 +99,7 @@ export class RingBuffer {
     const { fromOffset, maxBytes } = options
     const text = this.#chunks.length === 1 ? (this.#chunks[0] as string) : this.#chunks.join('')
     this.#chunks = text.length === 0 ? [] : [text]
+    this.#sizes = text.length === 0 ? [] : [this.#size]
     const start = this.startOffset
     if (fromOffset === undefined) {
       const from = maxBytes === undefined ? 0 : indexOfSuffixWithin(text, maxBytes)

@@ -1,29 +1,31 @@
+import { utf8ByteLength } from '@nexo/contracts'
+
 /**
  * Utilidades de bytes UTF-8 sobre cadenas UTF-16. Un par sustituto cuenta 4 bytes y un sustituto
  * suelto 3 (igual que `utf8ByteLength` de contracts). Nunca se corta dentro de un carácter.
+ * Los bucles no reservan objetos: se usan con ráfagas de decenas de MB.
  */
-
-/** Bytes UTF-8 de la unidad que empieza en `i` y cuántas unidades UTF-16 ocupa. */
-function unitAt(text: string, i: number): { bytes: number; units: number } {
-  const c = text.charCodeAt(i)
-  if (c < 0x80) return { bytes: 1, units: 1 }
-  if (c < 0x800) return { bytes: 2, units: 1 }
-  if (c >= 0xd800 && c <= 0xdbff && i + 1 < text.length) {
-    const next = text.charCodeAt(i + 1)
-    if (next >= 0xdc00 && next <= 0xdfff) return { bytes: 4, units: 2 }
-  }
-  return { bytes: 3, units: 1 }
-}
 
 /** Índice (en unidades UTF-16) tras consumir como máximo `maxBytes` desde `from`, sin partir un carácter. */
 export function indexAfterBytes(text: string, from: number, maxBytes: number): number {
   let i = from
   let used = 0
   while (i < text.length) {
-    const u = unitAt(text, i)
-    if (used + u.bytes > maxBytes) break
-    used += u.bytes
-    i += u.units
+    const c = text.charCodeAt(i)
+    let bytes = 3
+    let units = 1
+    if (c < 0x80) bytes = 1
+    else if (c < 0x800) bytes = 2
+    else if (c >= 0xd800 && c <= 0xdbff && i + 1 < text.length) {
+      const next = text.charCodeAt(i + 1)
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        bytes = 4
+        units = 2
+      }
+    }
+    if (used + bytes > maxBytes) break
+    used += bytes
+    i += units
   }
   return i
 }
@@ -60,16 +62,32 @@ export function skipBytes(text: string, skip: number): { index: number; skipped:
   let i = 0
   let skipped = 0
   while (i < text.length && skipped < skip) {
-    const u = unitAt(text, i)
-    skipped += u.bytes
-    i += u.units
+    const c = text.charCodeAt(i)
+    if (c < 0x80) skipped += 1
+    else if (c < 0x800) skipped += 2
+    else if (c >= 0xd800 && c <= 0xdbff && i + 1 < text.length) {
+      const next = text.charCodeAt(i + 1)
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        skipped += 4
+        i++
+      } else skipped += 3
+    } else skipped += 3
+    i++
   }
   return { index: i, skipped }
 }
 
 /** Parte `text` en trozos de como máximo `maxBytes` bytes, sin partir caracteres. `maxBytes` >= 4. */
 export function splitByBytes(text: string, maxBytes: number): string[] {
+  const bytes = utf8ByteLength(text)
+  if (bytes <= maxBytes) return text.length === 0 ? [] : [text]
   const out: string[] = []
+  // Solo ASCII: un byte por unidad, se corta por longitud sin recorrer.
+  if (bytes === text.length) {
+    for (let from = 0; from < text.length; from += maxBytes)
+      out.push(text.slice(from, from + maxBytes))
+    return out
+  }
   let from = 0
   while (from < text.length) {
     const end = indexAfterBytes(text, from, maxBytes)

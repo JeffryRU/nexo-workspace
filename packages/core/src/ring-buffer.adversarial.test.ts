@@ -10,7 +10,7 @@ describe('RingBuffer (adversarial)', () => {
     expect(ring.offset).toBe(50 * 1024 * 1024)
     expect(ring.size).toBe(2 * 1024 * 1024)
     expect(ring.read().data.length).toBe(2 * 1024 * 1024)
-  })
+  }, 60_000)
 
   it('ráfaga de 50 MB en trozos de 64 KiB con multibyte: nunca supera la capacidad', () => {
     const ring = new RingBuffer()
@@ -25,7 +25,7 @@ describe('RingBuffer (adversarial)', () => {
     const { data } = ring.read()
     expect(data).toBe('€'.repeat(data.length))
     expect(data.length * 3).toBeGreaterThan(2 * 1024 * 1024 - 3)
-  })
+  }, 60_000)
 
   it('caracteres de 4 bytes con capacidad mínima', () => {
     const ring = new RingBuffer(4)

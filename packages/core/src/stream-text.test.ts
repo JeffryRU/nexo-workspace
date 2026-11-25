@@ -45,7 +45,10 @@ describe('SurrogateJoiner', () => {
 
 describe('sanitizeTitle', () => {
   it('quita controles, ESC, saltos y marcas bidireccionales', () => {
-    expect(sanitizeTitle('a\x1b[31mb\x07\n\r\tc‮d e\x7f\x9bf')).toBe('a[31mbcdef')
+    const dirty = `a[31mb
+
+	c${String.fromCodePoint(0x202e)}d${String.fromCodePoint(0x2028)}ef`
+    expect(sanitizeTitle(dirty)).toBe('a[31mbcdef')
   })
 
   it('devuelve null si queda vacío', () => {

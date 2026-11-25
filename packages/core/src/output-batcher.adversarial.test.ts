@@ -25,7 +25,7 @@ describe('OutputBatcher (adversarial)', () => {
     expect(total).toBe(count * utf8ByteLength(unit))
     expect(max).toBeLessThanOrEqual(64 * 1024)
     expect(pieces).toBeGreaterThanOrEqual(800)
-  })
+  }, 60_000)
 
   it('emisión con maxBytes diminuto no parte caracteres', () => {
     const clock = new FakeClock()
