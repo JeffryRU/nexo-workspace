@@ -1,4 +1,6 @@
 import type {
+  AgentSessionId,
+  BlockId,
   EventData,
   EventName,
   PaneId,
@@ -28,6 +30,8 @@ export interface IdPort {
   tab(): TabId
   pane(): PaneId
   terminal(): TerminalId
+  agentSession(): AgentSessionId
+  block(): BlockId
 }
 
 export type PersistedState = { version: 1; workspaces: Workspace[] }

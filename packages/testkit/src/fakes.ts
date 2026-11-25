@@ -1,4 +1,6 @@
 import {
+  AgentSessionId,
+  BlockId,
   type EventData,
   type EventName,
   PaneId,
@@ -79,6 +81,8 @@ export class SequentialIds implements IdPort {
   #tab = 0
   #pane = 0
   #term = 0
+  #agent = 0
+  #block = 0
   workspace(): WorkspaceId {
     return WorkspaceId.parse(`ws-${++this.#ws}`)
   }
@@ -90,6 +94,12 @@ export class SequentialIds implements IdPort {
   }
   terminal(): TerminalId {
     return TerminalId.parse(`term-${++this.#term}`)
+  }
+  agentSession(): AgentSessionId {
+    return AgentSessionId.parse(`agent-${++this.#agent}`)
+  }
+  block(): BlockId {
+    return BlockId.parse(`blk-${++this.#block}`)
   }
 }
 
