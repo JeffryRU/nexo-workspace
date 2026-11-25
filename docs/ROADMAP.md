@@ -34,6 +34,10 @@ leer y escribir en un panel abierto en la ventana.
   línea, redactor con chips (proveedor, modelo, esfuerzo, permisos, carpeta).
 - Atención en la barra (`working`, `needs-input`, `done`) y notificaciones del sistema.
 
+**Hecho cuando:** un permiso o una pregunta pendiente se ve en la pestaña y la barra con su contador, avisa con una
+notificación del sistema si la ventana no tiene el foco, y las mediciones de rendimiento del agente (primer delta, documento de
+5 000 bloques, cambio de pestaña con agentes emitiendo) pasan en el CI. **F2 completa** (F2.1 a F2.6).
+
 ## F3 — Más proveedores
 
 - Codex (`codex app-server`), ACP (Gemini y otros agentes ACP), Antigravity (`agy --output-format

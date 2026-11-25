@@ -1,2 +1,6 @@
+export * from './agent-mirror.ts'
 export * from './arbitraries.ts'
+export * from './arbitraries-agent.ts'
+export * from './fake-agent.ts'
 export * from './fakes.ts'
+export * from './harness.ts'

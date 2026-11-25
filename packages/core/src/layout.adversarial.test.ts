@@ -2,7 +2,17 @@ import { type Layout, LayoutSchema, LIMITS, PaneId } from '@nexo/contracts'
 import { arbHostileString } from '@nexo/testkit'
 import * as fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { close, focusNeighbor, LayoutError, leaf, leaves, resize, split, swap } from './layout.ts'
+import {
+  close,
+  focusNeighbor,
+  LayoutError,
+  leaf,
+  leaves,
+  resize,
+  resizeBoundary,
+  split,
+  swap,
+} from './layout.ts'
 
 const id = (s: string) => PaneId.parse(s)
 
@@ -156,5 +166,70 @@ describe('adversarial: árboles profundos', () => {
     } catch (e) {
       expect((e as LayoutError).code).toBe('CONFLICT')
     }
+  })
+})
+
+describe('adversarial: resizeBoundary', () => {
+  const two = (): Layout => split(leaf(id('a')), id('a'), 'row', id('b'))
+
+  it('caminos vacíos, enormes, negativos y que apuntan a hojas lanzan LayoutError sin alterar el árbol', () => {
+    const t = two()
+    const before = JSON.stringify(t)
+    const bad: [readonly number[], number][] = [
+      [[0], 0],
+      [[1], 0],
+      [[-1], 0],
+      [[Number.MAX_SAFE_INTEGER], 0],
+      [[0, 0, 0], 0],
+      [new Array(100_000).fill(0), 0],
+      [[], 1],
+      [[], 99],
+      [[], -1],
+      [[], Number.NaN],
+      [[], Number.POSITIVE_INFINITY],
+      [[Number.NaN], 0],
+    ]
+    for (const [path, index] of bad) {
+      expect(() => resizeBoundary(t, path, index, 0.1)).toThrow(LayoutError)
+    }
+    expect(JSON.stringify(t)).toBe(before)
+  })
+
+  it('camino vacío en una hoja única: error', () => {
+    expect(() => resizeBoundary(leaf(id('a')), [], 0, 0.1)).toThrow(LayoutError)
+  })
+
+  it('delta NaN lanza; ±Infinity se acota y deja el árbol válido', () => {
+    const t = two()
+    expect(() => resizeBoundary(t, [], 0, Number.NaN)).toThrow(LayoutError)
+    for (const delta of [Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, 1e300, -1e300]) {
+      expect(LayoutSchema.safeParse(resizeBoundary(t, [], 0, delta)).success).toBe(true)
+    }
+  })
+
+  it('un camino calculado antes de cerrar paneles ya no vale: error o árbol válido, nunca estado corrupto', () => {
+    fc.assert(
+      fc.property(fc.array(fc.nat(3), { maxLength: 6 }), fc.nat(3), (path, index) => {
+        const full = split(
+          split(leaf(id('a')), id('a'), 'row', id('b')),
+          id('b'),
+          'column',
+          id('c'),
+        )
+        const t = close(full, id('c'))
+        if (t === null) return
+        try {
+          expect(LayoutSchema.safeParse(resizeBoundary(t, path, index, 0.1)).success).toBe(true)
+        } catch (e) {
+          expect(e).toBeInstanceOf(LayoutError)
+        }
+      }),
+    )
+  })
+
+  it('1000 niveles: mover el divisor más profundo funciona', () => {
+    const t = deepChain(1000)
+    const path = new Array(999).fill(0)
+    expect(LayoutSchema.safeParse(resizeBoundary(t, path, 0, 0.1)).success).toBe(true)
   })
 })

@@ -1,4 +1,6 @@
 import {
+  AgentSessionId,
+  BlockId,
   type EventData,
   type EventName,
   PaneId,
@@ -6,28 +8,28 @@ import {
   TerminalId,
   WorkspaceId,
 } from '@nexo/contracts'
-import type {
-  AgentProviderPort,
-  BusEvent,
-  ClockPort,
-  EventBusPort,
-  FileStat,
-  FileSystemPort,
-  IdPort,
-  LogFields,
-  LoggerPort,
-  Notification,
-  NotifierPort,
-  PersistedState,
-  ProcessLauncherPort,
-  PtyExit,
-  PtyPort,
-  PtyProcess,
-  PtySpawnOptions,
-  RunOptions,
-  RunResult,
-  SessionStorePort,
-  Unsubscribe,
+import {
+  type BusEvent,
+  type ClockPort,
+  type EventBusPort,
+  type FileStat,
+  type FileSystemPort,
+  type IdPort,
+  type LogFields,
+  type LoggerPort,
+  type Notification,
+  type NotifierPort,
+  type PersistedState,
+  type ProcessLauncherPort,
+  type PtyExit,
+  type PtyPort,
+  type PtyProcess,
+  PtySpawnError,
+  type PtySpawnOptions,
+  type RunOptions,
+  type RunResult,
+  type SessionStorePort,
+  type Unsubscribe,
 } from '@nexo/core'
 import { schedule } from './timers.ts'
 
@@ -79,6 +81,8 @@ export class SequentialIds implements IdPort {
   #tab = 0
   #pane = 0
   #term = 0
+  #agent = 0
+  #block = 0
   workspace(): WorkspaceId {
     return WorkspaceId.parse(`ws-${++this.#ws}`)
   }
@@ -90,6 +94,12 @@ export class SequentialIds implements IdPort {
   }
   terminal(): TerminalId {
     return TerminalId.parse(`term-${++this.#term}`)
+  }
+  agentSession(): AgentSessionId {
+    return AgentSessionId.parse(`agent-${++this.#agent}`)
+  }
+  block(): BlockId {
+    return BlockId.parse(`blk-${++this.#block}`)
   }
 }
 
@@ -198,10 +208,23 @@ export class FakePtyPort implements PtyPort {
   #pid = 1000
   #nextFailure: Error | undefined
   readonly #script: FakePtyScript | undefined
+  readonly #missingCmds: ReadonlySet<string>
+  readonly #missingCwds: ReadonlySet<string>
 
-  /** `script` corre justo después de que `spawn` resuelve (ya se pueden registrar oyentes). */
-  constructor(options: { script?: FakePtyScript } = {}) {
+  /**
+   * `script` corre justo después de que `spawn` resuelve (ya se pueden registrar oyentes).
+   * `missingCmds` y `missingCwds` simulan ejecutables y directorios que no existen.
+   */
+  constructor(
+    options: {
+      script?: FakePtyScript
+      missingCmds?: readonly string[]
+      missingCwds?: readonly string[]
+    } = {},
+  ) {
     this.#script = options.script
+    this.#missingCmds = new Set(options.missingCmds ?? [])
+    this.#missingCwds = new Set(options.missingCwds ?? [])
   }
 
   /** El siguiente `spawn` rechaza con este error. */
@@ -210,7 +233,17 @@ export class FakePtyPort implements PtyPort {
   }
 
   async spawn(options: PtySpawnOptions): Promise<PtyProcess> {
-    assertSize(options.cols, options.rows)
+    try {
+      assertSize(options.cols, options.rows)
+    } catch (error) {
+      throw new PtySpawnError('INVALID_OPTIONS', (error as Error).message, { cause: error })
+    }
+    if (this.#missingCmds.has(options.cmd)) {
+      throw new PtySpawnError('EXECUTABLE_NOT_FOUND', `ejecutable no encontrado: ${options.cmd}`)
+    }
+    if (options.cwd !== undefined && this.#missingCwds.has(options.cwd)) {
+      throw new PtySpawnError('CWD_NOT_FOUND', `directorio no encontrado: ${options.cwd}`)
+    }
     if (this.#nextFailure !== undefined) {
       const error = this.#nextFailure
       this.#nextFailure = undefined
@@ -322,13 +355,5 @@ export class FakeProcessLauncher implements ProcessLauncherPort {
   async run(options: RunOptions): Promise<RunResult> {
     this.calls.push(options)
     return this.respond(options)
-  }
-}
-
-export class FakeAgentProvider implements AgentProviderPort {
-  available = true
-  constructor(readonly id = 'fake') {}
-  async isAvailable(): Promise<boolean> {
-    return this.available
   }
 }

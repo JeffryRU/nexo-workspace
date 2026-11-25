@@ -1,7 +1,7 @@
 import { PaneId } from '@nexo/contracts'
 import { describe, expect, it } from 'vitest'
+import { FakeAgentProvider } from './fake-agent.ts'
 import {
-  FakeAgentProvider,
   FakeClock,
   FakeFileSystem,
   FakeLogger,
@@ -75,7 +75,10 @@ describe('FakePtyPort', () => {
     expect(fake?.size).toEqual({ cols: 100, rows: 30 })
     port.failNextSpawn(new Error('boom'))
     await expect(port.spawn({ cmd: 'sh', args: [], cols: 80, rows: 24 })).rejects.toThrow('boom')
-    await expect(port.spawn({ cmd: 'sh', args: [], cols: 0, rows: 24 })).rejects.toThrow(RangeError)
+    await expect(port.spawn({ cmd: 'sh', args: [], cols: 0, rows: 24 })).rejects.toMatchObject({
+      name: 'PtySpawnError',
+      code: 'INVALID_OPTIONS',
+    })
   })
 })
 
@@ -123,5 +126,6 @@ describe('otros falsos', () => {
     const provider = new FakeAgentProvider('claude')
     provider.available = false
     expect(await provider.isAvailable()).toBe(false)
+    await expect(provider.open({ cwd: '/x' })).rejects.toThrow()
   })
 })

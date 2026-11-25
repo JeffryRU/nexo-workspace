@@ -1,0 +1,77 @@
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-sunken);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 8px 4px 12px;
+  color: var(--fg-muted);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.sidebar-empty {
+  padding: 12px;
+  color: var(--fg-muted);
+}
+.ws-list,
+.tab-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ws-item {
+  padding: 2px 6px;
+}
+.ws-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.ws-name,
+.tab-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+.ws-name {
+  color: var(--fg-strong);
+  font-weight: 600;
+}
+.tab-row {
+  width: 100%;
+  padding-left: 22px;
+  color: var(--fg);
+}
+.ws-name:hover,
+.tab-row:hover {
+  background: var(--bg-hover);
+}
+.ws-item.active > .ws-row .ws-name {
+  color: var(--accent);
+}
+.tab-row.active {
+  background: var(--bg-active);
+  color: var(--fg-strong);
+}
+.ws-row .icon-button {
+  visibility: hidden;
+}
+.ws-row:hover .icon-button,
+.ws-row:focus-within .icon-button {
+  visibility: visible;
+}

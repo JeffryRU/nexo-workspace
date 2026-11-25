@@ -7,10 +7,21 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "start": "node src/main.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@nexo/adapter-provider-claude": "workspace:*",
+    "@nexo/adapter-pty-host": "workspace:*",
+    "@nexo/adapter-pty-node": "workspace:*",
     "@nexo/contracts": "workspace:*",
-    "@nexo/core": "workspace:*"
+    "@nexo/core": "workspace:*",
+    "ws": "8.23.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@nexo/testkit": "workspace:*",
+    "@types/ws": "8.18.2",
+    "@nexo/client": "workspace:*"
   }
 }

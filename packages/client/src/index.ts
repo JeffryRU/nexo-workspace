@@ -1,13 +1,49 @@
 import type { MethodName, MethodParams, MethodResult } from '@nexo/contracts'
+import { type ClientOptions, NexoClient } from './client.ts'
+import { type WebSocketTransportOptions, webSocketTransport } from './transport.ts'
 
-// TODO(F1): implementar el cliente WebSocket (conexion, auth, peticiones con id, eventos con seq,
-// validacion con parseServerMessage/parseResult). Por ahora solo los tipos derivados del registro.
+export { type AgentApi, agentApi } from './agent-api.ts'
+export {
+  AgentDocument,
+  type AgentDocumentClient,
+  type AgentDocumentEvent,
+  type AgentDocumentOptions,
+} from './agent-document.ts'
+export { type BackoffOptions, backoffDelay } from './backoff.ts'
+export {
+  type CallOptions,
+  type ClientOptions,
+  type ClientState,
+  NexoClient,
+  type ReconnectOptions,
+  type ResyncInfo,
+  type ResyncReason,
+  type Snapshot,
+} from './client.ts'
+export { type ClientErrorCode, NexoClientError } from './errors.ts'
+export {
+  SUBPROTOCOL,
+  type Transport,
+  type TransportFactory,
+  type WebSocketConstructor,
+  type WebSocketLike,
+  type WebSocketTransportOptions,
+  webSocketTransport,
+} from './transport.ts'
 
 export type { MethodName, MethodParams, MethodResult }
 
-/** Forma del cliente: un metodo por entrada del registro, con tipos derivados de contracts. */
-export type NexoClient = {
-  [M in MethodName]: (params: MethodParams<M>) => Promise<MethodResult<M>>
-}
-
 export const CLIENT_PROTOCOL_VERSION = 1
+
+/** Cliente por WebSocket (navegador, WebView o Node 24) ya conectado. */
+export async function connectWebSocket(
+  options: WebSocketTransportOptions & { client?: Omit<ClientOptions, 'transport'> },
+): Promise<NexoClient> {
+  const { client: clientOptions, ...transportOptions } = options
+  const client = new NexoClient({
+    ...clientOptions,
+    transport: () => webSocketTransport(transportOptions),
+  })
+  await client.connect()
+  return client
+}

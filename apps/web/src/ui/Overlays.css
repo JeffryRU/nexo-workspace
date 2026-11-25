@@ -1,0 +1,113 @@
+.status-screen {
+  height: 100%;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+}
+.status-screen h1 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--fg-strong);
+}
+.status-screen p {
+  margin: 0;
+  max-width: 56ch;
+}
+.banner {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 6px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+  z-index: 20;
+}
+.toast {
+  position: absolute;
+  right: 12px;
+  bottom: 28px;
+  max-width: 420px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  z-index: 20;
+}
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.5);
+  z-index: 30;
+}
+.modal {
+  min-width: 360px;
+  max-width: 90vw;
+  max-height: 85vh;
+  overflow: auto;
+  padding: 16px 20px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.modal h2 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  color: var(--fg-strong);
+}
+.shortcut-list {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 24px;
+  margin: 0 0 12px;
+}
+.shortcut-list dt {
+  color: var(--fg);
+}
+.shortcut-list dd {
+  margin: 0;
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+kbd {
+  font: 11px var(--font-mono);
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-sunken);
+  color: var(--fg-strong);
+}
+.searchbar {
+  position: absolute;
+  top: 40px;
+  right: 16px;
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  z-index: 15;
+}
+.searchbar input {
+  font: inherit;
+  color: var(--fg-strong);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2px 8px;
+  width: 200px;
+}

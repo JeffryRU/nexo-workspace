@@ -61,7 +61,9 @@ describe('parseRequest', () => {
 
   it('acepta cada método con params mínimos válidos', () => {
     const samples: Record<string, unknown> = {
+      auth: { token: 'abc' },
       'daemon.info': {},
+      'daemon.shutdown': {},
       snapshot: {},
       'events.subscribe': {},
       'workspace.list': {},
@@ -83,6 +85,14 @@ describe('parseRequest', () => {
       'terminal.resize': { terminalId: 'x1', cols: 1, rows: 1000 },
       'terminal.read': { terminalId: 'x1' },
       'terminal.kill': { terminalId: 'x1', signal: 'SIGTERM' },
+      'agent.providers': {},
+      'agent.create': { paneId: 'p1', provider: 'claude' },
+      'agent.send': { sessionId: 's1', text: 'hola' },
+      'agent.interrupt': { sessionId: 's1' },
+      'agent.respond': { type: 'permission', sessionId: 's1', blockId: 'b1', optionId: 'allow' },
+      'agent.list': {},
+      'agent.snapshot': { sessionId: 's1' },
+      'agent.close': { sessionId: 's1' },
     }
     expect(Object.keys(samples).sort()).toEqual([...METHOD_NAMES].sort())
     for (const [method, params] of Object.entries(samples)) {
@@ -91,9 +101,21 @@ describe('parseRequest', () => {
     }
   })
 
-  it('el registro de eventos tiene los nombres de la F1', () => {
+  it('el registro de eventos tiene los nombres de la F1 y la F2', () => {
     expect([...EVENT_NAMES].sort()).toEqual(
-      ['layout.changed', 'pane.attention', 'pane.title', 'terminal.exit', 'terminal.output'].sort(),
+      [
+        'agent.block',
+        'agent.delta',
+        'agent.session',
+        'agent.status',
+        'client.resync',
+        'layout.changed',
+        'pane.attention',
+        'pane.title',
+        'terminal.exit',
+        'terminal.output',
+        'workspace.changed',
+      ].sort(),
     )
   })
 
@@ -186,6 +208,22 @@ describe('límites de métodos', () => {
     const resize = (delta: number) => parseRequest(req('pane.resize', { paneId: 'p1', delta })).ok
     expect(resize(-1)).toBe(true)
     expect(resize(1.01)).toBe(false)
+  })
+
+  it('pane.resize por camino de nodo: valida tabId, camino, índice y delta', () => {
+    const resize = (params: Record<string, unknown>) => parseRequest(req('pane.resize', params)).ok
+    const ok = { tabId: 't1', path: [0, 1], index: 0, delta: 0.1 }
+    expect(resize(ok)).toBe(true)
+    expect(resize({ ...ok, path: [] })).toBe(true)
+    expect(resize({ ...ok, path: new Array(LIMITS.maxLayoutPathDepth).fill(0) })).toBe(true)
+    expect(resize({ ...ok, path: new Array(LIMITS.maxLayoutPathDepth + 1).fill(0) })).toBe(false)
+    expect(resize({ ...ok, path: [-1] })).toBe(false)
+    expect(resize({ ...ok, path: [0.5] })).toBe(false)
+    expect(resize({ ...ok, index: -1 })).toBe(false)
+    expect(resize({ ...ok, index: 1.5 })).toBe(false)
+    expect(resize({ ...ok, delta: 2 })).toBe(false)
+    expect(resize({ ...ok, paneId: 'p1' })).toBe(false)
+    expect(resize({ path: [], index: 0, delta: 0.1 })).toBe(false)
   })
 
   it('terminal.spawn: env con nombres reservados o inválidos se rechaza', () => {
@@ -283,5 +321,21 @@ describe('valores ya parseados', () => {
     expect(utf8ByteLength('😀')).toBe(4)
     expect(utf8ByteLength('\ud800')).toBe(3)
     expect(utf8ByteLength('\ud800a')).toBe(4)
+  })
+})
+
+describe('terminal.read: fromOffset y truncated', () => {
+  it('acepta fromOffset entero no negativo y rechaza el resto', () => {
+    const ok = parseRequest(req('terminal.read', { terminalId: 't1', fromOffset: 0, maxBytes: 10 }))
+    expect(ok.ok).toBe(true)
+    for (const fromOffset of [-1, 1.5, '3', null]) {
+      expect(parseRequest(req('terminal.read', { terminalId: 't1', fromOffset })).ok).toBe(false)
+    }
+  })
+
+  it('el resultado admite truncated opcional booleano', () => {
+    expect(parseResult('terminal.read', { data: 'x', offset: 1 }).ok).toBe(true)
+    expect(parseResult('terminal.read', { data: 'x', offset: 1, truncated: true }).ok).toBe(true)
+    expect(parseResult('terminal.read', { data: 'x', offset: 1, truncated: 'si' }).ok).toBe(false)
   })
 })

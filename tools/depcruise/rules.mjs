@@ -36,8 +36,22 @@ export function buildRules(prefix = '') {
       name: 'client-solo-contracts',
       comment: 'client (SDK del protocolo) solo importa contracts.',
       severity: error,
-      from: { path: p('packages/client/src/'), pathNot: TEST_FILE },
+      from: {
+        path: p('packages/client/src/'),
+        pathNot: [TEST_FILE, p('packages/client/src/node/')],
+      },
       to: { pathNot: [p('packages/client/'), p('packages/contracts/')] },
+    },
+    {
+      name: 'client-node-subpath',
+      comment:
+        'El subpath @nexo/client/node puede usar node:* y zod, pero nada mas fuera de client y contracts.',
+      severity: error,
+      from: { path: p('packages/client/src/node/'), pathNot: TEST_FILE },
+      to: {
+        dependencyTypesNot: ['core'],
+        pathNot: [p('packages/client/'), p('packages/contracts/'), 'node_modules/zod/', '^zod$'],
+      },
     },
     {
       name: 'adapters-aislados',

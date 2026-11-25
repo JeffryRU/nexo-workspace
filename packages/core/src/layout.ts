@@ -5,6 +5,7 @@ import {
   type SplitDirection,
   type SplitNode,
 } from '@nexo/contracts'
+import { DomainError } from './errors.ts'
 
 /**
  * Operaciones puras e inmutables sobre el árbol de distribución.
@@ -20,12 +21,11 @@ export type Direction = 'left' | 'right' | 'up' | 'down'
 
 export type LayoutErrorCode = 'NOT_FOUND' | 'INVALID_PARAMS' | 'CONFLICT'
 
-export class LayoutError extends Error {
-  readonly code: LayoutErrorCode
+export class LayoutError extends DomainError {
+  declare readonly code: LayoutErrorCode
   constructor(code: LayoutErrorCode, message: string) {
-    super(message)
+    super(code, message)
     this.name = 'LayoutError'
-    this.code = code
   }
 }
 
@@ -46,18 +46,28 @@ export function leaves(layout: Layout): PaneId[] {
   return out
 }
 
-/** Camino (índices de hijo desde la raíz) hasta la hoja `paneId`, o `null` si no está. */
+/**
+ * Camino (índices de hijo desde la raíz) hasta la hoja `paneId`, o `null` si no está. Cada nodo guarda solo
+ * su padre y su índice; copiar el camino en cada nodo era cuadrático en árboles profundos.
+ */
 export function pathOf(layout: Layout, paneId: PaneId): number[] | null {
-  const stack: { node: Layout; path: number[] }[] = [{ node: layout, path: [] }]
-  while (stack.length > 0) {
-    const item = stack.pop()
-    if (item === undefined) break
-    if (item.node.type === 'leaf') {
-      if (item.node.paneId === paneId) return item.path
-    } else {
-      for (let i = item.node.children.length - 1; i >= 0; i--) {
-        stack.push({ node: item.node.children[i] as Layout, path: [...item.path, i] })
+  const nodes: Layout[] = [layout]
+  const parents: number[] = [-1]
+  const indexes: number[] = [-1]
+  for (let at = 0; at < nodes.length; at++) {
+    const node = nodes[at] as Layout
+    if (node.type === 'leaf') {
+      if (node.paneId !== paneId) continue
+      const path: number[] = []
+      for (let cur = at; parents[cur] !== -1; cur = parents[cur] as number) {
+        path.push(indexes[cur] as number)
       }
+      return path.reverse()
+    }
+    for (let i = 0; i < node.children.length; i++) {
+      nodes.push(node.children[i] as Layout)
+      parents.push(at)
+      indexes.push(i)
     }
   }
   return null
@@ -189,6 +199,25 @@ export function resize(layout: Layout, target: PaneId | NodePath, delta: number)
   ratios[i] = own + d
   ratios[j] = other - d
   return replaceAt(layout, parentPath, { ...parent, ratios: renormalize(ratios) }) as Layout
+}
+
+/**
+ * Mueve el divisor entre los hijos `index` e `index + 1` del split en `splitPath`: delta > 0 agranda el
+ * hijo `index`. El camino debe apuntar a un split y `index + 1` debe existir; si no, `NOT_FOUND`.
+ */
+export function resizeBoundary(
+  layout: Layout,
+  splitPath: NodePath,
+  index: number,
+  delta: number,
+): Layout {
+  if (!Number.isInteger(index) || index < 0) {
+    throw new LayoutError('INVALID_PARAMS', 'índice de divisor inválido')
+  }
+  const node = nodeAt(layout, splitPath)
+  if (node.type !== 'split') throw new LayoutError('NOT_FOUND', 'el camino no apunta a un split')
+  if (index + 1 >= node.children.length) throw new LayoutError('NOT_FOUND', 'divisor inexistente')
+  return resize(layout, [...splitPath, index], delta)
 }
 
 /** Intercambia la posición de dos paneles. */

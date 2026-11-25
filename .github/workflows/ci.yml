@@ -26,3 +26,129 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+
+  # Issue #15: node-pty/ConPTY puede caerse con una violación de acceso nativa al salir varias terminales a la vez.
+  # Con el pty host el crash queda contenido: el proceso que hace de daemon debe terminar bien en todas las rondas.
+  pty-stress:
+    name: estrés de PTY con pty host (windows-latest)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node tools/stress/pty-stress.mjs --rounds 30 --variants host-mixed,host-output-exit,host-resize-exit
+
+  desktop:
+    name: desktop rust (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        working-directory: apps/desktop/src-tauri
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencias de sistema de Tauri 2 (Linux)
+        if: runner.os == 'Linux'
+        working-directory: .
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+      # tauri::generate_context! exige que exista frontendDist (apps/web/dist).
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        working-directory: .
+      - run: pnpm --filter @nexo/web build
+        working-directory: .
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+      - run: cargo build
+
+  e2e:
+    name: e2e y rendimiento (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows queda fuera de la matriz: con ConPTY cada terminal tarda ~3 s en arrancar y la suite
+        # (con 10 + 30 terminales) pasaría de 15 minutos; la CLI, el daemon y la web ya se prueban allí en `check`.
+        os: [ubuntu-latest]
+    env:
+      # Los runners compartidos son más lentos y variables (p95 medido entre 12 y 44 ms con el mismo código): margen
+      # de 2,5x sobre el presupuesto local (16 ms) y salida menos densa (20 ms por línea); el valor previo a las
+      # optimizaciones (53 ms en local) seguiría fallando.
+      NEXO_PERF_TAB_P95_MS: "40"
+      NEXO_PERF_EMIT_MS: "20"
+      NEXO_PERF_LONGTASK_MAX_MS: "500"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Versión de Playwright
+        id: playwright
+        run: echo "version=$(pnpm --filter @nexo/e2e exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: browsers
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Instala Chromium y sus dependencias del sistema
+        if: steps.browsers.outputs.cache-hit != 'true'
+        run: pnpm --filter @nexo/e2e exec playwright install --with-deps chromium
+      - name: Dependencias del sistema (con Chromium en caché)
+        if: steps.browsers.outputs.cache-hit == 'true'
+        run: pnpm --filter @nexo/e2e exec playwright install-deps chromium
+      - run: pnpm e2e
+        env:
+          CI: "true"
+      - run: pnpm perf
+        env:
+          CI: "true"
+      - name: Resumen de rendimiento
+        if: always()
+        run: |
+          for f in e2e/results/*.json; do
+            [ -f "$f" ] || continue
+            echo "### $(basename "$f")" >> "$GITHUB_STEP_SUMMARY"
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            cat "$f" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          done
+      - name: Resultados de rendimiento
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-results-${{ matrix.os }}
+          path: e2e/results
+          if-no-files-found: ignore
+      - name: Trazas, capturas e informe si algo falla
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure-${{ matrix.os }}
+          path: |
+            e2e/test-results
+            e2e/report
+          if-no-files-found: ignore
+          retention-days: 7

@@ -1,4 +1,4 @@
-import { LayoutSchema, PaneId, Tab, TabId, WorkspaceId } from '@nexo/contracts'
+import { events, LayoutSchema, PaneId, Tab, TabId, WorkspaceId } from '@nexo/contracts'
 import { RecordingEventBus, SequentialIds } from '@nexo/testkit'
 import { describe, expect, it } from 'vitest'
 import { LayoutError } from './layout.ts'
@@ -117,6 +117,39 @@ describe('LayoutService', () => {
     expect(service.snapshot()[0]?.tabs).toHaveLength(1)
   })
 
+  it('resizeBoundaryAt mueve un divisor por camino y emite', () => {
+    const { bus, service, ws } = setup()
+    const tab = service.createTab(ws.id)
+    const second = service.split(tab.focusedPaneId, 'row')
+    service.split(second.id, 'column')
+    const before = bus.ofType('layout.changed').length
+    const layout = service.resizeBoundaryAt(tab.id, [1], 0, 0.2)
+    const inner = layout.type === 'split' ? layout.children[1] : undefined
+    expect(inner?.type === 'split' && inner.ratios[0]).toBeCloseTo(0.7)
+    expect(bus.ofType('layout.changed')).toHaveLength(before + 1)
+  })
+
+  it('resizeBoundaryAt con pestaña o camino inexistentes lanza sin emitir', () => {
+    const { bus, service, ws } = setup()
+    const tab = service.createTab(ws.id)
+    const before = bus.events.length
+    expect(() => service.resizeBoundaryAt(TabId.parse('fantasma'), [], 0, 0.1)).toThrow(LayoutError)
+    expect(() => service.resizeBoundaryAt(tab.id, [], 0, 0.1)).toThrow(LayoutError)
+    expect(() => service.resizeBoundaryAt(tab.id, [3], 0, 0.1)).toThrow(LayoutError)
+    expect(() => service.resizeBoundaryAt(tab.id, [], 0, Number.NaN)).toThrow(LayoutError)
+    expect(bus.events.length).toBe(before)
+  })
+
+  it('un camino viejo tras cerrar paneles falla limpio y el árbol sigue válido', () => {
+    const { service, ws } = setup()
+    const tab = service.createTab(ws.id)
+    const b = service.split(tab.focusedPaneId, 'row')
+    const c = service.split(b.id, 'column')
+    service.closePane(c.id)
+    expect(() => service.resizeBoundaryAt(tab.id, [1], 0, 0.1)).toThrow(LayoutError)
+    expect(LayoutSchema.safeParse(service.resizeBoundaryAt(tab.id, [], 0, 0.1)).success).toBe(true)
+  })
+
   it('cerrar una pestaña no activa conserva la activa', () => {
     const { service, ws } = setup()
     const t1 = service.createTab(ws.id)
@@ -145,7 +178,33 @@ describe('LayoutService', () => {
     bus.subscribe((e) => seen.push(e.event))
     const tab = service.createTab(ws.id)
     service.split(tab.focusedPaneId, 'column')
-    expect(seen).toEqual(['layout.changed', 'layout.changed'])
+    expect(seen).toEqual(['layout.changed', 'workspace.changed', 'layout.changed'])
+  })
+
+  it('workspace.changed cubre alta, renombres, movimiento y cierre', () => {
+    const { bus, service, ws } = setup()
+    const changes = () => bus.ofType('workspace.changed')
+    const t1 = service.createTab(ws.id, 'uno')
+    service.renameTab(t1.id, 'dos')
+    service.renameWorkspace(ws.id, 'nuevo')
+    const other = service.createWorkspace('otro')
+    service.moveTab(t1.id, 0, other.id)
+    service.closeTab(t1.id)
+    service.closeWorkspace(other.id)
+    const all = changes()
+    const summaries = all.flatMap((d) => ('workspace' in d ? [d.workspace] : []))
+    expect(summaries.some((w) => w.tabs.some((t) => t.title === 'dos'))).toBe(true)
+    expect(summaries.some((w) => w.name === 'nuevo')).toBe(true)
+    expect(summaries.some((w) => w.id === other.id && w.tabs.length === 1)).toBe(true)
+    expect(all.at(-1)).toEqual({ workspaceId: other.id, removed: true })
+    for (const d of all) expect(events['workspace.changed'].safeParse(d).success).toBe(true)
+  })
+
+  it('el evento de espacio no trae distribución ni paneles', () => {
+    const { bus, service, ws } = setup()
+    service.createTab(ws.id)
+    const last = bus.ofType('workspace.changed').at(-1)
+    expect(JSON.stringify(last)).not.toContain('layout')
   })
 })
 

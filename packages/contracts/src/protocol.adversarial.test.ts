@@ -3,6 +3,12 @@ import { LayoutSchema, LIMITS, parseRequest, parseServerMessage } from './index.
 
 const polluted = () => ({}) as Record<string, unknown>
 
+// Aserción de rendimiento: en máquinas lentas se escala con NEXO_TEST_TIMEOUT_SCALE (1 por omisión; ver AGENTS.md).
+const rawScale = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process
+  ?.env?.NEXO_TEST_TIMEOUT_SCALE
+const scaleEnv = Number(rawScale ?? '1')
+const TIMEOUT_SCALE = Number.isFinite(scaleEnv) && scaleEnv >= 1 ? Math.min(scaleEnv, 20) : 1
+
 describe('adversarial: tamaño y anidamiento', () => {
   it('JSON gigante -> PAYLOAD_TOO_LARGE sin parsear', () => {
     const big = `{"v":1,"id":"a","method":"snapshot","params":{"x":"${'a'.repeat(LIMITS.maxMessageBytes)}"}}`
@@ -19,7 +25,7 @@ describe('adversarial: tamaño y anidamiento', () => {
     const started = Date.now()
     const r = parseRequest(text)
     expect(r.ok).toBe(false)
-    expect(Date.now() - started).toBeLessThan(2000)
+    expect(Date.now() - started).toBeLessThan(2000 * TIMEOUT_SCALE)
     expect(() => parseServerMessage('['.repeat(500_000))).not.toThrow()
   })
 
@@ -94,6 +100,20 @@ describe('adversarial: valores y tipos', () => {
       parseRequest('{"v":1,"id":"a","method":"pane.resize","params":{"paneId":"p1","delta":NaN}}')
         .ok,
     ).toBe(false)
+    const byPath = { tabId: 't1', path: [], index: 0 }
+    expect(call('pane.resize', { ...byPath, delta: Number.NaN }).ok).toBe(false)
+    expect(call('pane.resize', { ...byPath, delta: Number.NEGATIVE_INFINITY }).ok).toBe(false)
+    expect(call('pane.resize', { ...byPath, path: [Number.MAX_SAFE_INTEGER], delta: 0.1 }).ok).toBe(
+      false,
+    )
+    expect(call('pane.resize', { ...byPath, path: ['0'], delta: 0.1 }).ok).toBe(false)
+    expect(call('pane.resize', { ...byPath, path: 'x', delta: 0.1 }).ok).toBe(false)
+    expect(
+      call('pane.resize', { ...byPath, path: new Array(100_000).fill(0), delta: 0.1 }).ok,
+    ).toBe(false)
+    expect(call('pane.resize', { ...byPath, index: LIMITS.maxPanesPerTab, delta: 0.1 }).ok).toBe(
+      false,
+    )
     expect(call('tab.move', { tabId: 't1', index: -1 }).ok).toBe(false)
     expect(call('terminal.spawn', { paneId: 'p1', cols: -80, rows: 24 }).ok).toBe(false)
     expect(call('terminal.read', { terminalId: 't1', maxBytes: 0 }).ok).toBe(false)

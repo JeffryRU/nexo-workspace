@@ -2,6 +2,7 @@ packages:
   - apps/*
   - packages/*
   - packages/adapters/*
+  - e2e
 minimumReleaseAgeExclude:
   - "@biomejs/biome@2.6.9"
   - "@biomejs/cli-android-arm64@2.6.9"
@@ -16,3 +17,6 @@ minimumReleaseAgeExclude:
   - "@biomejs/cli-win32-x64@2.6.9"
 
 ignoreWorkspaceCycles: true
+
+allowBuilds:
+  node-pty: true

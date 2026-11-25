@@ -18,7 +18,32 @@ export const LIMITS = {
   maxEnvValueLength: 32 * 1024,
   /** Paneles por pestaña (acota la profundidad y el tamaño del árbol). */
   maxPanesPerTab: 1024,
+  /** Profundidad máxima del camino de nodo en `pane.resize`. */
+  maxLayoutPathDepth: 64,
   maxErrorMessageLength: 4096,
   /** Tolerancia de la suma de proporciones de un `Layout`. */
   ratioTolerance: 1e-6,
+  // Agentes (F2.1). Los topes de bytes son UTF-8. Un campo de 128 KiB con escapes JSON (`\u001b`) llega a
+  // 768 KiB, por eso ningún campo pasa de 128 KiB; aun así, quien emite un bloque (el daemon) comprueba
+  // el tamaño serializado contra `maxMessageBytes` antes de enviarlo.
+  /** Texto de un bloque (mensaje, Markdown, razonamiento, salida de acción, diff). */
+  maxBlockTextBytes: 128 * 1024,
+  /** Entrada de una acción (JSON del proveedor, resumido) y detalle de un permiso. */
+  maxBlockInputBytes: 16 * 1024,
+  /** Un delta de texto (`agent.delta`). */
+  maxDeltaBytes: 32 * 1024,
+  /** Bloques por sesión; más allá, el daemon rechaza turnos nuevos con `CONFLICT`. */
+  maxBlocksPerSession: 10_000,
+  /** Sesiones de agente por daemon (`CONFLICT` al excederlo). */
+  maxAgentSessions: 64,
+  /** Bloques por página de `agent.snapshot`. */
+  maxSnapshotBlocks: 200,
+  /** Opciones de un permiso o de una pregunta. */
+  maxBlockOptions: 16,
+  /** Preguntas de un bloque `question`. */
+  maxQuestions: 4,
+  /** Entradas de un plan. */
+  maxPlanEntries: 256,
+  /** Modelos que declara un proveedor. */
+  maxProviderModels: 128,
 } as const
