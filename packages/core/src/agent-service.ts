@@ -292,10 +292,12 @@ export class AgentService {
       const parsed = ProviderCapabilities.safeParse(
         await port.capabilities().catch(() => undefined),
       )
+      const reason = available ? undefined : safeReason(port)
       const info = ProviderInfo.safeParse({
         id: port.id,
         name: port.displayName,
         available: available && parsed.success,
+        ...(reason === undefined || reason === '' ? {} : { reason }),
         capabilities: parsed.success ? parsed.data : FALLBACK_CAPABILITIES,
       })
       if (info.success) providers.push(info.data)
@@ -1029,5 +1031,14 @@ function identity(block: Block) {
     turn: block.turn,
     seq: block.seq,
     createdAt: block.createdAt,
+  }
+}
+
+function safeReason(port: AgentProviderPort): string | undefined {
+  try {
+    const raw = port.unavailableReason?.()
+    return raw === undefined ? undefined : oneLine(raw, 512)
+  } catch {
+    return undefined
   }
 }
