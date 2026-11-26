@@ -250,6 +250,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
         log: (entry) => logger[entry.level](`ollama: ${entry.message}`),
       })
     }
+    if (name !== 'claude') throw new Error(`proveedor de agente desconocido: ${name}`)
     return createClaudeProvider({
       env: childBaseEnv(),
       log: (entry) => logger[entry.level](`claude: ${entry.message}`),

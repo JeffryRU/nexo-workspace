@@ -159,3 +159,30 @@ describe('nexo agent con el proveedor Codex (proceso app-server falso)', () => {
     await attachText(sb, id, 'Hecho.')
   })
 })
+
+describe('nexo agent con un agente ACP (agente falso, declarado en NEXO_ACP_AGENTS)', () => {
+  it('agent new --provider gemini, conversación y permiso respondido desde la CLI', async () => {
+    const fakeAcp = fileURLToPath(
+      new URL('../../../packages/adapters/provider-acp/test/fake-acp.mjs', import.meta.url),
+    )
+    const sb = await Sandbox.create()
+    sandbox = sb
+    await sb.startDaemon({
+      NEXO_AGENT_PROVIDERS: 'gemini',
+      NEXO_ACP_AGENTS: JSON.stringify([
+        { id: 'gemini', name: 'Gemini', command: fakeAcp, args: ['--acp'] },
+      ]),
+    })
+    const { sessionId: id } = AgentNewOutput.parse(
+      await sb.json(['agent', 'new', '--provider', 'gemini', '--cwd', tmpdir()]),
+    )
+    await sb.json(['agent', 'send', id, 'simple hola'])
+    const doc = await attachText(sb, id, 'Hola desde ACP.')
+    expect(doc).toContain('> simple hola')
+
+    await sb.json(['agent', 'send', id, 'permiso'])
+    await attachText(sb, id, '? Permiso: Ejecutar: rm -rf build')
+    expect((await sb.nexo(['agent', 'respond', id, '1'])).code).toBe(0)
+    await attachText(sb, id, 'Hecho.')
+  })
+})

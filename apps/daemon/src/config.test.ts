@@ -60,4 +60,43 @@ describe('parseEnv: proveedores de agente', () => {
     )
     expect(parseEnv({ NEXO_CLAUDE_EXECUTABLE: '' }).claudeExecutable).toBeUndefined()
   })
+
+  it('gemini existe por omisión y se acepta en NEXO_AGENT_PROVIDERS', () => {
+    const env = parseEnv({ NEXO_AGENT_PROVIDERS: 'claude,gemini' })
+    expect(env.agentProviders).toEqual(['claude', 'gemini'])
+    expect(env.acpAgents).toEqual([
+      { id: 'gemini', name: 'Gemini', command: 'gemini', args: ['--acp'] },
+    ])
+    expect(parseEnv({}).acpAgents.map((a) => a.id)).toEqual(['gemini'])
+  })
+
+  it('NEXO_ACP_AGENTS: los agentes declarados valen como proveedores y se validan', () => {
+    const declared = JSON.stringify([
+      { id: 'otro', name: 'Otro', command: 'otro-cli', args: ['--acp'] },
+    ])
+    const env = parseEnv({ NEXO_ACP_AGENTS: declared, NEXO_AGENT_PROVIDERS: 'gemini,otro' })
+    expect(env.agentProviders).toEqual(['gemini', 'otro'])
+    expect(env.acpAgents.map((a) => a.id)).toEqual(['gemini', 'otro'])
+    expect(parseEnv({ NEXO_ACP_AGENTS: '' }).acpAgents.map((a) => a.id)).toEqual(['gemini'])
+    // Un id sin declarar sigue siendo desconocido.
+    expect(() => parseEnv({ NEXO_AGENT_PROVIDERS: 'otro' })).toThrow(/NEXO_AGENT_PROVIDERS/)
+    for (const bad of [
+      '{',
+      '[{"id":"claude","name":"x","command":"x"}]',
+      '[{"id":"a","name":"x","command":"x"},{"id":"a","name":"y","command":"y"}]',
+      '[{"id":"A b","name":"x","command":"x"}]',
+      '[{"id":"a","name":"x"}]',
+    ]) {
+      expect(() => parseEnv({ NEXO_ACP_AGENTS: bad }), bad).toThrow(/NEXO_ACP_AGENTS/)
+    }
+  })
+
+  it('declarar «gemini» sustituye el agente por omisión', () => {
+    const env = parseEnv({
+      NEXO_ACP_AGENTS: JSON.stringify([{ id: 'gemini', name: 'Mi Gemini', command: '/x/gemini' }]),
+    })
+    expect(env.acpAgents).toEqual([
+      { id: 'gemini', name: 'Mi Gemini', command: '/x/gemini', args: [] },
+    ])
+  })
 })
