@@ -21,11 +21,13 @@ export const nodeTimers: Timers = {
 
 /** El agente habla otra versión del protocolo: no se puede seguir. */
 export class AcpVersionError extends Error {
-  constructor(readonly agentVersion: number) {
+  readonly agentVersion: number
+  constructor(agentVersion: number) {
     super(
       `el agente usa la versión ${agentVersion} del protocolo ACP y Nexo solo habla la ${ACP_PROTOCOL_VERSION}`,
     )
     this.name = 'AcpVersionError'
+    this.agentVersion = agentVersion
   }
 }
 
