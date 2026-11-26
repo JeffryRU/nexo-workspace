@@ -443,6 +443,19 @@ importers:
         specifier: workspace:*
         version: link:../../testkit
 
+  packages/adapters/store-memory-fs:
+    dependencies:
+      '@nexo/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@nexo/core':
+        specifier: workspace:*
+        version: link:../../core
+    devDependencies:
+      '@nexo/testkit':
+        specifier: workspace:*
+        version: link:../../testkit
+
   packages/client:
     dependencies:
       '@nexo/contracts':

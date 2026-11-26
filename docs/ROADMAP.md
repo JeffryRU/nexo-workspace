@@ -56,6 +56,11 @@ notificación del sistema si la ventana no tiene el foco, y las mediciones de re
 
 ## F3.5 — Memoria observacional (ADR 0007)
 
+- **F3.5.1 Dominio, contratos y almacén** (hecho): dominio puro en `core` (observaciones, reflexiones, estimación de tokens, selección
+  de bloques, lotes de 6k y umbral de 40k, bloque inyectable con escape), puertos `SummarizerPort` y `MemoryStorePort` con falsos y
+  conformidad, contratos zod `memory.*` (sin implementar en el daemon) y `packages/adapters/store-memory-fs` (ver «Memoria
+  observacional (F3.5)»). F3.5.2 a F3.5.4 siguen abiertas; el ADR 0007 queda «propuesta» hasta F3.5.4.
+
 - Observador y Reflector en el daemon sobre la transcripción normalizada (`SummarizerPort`; Ollama,
   Haiku o Gemini Flash), con alcance por sesión y por proyecto.
 - Inyección por proveedor (`MemoryInjectionPort`), reinyección tras la compactación de Claude Code,

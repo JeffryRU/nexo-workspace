@@ -6,6 +6,7 @@ export * from './envelope.ts'
 export * from './errors.ts'
 export * from './events.ts'
 export * from './limits.ts'
+export * from './memory.ts'
 export * from './methods.ts'
 export * from './parse.ts'
 export {

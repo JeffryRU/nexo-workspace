@@ -46,4 +46,21 @@ export const LIMITS = {
   maxPlanEntries: 256,
   /** Modelos que declara un proveedor. */
   maxProviderModels: 128,
+  // Memoria observacional (F3.5.1).
+  /** Texto de una observación (bytes UTF-8). */
+  maxObservationBytes: 2 * 1024,
+  /** Texto de una reflexión (bytes UTF-8). */
+  maxReflectionBytes: 16 * 1024,
+  /** Observaciones por proyecto (el dominio descarta las menos útiles al pasarse). */
+  maxObservationsPerProject: 2000,
+  /** Rangos de origen que conserva una reflexión. */
+  maxReflectionSources: 64,
+  /** Sesiones con progreso del Observador guardado por proyecto. */
+  maxMemorySessions: 256,
+  /** Observaciones por página de `memory.list` y resultados de `memory.search`. */
+  maxMemoryPage: 100,
+  /** Texto de una consulta de `memory.search`. */
+  maxMemoryQueryChars: 256,
+  /** Bloques que cubre un rango de `memory.recall` (y que devuelve como máximo). */
+  maxRecallBlocks: 200,
 } as const
