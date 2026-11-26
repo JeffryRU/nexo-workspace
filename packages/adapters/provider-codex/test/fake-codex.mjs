@@ -342,6 +342,43 @@ async function runTurn(turn, text) {
       done(turn)
       return
     }
+    case 'limites': {
+      // Actualización parcial: solo la ventana primaria (el cliente junta con lo que ya sabe).
+      notify('account/rateLimits/updated', {
+        rateLimits: {
+          limitId: 'codex',
+          primary: { usedPercent: 77, windowDurationMins: 300, resetsAt: 4102444800 },
+          secondary: null,
+          planType: 'SECRETO-plan',
+        },
+      })
+      notify('account/rateLimits/updated', { rateLimits: 'basura' })
+      item(turn, agentMessage('m1', 'ok'), 'item/completed')
+      done(turn)
+      return
+    }
+    case 'notificar': {
+      // Notificaciones de límites tal como las deja la prueba en FAKE_CODEX_NOTIFY_FILE (una lista de params).
+      for (const params of JSON.parse(readFileSync(process.env.FAKE_CODEX_NOTIFY_FILE, 'utf8'))) {
+        notify('account/rateLimits/updated', params)
+      }
+      item(turn, agentMessage('m1', 'ok'), 'item/completed')
+      done(turn)
+      return
+    }
+    case 'avalancha': {
+      for (let i = 0; i < 500; i++) {
+        notify('account/rateLimits/updated', {
+          rateLimits: {
+            limitId: 'codex',
+            primary: { usedPercent: i % 101, windowDurationMins: 300 },
+          },
+        })
+      }
+      item(turn, agentMessage('m1', 'ok'), 'item/completed')
+      done(turn)
+      return
+    }
     case 'garbage': {
       raw('esto no es json\n')
       raw('[1,2,3]\n')
@@ -468,6 +505,32 @@ async function runTurn(turn, text) {
   }
 }
 
+// Respuesta de límites con datos de cuenta que el adaptador debe descartar (SECRETO-*).
+const snapshot = (primary, secondary) => ({
+  limitId: 'codex',
+  limitName: null,
+  primary,
+  secondary,
+  credits: { hasCredits: true, unlimited: false, balance: 'SECRETO-saldo' },
+  planType: 'SECRETO-plan',
+  rateLimitReachedType: null,
+})
+const LIMITS_DEFAULT = {
+  rateLimits: snapshot(
+    { usedPercent: 42, windowDurationMins: 300, resetsAt: 4102444800 },
+    { usedPercent: 7, windowDurationMins: 10080, resetsAt: 4102531200 },
+  ),
+  rateLimitsByLimitId: {
+    codex: snapshot(
+      { usedPercent: 42, windowDurationMins: 300, resetsAt: 4102444800 },
+      { usedPercent: 7, windowDurationMins: 10080, resetsAt: 4102531200 },
+    ),
+  },
+  accountId: 'SECRETO-cuenta',
+  ordinaryUsageAllowed: true,
+  rateLimitResetCredits: { availableCount: 1, credits: [{ id: 'SECRETO-credito' }] },
+}
+
 const loadThreads = () => {
   const file = process.env.FAKE_CODEX_THREADS_FILE
   if (!file) return []
@@ -502,6 +565,17 @@ function handle(msg) {
       })
     case 'initialized':
       return
+    case 'account/rateLimits/read': {
+      // Prueba de límites: FAKE_CODEX_LIMITS_FILE = JSON de la respuesta; FAKE_CODEX_LIMITS_MODE = fail | hang | garbage.
+      note({ limitsRead: true })
+      const mode = process.env.FAKE_CODEX_LIMITS_MODE
+      if (mode === 'hang') return
+      if (mode === 'fail') return fail(-32603, 'no hay sesión de ChatGPT: yo@example.com')
+      if (mode === 'garbage') return reply({ rateLimits: 5 })
+      const file = process.env.FAKE_CODEX_LIMITS_FILE
+      if (file) return reply(JSON.parse(readFileSync(file, 'utf8')))
+      return reply(LIMITS_DEFAULT)
+    }
     case 'account/read':
       return reply(
         logged
