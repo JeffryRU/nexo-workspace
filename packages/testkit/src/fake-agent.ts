@@ -13,6 +13,7 @@ import {
   type AgentProviderSession,
   type AgentResponse,
   type ClockPort,
+  type HistoryPort,
   type MemoryInjectionPort,
   type Unsubscribe,
 } from '@nexo/core'
@@ -114,6 +115,8 @@ export type FakeAgentProviderOptions = {
   clock?: ClockPort
   /** Cómo recibe la memoria; sin él, el falso no la recibe. */
   memoryInjection?: MemoryInjectionPort
+  /** Historial del proveedor (F4.3); sin él, el falso no tiene historial. */
+  history?: HistoryPort
 }
 
 const realClock: ClockPort = {
@@ -318,6 +321,7 @@ export class FakeAgentProvider implements AgentProviderPort {
   /** Opciones con las que se abrió cada sesión (para ver la `memory` recibida). */
   readonly opened: AgentOpenOptions[] = []
   readonly memoryInjection?: MemoryInjectionPort
+  readonly history?: HistoryPort
   readonly #clock: ClockPort
   readonly #known = new Set<string>()
   #n = 0
@@ -331,10 +335,16 @@ export class FakeAgentProvider implements AgentProviderPort {
     this.script = options.script ?? defaultScript
     this.#clock = options.clock ?? realClock
     if (options.memoryInjection !== undefined) this.memoryInjection = options.memoryInjection
+    if (options.history !== undefined) this.history = options.history
   }
 
   async isAvailable(): Promise<boolean> {
     return this.available
+  }
+
+  /** Declara una ficha de sesión como reanudable (p. ej. una sembrada en su `FakeHistory`). */
+  rememberSession(providerSessionId: string): void {
+    this.#known.add(providerSessionId)
   }
 
   /** Motivo que se informa mientras `available` es `false` (`undefined`: sin motivo). */
