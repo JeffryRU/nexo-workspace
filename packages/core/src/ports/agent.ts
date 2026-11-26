@@ -85,4 +85,6 @@ export interface AgentProviderPort {
   open(options: AgentOpenOptions): Promise<AgentProviderSession>
   /** Opcional (`capabilities.warmup`): arranca el proceso antes del primer mensaje; es idempotente. */
   warmUp?(options: Pick<AgentOpenOptions, 'cwd'>): Promise<void>
+  /** Opcional: por qué `isAvailable()` dio `false` (la interfaz lo muestra); `undefined` si lo está o no se sabe. */
+  unavailableReason?(): string | undefined
 }

@@ -330,6 +330,14 @@ export class FakeAgentProvider implements AgentProviderPort {
     return this.available
   }
 
+  /** Motivo que se informa mientras `available` es `false` (`undefined`: sin motivo). */
+  reason: string | undefined
+
+  unavailableReason(): string | undefined {
+    if (this.reason === 'lanza') throw new Error('boom')
+    return this.available ? undefined : this.reason
+  }
+
   async capabilities(): Promise<ProviderCapabilities> {
     return this.caps
   }

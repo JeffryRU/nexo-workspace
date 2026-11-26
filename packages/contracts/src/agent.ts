@@ -91,6 +91,8 @@ export const ProviderInfo = z.strictObject({
   id: ProviderId,
   name: lineText(LIMITS.maxTitleLength),
   available: z.boolean(),
+  /** Si no está disponible, el motivo (para mostrarlo en la interfaz). */
+  reason: lineText(512).optional(),
   capabilities: ProviderCapabilities,
 })
 export type ProviderInfo = z.infer<typeof ProviderInfo>

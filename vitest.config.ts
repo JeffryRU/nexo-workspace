@@ -62,6 +62,7 @@ export default defineConfig({
       project('adapter-pty-node', './packages/adapters/pty-node', 30000),
       project('adapter-pty-host', './packages/adapters/pty-host', 30000),
       project('adapter-provider-claude', './packages/adapters/provider-claude', 15000),
+      project('adapter-provider-ollama', './packages/adapters/provider-ollama', 15000),
       project('client', './packages/client', 30000),
       project('daemon', './apps/daemon', 30000),
       project('cli', './apps/cli', 30000),

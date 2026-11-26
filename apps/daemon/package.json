@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@nexo/adapter-provider-claude": "workspace:*",
+    "@nexo/adapter-provider-ollama": "workspace:*",
     "@nexo/adapter-pty-host": "workspace:*",
     "@nexo/adapter-pty-node": "workspace:*",
     "@nexo/contracts": "workspace:*",

@@ -26,6 +26,24 @@ describe('parseEnv: proveedores de agente', () => {
     }
   })
 
+  it('acepta ollama en la lista de proveedores', () => {
+    expect(parseEnv({ NEXO_AGENT_PROVIDERS: 'claude,ollama' }).agentProviders).toEqual([
+      'claude',
+      'ollama',
+    ])
+  })
+
+  it('NEXO_OLLAMA_URL: por omisión local, solo http(s) y sin credenciales', () => {
+    expect(parseEnv({}).ollamaUrl).toBe('http://127.0.0.1:11434')
+    expect(parseEnv({ NEXO_OLLAMA_URL: '' }).ollamaUrl).toBe('http://127.0.0.1:11434')
+    expect(parseEnv({ NEXO_OLLAMA_URL: 'https://gpu.local:8443/' }).ollamaUrl).toBe(
+      'https://gpu.local:8443',
+    )
+    for (const bad of ['ftp://x', 'file:///x', 'http://u:p@h', 'nada', 'http://h/?a=1']) {
+      expect(() => parseEnv({ NEXO_OLLAMA_URL: bad }), bad).toThrow(/NEXO_OLLAMA_URL/)
+    }
+  })
+
   it('lee la ruta del ejecutable de Claude Code', () => {
     expect(parseEnv({ NEXO_CLAUDE_EXECUTABLE: '/usr/bin/claude' }).claudeExecutable).toBe(
       '/usr/bin/claude',

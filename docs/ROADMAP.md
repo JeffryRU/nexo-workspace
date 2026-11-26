@@ -41,7 +41,9 @@ notificación del sistema si la ventana no tiene el foco, y las mediciones de re
 ## F3 — Más proveedores
 
 - Codex (`codex app-server`), ACP (Gemini y otros agentes ACP), Antigravity (`agy --output-format
-  stream-json`), Ollama.
+  stream-json`).
+- **F3.1 Ollama** (hecho): `packages/adapters/provider-ollama` y selector de proveedor y modelo en la interfaz
+  (ver «Proveedor Ollama (F3.1)» en `docs/ARCHITECTURE.md`).
 
 ## F3.5 — Memoria observacional (ADR 0007)
 

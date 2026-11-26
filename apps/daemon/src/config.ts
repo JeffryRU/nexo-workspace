@@ -1,3 +1,4 @@
+import { DEFAULT_OLLAMA_URL, parseOllamaUrl } from '@nexo/adapter-provider-ollama'
 import { z } from 'zod'
 
 const bool = z
@@ -5,7 +6,7 @@ const bool = z
   .optional()
   .transform((v) => v === '1' || v === 'true')
 
-export const AGENT_PROVIDER_IDS = ['claude', 'fake'] as const
+export const AGENT_PROVIDER_IDS = ['claude', 'ollama', 'fake'] as const
 export type AgentProviderName = (typeof AGENT_PROVIDER_IDS)[number]
 
 const providerList = z
@@ -13,11 +14,30 @@ const providerList = z
   .transform((v) => v.split(',').map((p) => p.trim()))
   .pipe(
     z
-      .array(z.enum(AGENT_PROVIDER_IDS, { error: 'proveedor desconocido (valen: claude, fake)' }))
+      .array(
+        z.enum(AGENT_PROVIDER_IDS, {
+          error: 'proveedor desconocido (valen: claude, ollama, fake)',
+        }),
+      )
       .min(1)
       .max(AGENT_PROVIDER_IDS.length),
   )
   .refine((list) => new Set(list).size === list.length, 'proveedor repetido')
+
+const ollamaUrl = z
+  .string()
+  .max(2048)
+  .transform((v, ctx) => {
+    try {
+      return parseOllamaUrl(v)
+    } catch (error) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `URL de Ollama inválida (${error instanceof Error ? error.message : 'no válida'})`,
+      })
+      return z.NEVER
+    }
+  })
 
 const EnvSchema = z.object({
   NEXO_PORT: z.coerce.number().int().min(0).max(65535).default(4317),
@@ -26,6 +46,7 @@ const EnvSchema = z.object({
   NEXO_PTY_MODE: z.enum(['host', 'direct']).optional(),
   NEXO_AGENT_PROVIDERS: providerList.optional(),
   NEXO_CLAUDE_EXECUTABLE: z.string().min(1).max(4096).optional(),
+  NEXO_OLLAMA_URL: ollamaUrl.default(DEFAULT_OLLAMA_URL),
   NEXO_LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   NEXO_MAX_CONNECTIONS: z.coerce.number().int().min(1).max(10000).default(128),
   NEXO_AUTH_TIMEOUT_MS: z.coerce.number().int().min(100).max(60000).default(5000),
@@ -41,6 +62,8 @@ export type DaemonEnv = {
   agentProviders: AgentProviderName[]
   /** Ruta del ejecutable de Claude Code; por omisión, el que trae el SDK. */
   claudeExecutable: string | undefined
+  /** URL base de la API de Ollama (`http://127.0.0.1:11434` por omisión). */
+  ollamaUrl: string
   logLevel: 'debug' | 'info' | 'warn' | 'error'
   maxConnections: number
   authTimeoutMs: number
@@ -56,6 +79,7 @@ export function parseEnv(env: Readonly<Record<string, string | undefined>>): Dae
     NEXO_AGENT_PROVIDERS: env.NEXO_AGENT_PROVIDERS === '' ? undefined : env.NEXO_AGENT_PROVIDERS,
     NEXO_CLAUDE_EXECUTABLE:
       env.NEXO_CLAUDE_EXECUTABLE === '' ? undefined : env.NEXO_CLAUDE_EXECUTABLE,
+    NEXO_OLLAMA_URL: env.NEXO_OLLAMA_URL === '' ? undefined : env.NEXO_OLLAMA_URL,
     NEXO_LOG_LEVEL: env.NEXO_LOG_LEVEL,
     NEXO_MAX_CONNECTIONS: env.NEXO_MAX_CONNECTIONS,
     NEXO_AUTH_TIMEOUT_MS: env.NEXO_AUTH_TIMEOUT_MS,
@@ -73,6 +97,7 @@ export function parseEnv(env: Readonly<Record<string, string | undefined>>): Dae
     ptyMode: d.NEXO_PTY_MODE,
     agentProviders: d.NEXO_AGENT_PROVIDERS ?? ['claude'],
     claudeExecutable: d.NEXO_CLAUDE_EXECUTABLE,
+    ollamaUrl: d.NEXO_OLLAMA_URL,
     logLevel: d.NEXO_LOG_LEVEL,
     maxConnections: d.NEXO_MAX_CONNECTIONS,
     authTimeoutMs: d.NEXO_AUTH_TIMEOUT_MS,

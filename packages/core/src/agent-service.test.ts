@@ -136,6 +136,23 @@ describe('AgentService: sesiones', () => {
     expect(broken?.capabilities.models).toEqual([])
   })
 
+  it('agent.providers informa el motivo de un proveedor no disponible, saneado, y tolera que falle', async () => {
+    const t = await bootAgentHarness()
+    t.provider.available = false
+    t.provider.reason = 'Ollama no responde\u001b[31m\ny m\u00e1s'
+    const down = (await t.service.providers()).providers[0]
+    expect(down).toMatchObject({ available: false, reason: 'Ollama no responde [31m y m\u00e1s' })
+    t.provider.reason = 'x'.repeat(2000)
+    expect((await t.service.providers()).providers[0]?.reason).toHaveLength(512)
+    t.provider.reason = 'lanza'
+    const failing = (await t.service.providers()).providers[0]
+    expect(failing?.available).toBe(false)
+    expect(failing?.reason).toBeUndefined()
+    t.provider.available = true
+    t.provider.reason = 'ya no aplica'
+    expect((await t.service.providers()).providers[0]?.reason).toBeUndefined()
+  })
+
   it('aplica el tope de sesiones, también con aperturas concurrentes', async () => {
     const t = await bootAgentHarness({ config: { maxSessions: 2 } })
     const panes = [t.paneId]
