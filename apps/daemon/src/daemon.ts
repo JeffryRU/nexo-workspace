@@ -23,6 +23,8 @@ import {
   type EventBusPort,
   FileService,
   type FileSystemPort,
+  HistoryService,
+  type HistoryServiceConfig,
   LayoutService,
   type LoggerPort,
   MemoryService,
@@ -121,6 +123,8 @@ export type DaemonOptions = {
   /** URL base de Ollama (por omisión `http://127.0.0.1:11434`). */
   ollamaUrl?: string
   agents?: AgentServiceConfig
+  /** Plazos y caché del historial de los proveedores (F4.3); por omisión los de `DEFAULT_HISTORY_CONFIG`. */
+  history?: HistoryServiceConfig
   /** Puerto de archivos para `fs.*` (pruebas); por omisión, `FsSandbox` sobre las carpetas de los espacios abiertos. */
   files?: FileSystemPort
   /**
@@ -253,6 +257,15 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
             renewAtTokens: () => memory.renewAtTokens(),
           },
           config: { ...options.agents },
+        })
+  const history =
+    providers.length === 0
+      ? undefined
+      : new HistoryService({
+          providers,
+          clock,
+          logger,
+          ...(options.history === undefined ? {} : { config: options.history }),
         })
   const memory = await createMemory()
   const stopWarmup = watchAgentPanes({ bus, panes: layout, provider: providers[0], logger })
@@ -406,6 +419,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
         ...(agentService === undefined ? {} : { agents: agentService.handlers }),
         memory: memory.handlers,
         files: files.handlers,
+        ...(history === undefined ? {} : { history: history.handlers }),
         snapshot: new SnapshotService({ layout, identity, currentSeq: hooks.currentSeq }),
         subscribe: hooks.subscribe,
         shutdown: () => {
@@ -424,6 +438,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   const stop = (): Promise<void> => {
     stopped ??= (async () => {
       stopWarmup()
+      history?.close()
       terminals.shutdown()
       await memory
         .stop()
@@ -472,6 +487,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     }
   } catch (error) {
     stopWarmup()
+    history?.close()
     terminals.shutdown()
     await memory.stop().catch(() => {})
     await agentService?.closeAll().catch(() => {})
