@@ -12,7 +12,7 @@ import {
 } from '@nexo/contracts'
 import type { MemoryHandlers } from './dispatcher.ts'
 import { DomainError } from './errors.ts'
-import { escapeMemoryText } from './memory-inject.ts'
+import { buildMemoryBlock, escapeMemoryText } from './memory-inject.ts'
 import {
   addUsage,
   applyObserved,
@@ -33,7 +33,12 @@ import {
   shouldObserve,
   shouldReflect,
 } from './memory-policy.ts'
-import { DEFAULT_SELECT_LIMITS, pendingObserverTokens, selectForObserver } from './memory-select.ts'
+import {
+  DEFAULT_SELECT_LIMITS,
+  pendingObserverTokens,
+  recentTurnsFromBlocks,
+  selectForObserver,
+} from './memory-select.ts'
 import { estimateTokens } from './memory-tokens.ts'
 import {
   type AbortSignalLike,
@@ -64,6 +69,10 @@ export type MemoryServiceConfig = {
   reflectCooldownMs?: number
   /** Observaciones recientes que se pasan al Observador como contexto conocido. */
   recentContext?: number
+  /** Tope de tokens del bloque que se inyecta al abrir una sesión (4000 por omisión). */
+  injectTokens?: number
+  /** Tokens de últimos turnos tal cual que se suman al bloque al renovar una sesión (6000 por omisión). */
+  seedTurnTokens?: number
 }
 
 export type MemoryServiceDeps = {
@@ -90,6 +99,8 @@ const DEFAULT_PAUSE_MS = 60_000
 const DEFAULT_AVAILABILITY_TTL_MS = 60_000
 const DEFAULT_REFLECT_COOLDOWN_MS = 10 * 60_000
 const DEFAULT_RECENT_CONTEXT = 12
+const DEFAULT_INJECT_TOKENS = 4_000
+const DEFAULT_SEED_TURN_TOKENS = 6_000
 const MAX_BATCHES_PER_DRAIN = 20
 const MAX_REFLECT_ROUNDS = 3
 const MAX_OBSERVATIONS_PER_BATCH = 20
@@ -183,6 +194,8 @@ export class MemoryService {
   readonly #ttlMs: number
   readonly #cooldownMs: number
   readonly #recent: number
+  readonly #injectTokens: number
+  readonly #seedTurnTokens: number
   readonly #stopper = new Stopper()
   readonly #sessions = new Map<AgentSessionId, SessionInfo>()
   readonly #queues = new Map<string, ProjectQueue>()
@@ -205,6 +218,8 @@ export class MemoryService {
     this.#ttlMs = c.availabilityTtlMs ?? DEFAULT_AVAILABILITY_TTL_MS
     this.#cooldownMs = c.reflectCooldownMs ?? DEFAULT_REFLECT_COOLDOWN_MS
     this.#recent = c.recentContext ?? DEFAULT_RECENT_CONTEXT
+    this.#injectTokens = c.injectTokens ?? DEFAULT_INJECT_TOKENS
+    this.#seedTurnTokens = c.seedTurnTokens ?? DEFAULT_SEED_TURN_TOKENS
   }
 
   /** Los manejadores de `memory.*` para `createDispatcher({ memory })`. */
@@ -356,6 +371,51 @@ export class MemoryService {
       if (next !== null) next = snap.nextIndex
     }
     return { blocks, truncated }
+  }
+
+  // ---- Inyección (ADR 0007, punto 4; la usa AgentService) ----
+
+  /**
+   * Bloque de memoria para una sesión nueva en `cwd`: reflexión y observaciones del proyecto (las de alcance
+   * `session` no, porque la sesión aún no existe). `null` con la memoria apagada, sin nada que inyectar o si el
+   * almacén falla: la memoria nunca impide abrir una sesión.
+   */
+  async newSession(cwd: string): Promise<string | null> {
+    if (!this.#d.enabled) return null
+    return this.#block(cwd, {})
+  }
+
+  /** Bloque para renovar una sesión: lo anterior más sus últimos turnos tal cual. */
+  async renewal(
+    cwd: string,
+    sessionId: AgentSessionId,
+    blocks: readonly Block[],
+  ): Promise<string | null> {
+    if (!this.#d.enabled) return null
+    const recentTurns = recentTurnsFromBlocks(blocks, this.#seedTurnTokens)
+    return this.#block(cwd, { sessionId, recentTurns, extraTokens: this.#seedTurnTokens })
+  }
+
+  async #block(
+    cwd: string,
+    o: {
+      sessionId?: AgentSessionId
+      recentTurns?: { role: 'usuario' | 'agente'; text: string }[]
+      extraTokens?: number
+    },
+  ): Promise<string | null> {
+    try {
+      const memory = await this.#d.store.load(normalizeProjectPath(cwd))
+      const block = buildMemoryBlock(memory, {
+        maxTokens: this.#injectTokens + (o.extraTokens ?? 0),
+        ...(o.sessionId === undefined ? {} : { sessionId: o.sessionId }),
+        ...(o.recentTurns === undefined ? {} : { recentTurns: o.recentTurns }),
+      })
+      return block?.text ?? null
+    } catch (error) {
+      this.#d.logger?.warn('memoria: no se pudo armar el bloque a inyectar', { error })
+      return null
+    }
   }
 
   // ---- Bus ----

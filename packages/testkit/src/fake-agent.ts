@@ -13,6 +13,7 @@ import {
   type AgentProviderSession,
   type AgentResponse,
   type ClockPort,
+  type MemoryInjectionPort,
   type Unsubscribe,
 } from '@nexo/core'
 import { schedule } from './timers.ts'
@@ -111,6 +112,8 @@ export type FakeAgentProviderOptions = {
   script?: FakeAgentScript
   /** Reloj de los retardos; por omisión, temporizadores reales. Con `FakeClock` el tiempo lo gobierna la prueba. */
   clock?: ClockPort
+  /** Cómo recibe la memoria; sin él, el falso no la recibe. */
+  memoryInjection?: MemoryInjectionPort
 }
 
 const realClock: ClockPort = {
@@ -312,6 +315,9 @@ export class FakeAgentProvider implements AgentProviderPort {
   readonly displayName: string
   readonly sessions: FakeAgentSession[] = []
   readonly warmed: string[] = []
+  /** Opciones con las que se abrió cada sesión (para ver la `memory` recibida). */
+  readonly opened: AgentOpenOptions[] = []
+  readonly memoryInjection?: MemoryInjectionPort
   readonly #clock: ClockPort
   readonly #known = new Set<string>()
   #n = 0
@@ -324,6 +330,7 @@ export class FakeAgentProvider implements AgentProviderPort {
     this.caps = options.capabilities ?? DEFAULT_CAPABILITIES
     this.script = options.script ?? defaultScript
     this.#clock = options.clock ?? realClock
+    if (options.memoryInjection !== undefined) this.memoryInjection = options.memoryInjection
   }
 
   async isAvailable(): Promise<boolean> {
@@ -380,6 +387,7 @@ export class FakeAgentProvider implements AgentProviderPort {
       providerSessionId = `${this.id}-session-${++this.#n}`
       this.#known.add(providerSessionId)
     }
+    this.opened.push(options)
     const session = new FakeAgentSession(providerSessionId, this.#clock, () => this.script)
     this.sessions.push(session)
     return session
