@@ -9,6 +9,8 @@ Estas reglas valen para cualquier agente (y persona) que trabaje en este reposit
    - `packages/contracts` no importa nada del repo (solo `zod`).
    - `packages/core` importa solo `contracts`; nada de `node:*`, `fs`, `process` ni DOM.
    - `packages/adapters/*` importan `core` y `contracts`; nunca otro adaptador ni una app.
+   - `packages/jsonrpc` (JSON-RPC 2.0 por líneas, reutilizable por los adaptadores de Codex y ACP) es puro: sin
+     `node:*`, solo `zod`, y solo lo importan los adaptadores (no `contracts`, `core`, `client`, `testkit` ni `apps`).
    - `apps/*` no se importan entre sí. `packages/client` solo importa `contracts`.
    - El código de producción no importa `packages/testkit`.
 3. **zod en los bordes**: todo lo que cruza un proceso se valida al recibirlo con los esquemas de

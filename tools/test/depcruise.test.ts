@@ -41,6 +41,8 @@ describe('reglas de dependency-cruiser', () => {
         'client-solo-contracts',
         'contracts-solo-zod',
         'core-solo-contracts',
+        'jsonrpc-puro',
+        'jsonrpc-solo-adaptadores',
         'no-circular',
         'paquetes-sin-apps',
         'produccion-sin-testkit',
@@ -54,6 +56,14 @@ describe('reglas de dependency-cruiser', () => {
     const core = (found.get('core-solo-contracts') ?? []).join('\n')
     expect(core).toMatch(/ -> fs$/m)
     expect(core).toMatch(/ -> path$/m)
+  })
+
+  it('jsonrpc es puro y solo lo usan los adaptadores', async () => {
+    const found = await violationsOf('violations')
+    expect((found.get('jsonrpc-puro') ?? []).join('\n')).toMatch(/jsonrpc\/src\/bad\.ts -> fs$/m)
+    expect((found.get('jsonrpc-solo-adaptadores') ?? []).join('\n')).toContain(
+      'core/src/uses-jsonrpc.ts',
+    )
   })
 
   it('contracts no puede importar librerías que no sean zod', async () => {

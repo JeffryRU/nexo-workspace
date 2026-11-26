@@ -1,5 +1,6 @@
 import { fireEvent } from '@solidjs/testing-library'
 import { describe, expect, it } from 'vitest'
+import { unavailableNote } from './Composer.tsx'
 import { bid, blocks, FAKE_PROVIDER, mountAgent, SID, settle } from './test-helpers.ts'
 
 const text = (el: Element | null) => el?.textContent ?? ''
@@ -369,8 +370,26 @@ describe('panel de agente: redactor', () => {
       session: { model: 'm1', effort: 'high', permissionMode: 'plan', cwd: '/proyecto' },
     })
     const chips = [...h.container.querySelectorAll('.chip.fixed')].map((c) => c.textContent)
-    expect(chips).toEqual(['fake', 'm1', 'high', 'Solo planificar', '/proyecto'])
+    expect(chips).toEqual(['Proveedor falso', 'Modelo uno', 'high', 'Solo planificar', '/proyecto'])
     expect(h.container.querySelectorAll('select.chip')).toHaveLength(0)
+  })
+
+  it('los chips de una sesión usan los nombres del proveedor y del esfuerzo, y caen al id si no los conocen', async () => {
+    const named = await mountAgent({
+      blocks: [],
+      session: { model: 'm2', effort: 'think', permissionMode: 'ask', cwd: '/p' },
+    })
+    expect(
+      [...named.container.querySelectorAll('.chip.fixed')].map((c) => c.textContent).slice(0, 3),
+    ).toEqual(['Proveedor falso', 'Modelo dos', 'Razonar'])
+    const unknown = await mountAgent({
+      blocks: [],
+      providers: [],
+      session: { model: 'x1', permissionMode: 'ask', cwd: '/p' },
+    })
+    expect(
+      [...unknown.container.querySelectorAll('.chip.fixed')].map((c) => c.textContent).slice(0, 2),
+    ).toEqual(['fake', 'x1'])
   })
 
   it('el estado de la sesión se anuncia en una región de estado', async () => {
@@ -480,8 +499,16 @@ describe('panel de agente sin sesión', () => {
     expect(options[0]?.title).toBe('Ollama no responde en http://127.0.0.1:11434')
     expect(select?.value).toBe('fake')
     expect(text(h.container.querySelector('.chips [role="note"]'))).toContain(
-      'Ollama: Ollama no responde en http://127.0.0.1:11434',
+      'Ollama no responde en http://127.0.0.1:11434',
     )
+  })
+
+  it('el aviso de no disponible no repite el nombre si el motivo ya lo trae, y lo antepone si no', () => {
+    expect(unavailableNote({ name: 'Ollama', reason: 'Ollama no responde en X' })).toBe(
+      'Ollama no responde en X',
+    )
+    expect(unavailableNote({ name: 'Codex', reason: 'sin sesión' })).toBe('Codex: sin sesión')
+    expect(unavailableNote({ name: 'Codex' })).toBe('Codex: no disponible')
   })
 
   it('con todos no disponibles muestra el selector deshabilitado, los motivos y no deja enviar', async () => {

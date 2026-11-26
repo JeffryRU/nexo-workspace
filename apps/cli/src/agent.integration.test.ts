@@ -1,6 +1,7 @@
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
+import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   AgentActionOutput,
@@ -134,5 +135,27 @@ describe('nexo agent con el proveedor Ollama (servidor HTTP falso)', () => {
     } finally {
       await new Promise<void>((r) => server.close(() => r()))
     }
+  })
+})
+
+describe('nexo agent con el proveedor Codex (proceso app-server falso)', () => {
+  it('agent new --provider codex, conversación y aprobación respondida desde la CLI', async () => {
+    const fakeCodex = fileURLToPath(
+      new URL('../../../packages/adapters/provider-codex/test/fake-codex.mjs', import.meta.url),
+    )
+    const sb = await Sandbox.create()
+    sandbox = sb
+    await sb.startDaemon({ NEXO_AGENT_PROVIDERS: 'codex', NEXO_CODEX_EXECUTABLE: fakeCodex })
+    const { sessionId: id } = AgentNewOutput.parse(
+      await sb.json(['agent', 'new', '--provider', 'codex', '--cwd', tmpdir()]),
+    )
+    await sb.json(['agent', 'send', id, 'simple hola'])
+    const doc = await attachText(sb, id, 'Hola mundo')
+    expect(doc).toContain('> simple hola')
+
+    await sb.json(['agent', 'send', id, 'permiso'])
+    await attachText(sb, id, '? Permiso: Ejecutar: rm -rf build')
+    expect((await sb.nexo(['agent', 'respond', id, '1'])).code).toBe(0)
+    await attachText(sb, id, 'Hecho.')
   })
 })

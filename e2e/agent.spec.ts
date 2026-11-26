@@ -42,7 +42,7 @@ test.describe('panel de agente', () => {
     await expect(app.getByRole('button', { name: 'Interrumpir' })).toHaveCount(0)
     // Los chips pasan a ser de solo lectura al existir la sesión.
     await expect(app.locator('select.chip')).toHaveCount(0)
-    await expect(app.locator('.chip.fixed').first()).toHaveText('fake')
+    await expect(app.locator('.chip.fixed').first()).toHaveText('Proveedor de prueba')
 
     // Segundo turno, y el documento sobrevive a recargar la página (se vuelve a abrir la sesión).
     await say(app, 'otra vez')
@@ -402,7 +402,7 @@ test.describe('proveedor Ollama (servidor falso)', () => {
       await expect(app.locator('.blk-text')).toContainText('Hola desde Ollama.')
       await expect(app.locator('.blk-reasoning')).toBeVisible()
       await expect(app.locator('.usage')).toBeVisible()
-      await expect(app.locator('.chip.fixed').first()).toHaveText('ollama')
+      await expect(app.locator('.chip.fixed').first()).toHaveText('Ollama')
       expect(ollama.chats[0]).toMatchObject({ model: 'qwen3:8b', think: true, stream: true })
       await say(app, 'otra')
       await expect(app.locator('.blk-text')).toHaveCount(2)
@@ -429,6 +429,65 @@ test.describe('proveedor Ollama (servidor falso)', () => {
       await expect(app.getByLabel('Proveedor')).toHaveValue('fake')
       await say(app, 'sigue funcionando')
       await expect(app.locator('.blk-text')).toContainText('Eco: sigue funcionando')
+    } finally {
+      await stack.dispose()
+    }
+  })
+})
+
+/** Servidor  falso (el mismo de las pruebas del adaptador): habla JSON-RPC por stdio. */
+const FAKE_CODEX = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'packages',
+  'adapters',
+  'provider-codex',
+  'test',
+  'fake-codex.mjs',
+)
+
+test.describe('proveedor Codex (app-server falso)', () => {
+  test('se elige Codex, la aprobación de un comando se responde en línea y los items salen como bloques', async ({
+    app,
+  }) => {
+    const stack = await Stack.start({
+      NEXO_AGENT_PROVIDERS: 'fake,codex',
+      NEXO_CODEX_EXECUTABLE: FAKE_CODEX,
+    })
+    try {
+      await openAgentTab(stack, app)
+      await app.getByLabel('Proveedor').selectOption('codex')
+      await expect(app.getByLabel('Modelo').locator('option')).toHaveText(['GPT Fake', 'GPT Mini'])
+      await app.getByLabel('Esfuerzo').selectOption('high')
+      await say(app, 'permiso')
+      await expect(app.locator('section.perm.pending')).toBeVisible()
+      await expect(app.locator('section.perm.pending')).toContainText('Ejecutar: rm -rf build')
+      await expect(app.locator('.chip.fixed').first()).toHaveText('Codex')
+      await app.getByRole('button', { name: '1 Permitir', exact: true }).click()
+      await expect(app.locator('.blk-text').last()).toContainText('Hecho.')
+      await expect(app.locator('.usage')).toBeVisible()
+      await say(app, 'rich')
+      await expect(app.locator('.blk-reasoning')).toBeVisible()
+      await expect(app.locator('.blk-action')).toHaveCount(5)
+    } finally {
+      await stack.dispose()
+    }
+  })
+
+  test('sin sesión iniciada Codex sale deshabilitado con el motivo, sin repetir el nombre', async ({
+    app,
+  }) => {
+    const stack = await Stack.start({
+      NEXO_AGENT_PROVIDERS: 'fake,codex',
+      NEXO_CODEX_EXECUTABLE: FAKE_CODEX,
+      FAKE_CODEX_LOGGED_OUT: '1',
+    })
+    try {
+      await openAgentTab(stack, app)
+      const option = app.getByLabel('Proveedor').locator('option[value="codex"]')
+      await expect(option).toBeDisabled()
+      await expect(app.getByRole('note')).toContainText('Codex no tiene la sesión iniciada')
+      await expect(app.getByRole('note')).not.toContainText('Codex: Codex')
     } finally {
       await stack.dispose()
     }
@@ -523,6 +582,43 @@ test.describe('capturas', () => {
       await shot(app, 'no-disponible', 'f3-1')
     } finally {
       await down.dispose()
+    }
+  })
+
+  test('capturas del proveedor Codex (F3.2)', async ({ app }) => {
+    await app.setViewportSize({ width: 1280, height: 800 })
+    const stack = await Stack.start({
+      NEXO_AGENT_PROVIDERS: 'fake,codex',
+      NEXO_CODEX_EXECUTABLE: FAKE_CODEX,
+    })
+    try {
+      await openAgentTab(stack, app)
+      await app.getByLabel('Proveedor').selectOption('codex')
+      await app.getByLabel('Esfuerzo').selectOption('high')
+      await shot(app, 'selector', 'f3-2')
+      await say(app, 'permiso')
+      await expect(app.locator('section.perm.pending')).toBeVisible()
+      await shot(app, 'aprobacion', 'f3-2')
+      await app.getByRole('button', { name: '1 Permitir', exact: true }).click()
+      await expect(app.locator('.blk-text').last()).toContainText('Hecho.')
+      await say(app, 'rich')
+      await expect(app.locator('.blk-action')).toHaveCount(5)
+      await shot(app, 'acciones', 'f3-2')
+    } finally {
+      await stack.dispose()
+    }
+    const out = await Stack.start({
+      NEXO_AGENT_PROVIDERS: 'fake,codex',
+      NEXO_CODEX_EXECUTABLE: FAKE_CODEX,
+      FAKE_CODEX_LOGGED_OUT: '1',
+    })
+    try {
+      await app.goto('about:blank')
+      await openAgentTab(out, app)
+      await expect(app.getByRole('note')).toBeVisible()
+      await shot(app, 'sin-sesion', 'f3-2')
+    } finally {
+      await out.dispose()
     }
   })
 

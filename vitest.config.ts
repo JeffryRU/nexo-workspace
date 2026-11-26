@@ -63,6 +63,8 @@ export default defineConfig({
       project('adapter-pty-host', './packages/adapters/pty-host', 30000),
       project('adapter-provider-claude', './packages/adapters/provider-claude', 15000),
       project('adapter-provider-ollama', './packages/adapters/provider-ollama', 15000),
+      project('adapter-provider-codex', './packages/adapters/provider-codex', 15000),
+      project('jsonrpc', './packages/jsonrpc'),
       project('client', './packages/client', 30000),
       project('daemon', './apps/daemon', 30000),
       project('cli', './apps/cli', 30000),
@@ -77,6 +79,7 @@ export default defineConfig({
       include: [
         'packages/contracts/src/**/*.ts',
         'packages/core/src/**/*.ts',
+        'packages/jsonrpc/src/**/*.ts',
         'packages/adapters/*/src/**/*.ts',
         'packages/client/src/**/*.ts',
         'apps/cli/src/**/*.ts',
@@ -99,6 +102,7 @@ export default defineConfig({
       thresholds: {
         'packages/contracts/src/**': { statements: 90, branches: 90, functions: 90, lines: 90 },
         'packages/core/src/**': { statements: 90, branches: 90, functions: 90, lines: 90 },
+        'packages/jsonrpc/src/**': { statements: 90, branches: 85, functions: 90, lines: 90 },
         'packages/client/src/**': { statements: 90, branches: 90, functions: 90, lines: 90 },
         'apps/cli/src/**': { statements: 85, branches: 85, functions: 85, lines: 85 },
         'apps/web/src/**': { statements: 80, branches: 80, functions: 80, lines: 80 },

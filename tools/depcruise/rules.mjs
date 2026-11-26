@@ -54,6 +54,29 @@ export function buildRules(prefix = '') {
       },
     },
     {
+      name: 'jsonrpc-puro',
+      comment: 'jsonrpc (JSON-RPC por lineas) es puro: sin node:*, sin repo, solo zod.',
+      severity: error,
+      from: { path: p('packages/jsonrpc/src/'), pathNot: TEST_FILE },
+      to: { pathNot: [p('packages/jsonrpc/'), 'node_modules/zod/', '^zod$'] },
+    },
+    {
+      name: 'jsonrpc-solo-adaptadores',
+      comment:
+        'Solo los adaptadores (y el propio jsonrpc) usan jsonrpc; contracts, core, client, testkit y apps no.',
+      severity: error,
+      from: {
+        path: [
+          p('packages/contracts/'),
+          p('packages/core/'),
+          p('packages/client/'),
+          p('packages/testkit/'),
+          p('apps/'),
+        ],
+      },
+      to: { path: p('packages/jsonrpc/') },
+    },
+    {
       name: 'adapters-aislados',
       comment: 'Un adaptador no importa a otro adaptador.',
       severity: error,

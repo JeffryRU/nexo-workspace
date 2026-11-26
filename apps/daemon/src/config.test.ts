@@ -33,6 +33,16 @@ describe('parseEnv: proveedores de agente', () => {
     ])
   })
 
+  it('acepta codex y lee NEXO_CODEX_EXECUTABLE', () => {
+    expect(parseEnv({ NEXO_AGENT_PROVIDERS: 'claude,codex' }).agentProviders).toEqual([
+      'claude',
+      'codex',
+    ])
+    expect(parseEnv({}).codexExecutable).toBeUndefined()
+    expect(parseEnv({ NEXO_CODEX_EXECUTABLE: '' }).codexExecutable).toBeUndefined()
+    expect(parseEnv({ NEXO_CODEX_EXECUTABLE: '/opt/codex' }).codexExecutable).toBe('/opt/codex')
+  })
+
   it('NEXO_OLLAMA_URL: por omisión local, solo http(s) y sin credenciales', () => {
     expect(parseEnv({}).ollamaUrl).toBe('http://127.0.0.1:11434')
     expect(parseEnv({ NEXO_OLLAMA_URL: '' }).ollamaUrl).toBe('http://127.0.0.1:11434')

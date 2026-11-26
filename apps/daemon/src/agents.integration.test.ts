@@ -1,6 +1,7 @@
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
+import { fileURLToPath } from 'node:url'
 import {
   AgentDocument,
   agentApi,
@@ -343,6 +344,55 @@ describe('proveedor Ollama en el daemon real (servidor HTTP falso)', () => {
     expect(providers[0]).toMatchObject({ id: 'ollama', available: false })
     expect(providers[0]?.reason).toMatch(/Ollama no responde en http:\/\/127\.0\.0\.1:1/)
     await expect(newSession(client, 'ollama')).rejects.toMatchObject({
+      code: 'PROVIDER_UNAVAILABLE',
+    })
+  })
+})
+
+describe('proveedor Codex en el daemon real (proceso app-server falso)', () => {
+  const fakeCodex = fileURLToPath(
+    new URL('../../../packages/adapters/provider-codex/test/fake-codex.mjs', import.meta.url),
+  )
+
+  it('agent.providers lista modelos y una conversación completa llega al documento', async () => {
+    const daemon = await startTestDaemon({
+      agentProviders: ['codex'],
+      codexExecutable: fakeCodex,
+    })
+    daemons.push(daemon)
+    const { client } = await connect(daemon)
+    const { providers } = await client.call('agent.providers', {})
+    expect(providers[0]).toMatchObject({
+      id: 'codex',
+      name: 'Codex',
+      available: true,
+      capabilities: {
+        defaultModel: 'gpt-fake',
+        resume: true,
+        efforts: ['low', 'medium', 'high'],
+      },
+    })
+    const { session } = await newSession(client, 'codex')
+    expect(session.provider).toBe('codex')
+    const doc = await AgentDocument.open(client, session.id)
+    docs.push(doc)
+    await agentApi(client).send({ sessionId: session.id, text: 'simple hola' })
+    await until(() => doc.blocks().some((b) => b.type === 'usage'), 'fin del turno')
+    expect(doc.blocks().map((b) => b.type)).toEqual(['user', 'text', 'usage'])
+    expect(doc.blocks()[1]).toMatchObject({ text: 'Hola mundo', complete: true })
+  })
+
+  it('sin la CLI, el proveedor sale no disponible con su motivo y crear da PROVIDER_UNAVAILABLE', async () => {
+    const daemon = await startTestDaemon({
+      agentProviders: ['codex'],
+      codexExecutable: '/no/existe/codex',
+    })
+    daemons.push(daemon)
+    const { client } = await connect(daemon)
+    const { providers } = await client.call('agent.providers', {})
+    expect(providers[0]).toMatchObject({ id: 'codex', available: false })
+    expect(providers[0]?.reason).toMatch(/No se encontró Codex/)
+    await expect(newSession(client, 'codex')).rejects.toMatchObject({
       code: 'PROVIDER_UNAVAILABLE',
     })
   })

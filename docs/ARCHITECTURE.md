@@ -55,6 +55,8 @@ packages/contracts   esquemas zod del protocolo y del dominio compartido (sin de
         ▲
 packages/core        dominio + casos de uso + puertos (interfaces). Sin Node, sin I/O.
         ▲
+packages/jsonrpc     JSON-RPC 2.0 por líneas (puro, sin Node): lo usan los adaptadores de Codex y ACP
+        ▲
 packages/adapters/*  implementan los puertos: pty-node, pty-host, provider-claude, provider-codex, provider-acp,
                      provider-antigravity, provider-ollama, store-fs, notifier, fs-sandbox, ...
         ▲
@@ -65,7 +67,9 @@ apps/*               raíces de composición: daemon (une core + adaptadores), w
 
 - `contracts` no importa nada del repo.
 - `core` importa solo `contracts`. Nada de `node:*`, `fs`, `child_process`, `process`, ni del DOM.
-- `adapters/*` importan `core` y `contracts`; nunca otro adaptador ni una app.
+- `adapters/*` importan `core` y `contracts` (y, los que hablan JSON-RPC, `jsonrpc`); nunca otro adaptador ni una app.
+- `jsonrpc` es puro: sin `node:*`, solo `zod`; solo lo importan los adaptadores (`jsonrpc-puro` y `jsonrpc-solo-adaptadores` en
+  `tools/depcruise/rules.mjs`).
 - `apps/*` importan lo que necesiten; ninguna app importa a otra.
 - `packages/client` (SDK tipado del protocolo) lo usan `web`, `cli` y `mcp`; solo importa `contracts`. Su núcleo
   funciona en navegador/WebView y Node (sin `node:*`); lo específico de Node vive en el subpath
@@ -126,7 +130,7 @@ Todo en `packages/core`, sin I/O; el daemon (F1.3) solo los conecta con adaptado
 
 - **Entorno** (validado con zod al arrancar): `NEXO_PORT` (4317; 0 = efímero), `NEXO_DEV`, `NEXO_STATE_DIR`,
   `NEXO_LOG_LEVEL`, `NEXO_MAX_CONNECTIONS` (128), `NEXO_AUTH_TIMEOUT_MS` (5000), `NEXO_PTY_MODE` (`host` | `direct`; por omisión
-  `host` en Windows y `direct` en Linux/macOS), `NEXO_AGENT_PROVIDERS`, `NEXO_CLAUDE_EXECUTABLE` y `NEXO_OLLAMA_URL` (ver «Agentes en el daemon (F2.4)» y
+  `host` en Windows y `direct` en Linux/macOS), `NEXO_AGENT_PROVIDERS`, `NEXO_CLAUDE_EXECUTABLE`, `NEXO_CODEX_EXECUTABLE` y `NEXO_OLLAMA_URL` (ver «Agentes en el daemon (F2.4)» y
   «Proveedor Ollama (F3.1)»).
 - **PTY aislados (issue #15, ADR 0004).** En modo `host`, node-pty corre en un proceso hijo (`@nexo/adapter-pty-host`, `child_process.fork` + IPC con
   mensajes zod validados en ambos extremos). Si el código nativo de ConPTY se cae, muere solo el host: cada terminal afectada recibe
@@ -350,11 +354,11 @@ Ollama (solo texto, sin permisos).
 espacio cierra su sesión); al apagar (`stop()`) se llama `service.closeAll()` antes de cerrar las conexiones. Sin
 proveedores (`agentProviders: []`) no hay servicio y todo `agent.*` responde `PROVIDER_UNAVAILABLE`.
 
-**Proveedores.** `NEXO_AGENT_PROVIDERS` (zod; lista separada por comas de `claude`, `ollama` y `fake`; por omisión `claude`; el
+**Proveedores.** `NEXO_AGENT_PROVIDERS` (zod; lista separada por comas de `claude`, `codex`, `ollama` y `fake`; por omisión `claude`; el
 primero es el que se precalienta) o, en código, `startDaemon({ agentProviders })`, que además acepta puertos ya
 construidos (así las pruebas inyectan el suyo). `claude` es `createClaudeProvider({ env, log })` con el entorno del
 daemon **sin las variables `NEXO_*`** y el log del daemon (redactado); `NEXO_CLAUDE_EXECUTABLE` fija el ejecutable de Claude
-Code. `ollama` es `createOllamaProvider({ baseUrl: NEXO_OLLAMA_URL, log })` (ver «Proveedor Ollama (F3.1)»). `fake` es `ScriptedAgentProvider` (`apps/daemon/src/adapters/scripted-agent-provider.ts`): determinista, sin red;
+Code. `codex` es `createCodexProvider({ env, log, executable: NEXO_CODEX_EXECUTABLE })` con el mismo entorno (ver «Proveedor Codex (F3.2)»). `ollama` es `createOllamaProvider({ baseUrl: NEXO_OLLAMA_URL, log })` (ver «Proveedor Ollama (F3.1)»). `fake` es `ScriptedAgentProvider` (`apps/daemon/src/adapters/scripted-agent-provider.ts`): determinista, sin red;
 responde `Eco: <texto>`, y según la primera palabra: `lento [n]` (n trozos con retardo), `largo` (no termina hasta
 interrumpir), `permiso` y `pregunta`. Vive en la app y no en `testkit` porque el daemon real lanzado como proceso (CLI,
 E2E) tiene que poder usarlo y producción no importa `testkit`. **No se activa por accidente**: solo existe si se pide
@@ -541,6 +545,142 @@ pruebas normales usan un servidor HTTP falso local (`test/fake-ollama.ts`): conf
 traductor con propiedades (el NDJSON partido en trozos arbitrarios da los mismos eventos) y adversariales (NDJSON roto,
 líneas enormes, cierre a mitad, 404, 500, respuesta lenta e interrupción, servidor mudo, sin `done`, cuerpo vacío,
 redirecciones). Capturas: `docs/capturas/f3-1-*.png` (`NEXO_CAPTURAS=1 pnpm e2e -g capturas`).
+
+### Proveedor Codex (F3.2)
+
+`packages/adapters/provider-codex` (`createCodexProvider({ env, log, executable? })`) implementa `AgentProviderPort` sobre
+`codex app-server` (JSON-RPC por stdio). El protocolo **no sale de memoria**: sale del esquema que genera la propia CLI
+(`codex app-server generate-json-schema --out <dir>` y `generate-ts --out <dir>`, que no necesitan sesión). Versión
+fijada: **`codex-cli 0.158.0`** (`CODEX_PROTOCOL_VERSION`). `src/protocol.ts` guarda solo los esquemas zod propios del
+subconjunto que se usa, en modo laxo (`looseObject`: un campo nuevo no rompe; lo que no encaja se ignora y se cuenta). Al
+subir la versión de Codex hay que regenerar el esquema y revisar ese archivo. Importa `core`, `contracts` y `jsonrpc`.
+
+Particularidades verificadas contra 0.158.0: los mensajes **no llevan** `"jsonrpc":"2.0"`; `initialize` va seguido de la
+notificación `initialized`; las notificaciones son `item/started`, `item/completed`, `item/agentMessage/delta`,
+`turn/completed`, `thread/tokenUsage/updated`…; las aprobaciones son solicitudes del servidor al cliente
+(`item/commandExecution/requestApproval`…).
+
+**Capas.** (1) `translator.ts` + `items.ts` + `approvals.ts`: traducción pura de notificaciones y solicitudes a
+`ProviderEvent` (máquina de estados sin E/S). (2) `@nexo/jsonrpc` (ver abajo). (3) `process.ts`: lanza `codex app-server`
+con `spawn(cmd, args[])` sin shell, con stdout y stderr como texto; es una interfaz pequeña (`CodexLauncher`) para poder
+probar con un proceso falso. (4) `client.ts`: une proceso y conexión (guarda el final de stderr, redactado). (5)
+`session.ts`: hilo, turnos, aprobaciones, interrupción, muerte del proceso. (6) `provider.ts`: validación,
+disponibilidad y capacidades. (7) `resolve.ts`: resuelve el ejecutable.
+
+**Sesión.** Una sesión = un proceso `codex app-server` + un hilo. `open` hace `initialize` + `initialized` y luego
+`thread/start` (o `thread/resume` con `resume`, que pide el hilo sin sus turnos: `excludeTurns`); el id del hilo es el
+`providerSessionId` y `capabilities.resume` es `true` (un hilo inexistente → `INVALID_OPTIONS`). Cada `send` es un
+`turn/start` (con `model` y `effort` si se eligieron) y produce **exactamente un `turn-end`**: por `turn/completed`, o
+sintético si Codex no responde a `turn/interrupt` en 3 s o no da señales en 10 min (`TIMEOUT`). Las notificaciones de
+otro hilo o de un turno ya terminado se descartan. Si el proceso muere llegan un bloque `error` fatal
+(`CODEX_EXITED`, con el final de stderr redactado) y `exit`, sin `turn-end`, y la sesión rechaza todo con `CLOSED`.
+`session-info` se emite en el primer `send`.
+
+| Codex (`app-server`)                                                  | `ProviderEvent`                                                                                                                                                                        |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `item/started` + `item/agentMessage/delta` + `item/completed`         | bloque `text` (`block-start` con el primer delta, deltas, `block-end`); el texto final completa lo que falte                                                                           |
+| `reasoning` (`item/reasoning/summaryTextDelta`; resumen o contenido)  | bloque `reasoning`; cada parte del resumen es un párrafo; sin texto no hay bloque                                                                                                      |
+| `commandExecution`                                                    | `action` `exec` (`shell`): entrada = comando; `item/commandExecution/outputDelta` → deltas de `output`; al cerrar `ok`/`error` con `exitCode` (distinto de 0 → `error`) y `durationMs` |
+| `fileChange` (+ `item/fileChange/patchUpdated`)                       | `action` `edit` (`apply_patch`): ruta del primer archivo y `diff` (con varios archivos, un diff combinado con `--- ruta`)                                                              |
+| `webSearch`                                                           | `action` `search` (`web_search`)                                                                                                                                                       |
+| `mcpToolCall`, `dynamicToolCall`, `collabAgentToolCall`               | `action` `other` (`mcp__servidor__herramienta`…): argumentos como entrada, texto del resultado como salida                                                                             |
+| `imageView`                                                           | `action` `read`                                                                                                                                                                        |
+| `item/commandExecution/requestApproval`                               | `permission-request` «Ejecutar: …» (Permitir / Permitir en esta sesión / Rechazar)                                                                                                     |
+| `item/fileChange/requestApproval`, `item/permissions/requestApproval` | `permission-request` «Aplicar cambios en archivos» / «Permisos adicionales», con las mismas tres opciones                                                                              |
+| `thread/tokenUsage/updated`                                           | `usage` (acumulado del turno = total − referencia) y `usage` del `turn-end` (más la duración del turno)                                                                                |
+| `turn/completed`                                                      | `turn-end`: `completed` → `end-turn`, `interrupted` → `interrupted`, `failed` → `error`, otro → `other`                                                                                |
+| `error` (sin reintento) y `turn.error`                                | bloque `error` no fatal (`USAGE_LIMIT`, `RATE_LIMIT`, `CONTEXT_WINDOW`, `CODEX_UNAVAILABLE`, `CODEX_ERROR`); credenciales → `AUTH_REQUIRED` fatal. Con `willRetry` no se muestra       |
+| `serverRequest/resolved`                                              | `request-cancelled` si la aprobación seguía pendiente                                                                                                                                  |
+| `plan`, `userMessage`, `contextCompaction`, hooks, items desconocidos | se ignoran (se cuentan para diagnóstico)                                                                                                                                               |
+
+Al cerrar el turno, toda acción que Codex dejó abierta (interrupción, fallo) queda en `error` y los textos abiertos se
+cierran. Las salidas se recortan al tope del bloque (`truncated`) y los deltas se parten en ≤ 32 KiB sin cortar
+caracteres ni pares sustitutos (`TextCarry`); el texto se sanea con `sanitizeBodyText`.
+
+**Aprobaciones.** `respond` mapea la opción elegida a la respuesta exacta del protocolo: Permitir → `accept`, Permitir
+en esta sesión → `acceptForSession`, Rechazar → `decline` (los permisos adicionales responden `{ permissions, scope }` con
+`scope` `turn` o `session`). Al interrumpir, las pendientes salen como `request-cancelled` y se responden `cancel`. Una
+aprobación que llega **después** de interrumpir (o fuera de turno) se cancela sin mostrarse. Mientras haya una pendiente
+no corre el plazo de inactividad. Nexo no declara la API experimental (`experimentalApi: false` en `initialize`), así que
+Codex no debería enviar preguntas (`item/tool/requestUserInput`), formularios MCP ni llamadas a herramientas dinámicas; si
+llegan, y con cualquier otra solicitud que no sea una aprobación, el servidor recibe «método no encontrado».
+
+**Modos de permiso normalizados → Codex** (`PERMISSION_POLICY`; se fijan en `thread/start` / `thread/resume`):
+
+| Modo normalizado | `approvalPolicy` | `sandbox`            | Efecto                                                                                 |
+| ---------------- | ---------------- | -------------------- | -------------------------------------------------------------------------------------- |
+| `ask`            | `untrusted`      | `workspace-write`    | Solo corre sin preguntar lo que Codex considera de confianza; el resto pide aprobación |
+| `accept-edits`   | `on-request`     | `workspace-write`    | Edita la carpeta sin preguntar; Codex pide aprobación al salir del sandbox             |
+| `plan`           | `on-request`     | `read-only`          | Solo lectura; cualquier escritura o salida del sandbox pide aprobación                 |
+| `bypass`         | `never`          | `danger-full-access` | Sin preguntas ni sandbox                                                               |
+
+Codex tiene además un modo de colaboración «plan» propio, pero es experimental y no se usa: `plan` aquí significa «solo
+lectura».
+
+**Modelos y esfuerzos.** Salen del protocolo: `model/list` (sin los ocultos; el `isDefault` es el modelo por omisión; los
+esfuerzos de cada modelo son `supportedReasoningEfforts` y los del proveedor, su unión: hoy `low`, `medium`, `high`,
+`xhigh` y `max` según el modelo). Si `model/list` falla, el proveedor sigue disponible con `models: []` y los esfuerzos
+`low`, `medium`, `high`, `xhigh`; sin modelo Codex usa el de su configuración. El modelo se acepta tal cual (`Token`); el
+esfuerzo se valida contra la lista.
+
+**Autenticación.** Nexo **no hace login, no lee `~/.codex/auth.json` ni ninguna credencial**: solo lanza la CLI, que usa la
+sesión del usuario. `isAvailable()` lanza un `codex app-server` breve (≤ 15 s) y pregunta `account/read` y `model/list`; el
+resultado se reutiliza 30 s (3 s si falló, para notar un login reciente). Sin la CLI: «No se encontró Codex… Instala la
+CLI con `npm i -g @openai/codex` (o fija `NEXO_CODEX_EXECUTABLE`)»; sin sesión (`account` vacío y `requiresOpenaiAuth`):
+«Codex no tiene la sesión iniciada: ejecuta `codex login` en una terminal»; si el proceso no habla el protocolo, el motivo
+cita la versión verificada. El motivo llega a la interfaz en `agent.providers[].reason`.
+
+**Ejecutable (Windows y Linux, sin shell).** `resolveCodexCommand` busca `codex` en el `PATH` (o usa
+`NEXO_CODEX_EXECUTABLE`): un binario se lanza tal cual y un `.js`/`.mjs`, con el Node del daemon. En Windows `spawn` sin
+shell no puede ejecutar los `.cmd` de npm: se prueban primero `.exe`/`.com` (nunca el archivo sin extensión que deja npm) y,
+si solo hay `codex.cmd`, se lanza con Node el `node_modules/@openai/codex/bin/codex.js` que está junto al shim; si no
+existe, el motivo pide apuntar `NEXO_CODEX_EXECUTABLE` a `codex.exe` o a `codex.js`. Las reglas de rutas son las de la
+plataforma pedida (`path.win32` / `path.posix`), así que se prueban en cualquier sistema. El entorno del proceso es el del
+daemon sin las variables `NEXO_*`.
+
+**Configuración.** `NEXO_AGENT_PROVIDERS=claude,codex` (o `codex` solo), `NEXO_CODEX_EXECUTABLE` (opcional) y
+`nexo agent new --provider codex [--model <m>] [--effort low|medium|high|xhigh|max] [--permissions ask|accept-edits|plan|bypass]`.
+Nexo no gestiona Codex: hay que tenerlo instalado y con la sesión iniciada.
+
+**Interfaz.** Sin cambios de contrato: el selector lista los proveedores de `agent.providers`; con una sesión abierta, los
+chips muestran los nombres que da el proveedor («Codex», «GPT Fake», «Razonar») y no los ids crudos, y el aviso de un
+proveedor no disponible no repite el nombre si el motivo ya lo trae.
+
+**Limitaciones.** Un proceso por sesión (no se precalienta: `warmup: false`). Sin preguntas al usuario ni formularios MCP.
+El plan de Codex (`turn/plan/updated`) no se muestra. Una línea JSON-RPC de más de 32 MiB se descarta (se informa en el log
+y el turno sigue). Los procesos que Codex lanza para los comandos del agente no se matan con la sesión en Windows (solo el
+proceso `codex`).
+
+**Probar de verdad.** `NEXO_LIVE_CODEX=1 pnpm --filter @nexo/adapter-provider-codex test:live` (usa la sesión de Codex del
+usuario y consume cuota; modo `plan`, un saludo). No corre en el CI. Las pruebas normales usan `test/fake-codex.mjs`, un
+servidor `app-server` falso (script de Node que habla JSON-RPC por stdio): conformidad (`runAgentProviderConformance`),
+traductor con propiedades (el texto no depende de cómo se partan los deltas; mensajes arbitrarios nunca rompen ni dejan
+bloques abiertos) y adversariales (JSON roto, objetos fuera de esquema, ids ajenos y raros, líneas enormes, salida enorme,
+stderr ruidoso, proceso que muere a mitad de turno, interrupción sin respuesta, plazo de inactividad, aprobación tras
+interrumpir, `turn/start` rechazado, ejecutables que no son Codex). Capturas: `docs/capturas/f3-2-*.png`
+(`NEXO_CAPTURAS=1 pnpm e2e -g capturas`, con el proceso falso).
+
+#### Paquete JSON-RPC (`packages/jsonrpc`)
+
+JSON-RPC 2.0 por líneas, **puro** (sin `node:*`; solo `zod`; temporizadores inyectados) y reutilizable por el adaptador ACP
+(F3.3). Solo lo importan los adaptadores (reglas `jsonrpc-puro` y `jsonrpc-solo-adaptadores` de dependency-cruiser).
+`JsonRpcConnection` es un extremo simétrico: el dueño del transporte llama a `feed(texto)` con lo que llega y a `end()`
+cuando se cierra, y la conexión escribe líneas con `write(línea)`.
+
+| Pieza                        | Comportamiento                                                                                                                                                                                                                                                                                                                |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Enmarcado                    | Una línea = un mensaje; trozos arbitrarios; `\r\n` y líneas vacías toleradas; una línea final sin salto se entrega al cerrar                                                                                                                                                                                                  |
+| Tope de línea                | `maxLineLength` (4 Mi caracteres por omisión): una línea mayor se descarta entera (sin acumularla) y se informa; la siguiente se procesa                                                                                                                                                                                      |
+| Solicitudes propias          | `request(método, params, { timeoutMs })`: ids numéricos crecientes; rechaza con `RpcError` (código y datos del otro extremo), `RpcTimeoutError` o `RpcClosedError`; tope `maxPendingRequests`                                                                                                                                 |
+| Respuestas                   | Una respuesta resuelve su solicitud una sola vez; sin solicitud, repetida, tardía o con id de otro tipo se ignora y se informa (`unknown-response`)                                                                                                                                                                           |
+| Notificaciones               | `onNotification`; una excepción del atendedor se informa y no rompe la conexión                                                                                                                                                                                                                                               |
+| Solicitudes del otro extremo | `onRequest` puede devolver una promesa (la respuesta puede tardar, p. ej. una aprobación); `RpcError` lanzado → su código; otra excepción → `-32603` sin filtrar el mensaje; sin atendedor → `-32601`; id repetido en curso → `-32600`; más de `maxInFlightRequests` → `-32000`; tras cerrar, la respuesta tardía se descarta |
+| Cierre                       | `end` y `close` rechazan todas las pendientes (`RpcClosedError`), avisan una sola vez y ya no se escribe; si `write` lanza, se cierra                                                                                                                                                                                         |
+| Líneas hostiles              | JSON roto, mensajes con forma imposible y líneas enormes se informan; pasadas `maxIssues` (100) la conexión se cierra                                                                                                                                                                                                         |
+| Campo `jsonrpc`              | Al recibir es opcional (debe ser `"2.0"` si viene); al enviar, `version: '2.0'` (por omisión; ACP) u `'omit'` (Codex)                                                                                                                                                                                                         |
+
+Pruebas: unitarias, propiedades con fast-check (el resultado no depende de cómo se parta el flujo; cada solicitud recibe
+su respuesta en cualquier orden; basura arbitraria nunca lanza) y adversariales (`connection.adversarial.test.ts`).
 
 ## Protocolo (v1)
 
