@@ -103,6 +103,8 @@ describe('parseRequest', () => {
       'viewer.open': { paneId: 'p1', path: '/work/app/README.md' },
       'fs.stat': { path: '/work/app/README.md' },
       'fs.read': { path: '/work/app/README.md', offset: 0, length: 1024, encoding: 'utf8' },
+      'history.list': { provider: 'claude', cwd: '/work/app', limit: 20 },
+      'history.read': { provider: 'claude', sessionId: 'abc-123', limit: 50 },
     }
     expect(Object.keys(samples).sort()).toEqual([...METHOD_NAMES].sort())
     for (const [method, params] of Object.entries(samples)) {
