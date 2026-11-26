@@ -64,8 +64,9 @@ describe('FsMemoryStore: formato en disco', () => {
     await writeFile(join(state.dir, 'archivo'), 'x')
     const broken = new FsMemoryStore({ stateDir: join(state.dir, 'archivo'), logger })
     const read = await broken.load(PROJECT).catch((e: unknown) => e)
-    expect(read).toBeInstanceOf(MemoryStoreError)
-    expect((read as MemoryStoreError).code).toBe('IO')
+    // En POSIX leer bajo un archivo da ENOTDIR (IO); en Windows, ENOENT (registro vacío): ambos valen.
+    if (read instanceof MemoryStoreError) expect(read.code).toBe('IO')
+    else expect((read as { observations: unknown[] }).observations).toEqual([])
     const write = await broken.update(PROJECT, add('x')).catch((e: unknown) => e)
     expect((write as MemoryStoreError).code).toBe('IO')
     expect(await broken.list()).toEqual([])
