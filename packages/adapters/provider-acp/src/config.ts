@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 /** Ids que ya usan otros proveedores: un agente ACP declarado no puede llamarse así. */
-export const RESERVED_PROVIDER_IDS = ['claude', 'codex', 'ollama', 'fake'] as const
+export const RESERVED_PROVIDER_IDS = ['claude', 'codex', 'antigravity', 'ollama', 'fake'] as const
 
 function hasControl(s: string): boolean {
   for (const ch of s) {

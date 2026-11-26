@@ -13,6 +13,7 @@
   "dependencies": {
     "@nexo/adapter-provider-claude": "workspace:*",
     "@nexo/adapter-provider-acp": "workspace:*",
+    "@nexo/adapter-provider-antigravity": "workspace:*",
     "@nexo/adapter-provider-codex": "workspace:*",
     "@nexo/adapter-provider-ollama": "workspace:*",
     "@nexo/adapter-pty-host": "workspace:*",
