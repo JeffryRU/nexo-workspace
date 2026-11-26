@@ -2,12 +2,12 @@ import { z } from 'zod'
 
 /**
  * Esquema (permisivo) de la salida `agy --output-format stream-json`, según la documentación oficial
- * (antigravity.google/docs/cli/headless) y las notas de versión de la CLI. Verificado con `agy` 1.2.0 solo en lo
- * que se puede comprobar sin ejecutar un turno (banderas); los eventos salen de la documentación (ver
+ * (antigravity.google/docs/cli/headless) y las notas de versión de la CLI. Verificado con `agy` 1.5.17: banderas, `agy
+ * models` y un turno real de texto con reanudación (prueba en vivo); el resto de eventos sale de la documentación (ver
  * `docs/ARCHITECTURE.md`, «Proveedor Antigravity (F3.4)»). Todo campo es opcional y los desconocidos se
  * ignoran: un cambio menor de la CLI no debe romper el adaptador.
  */
-export const AGY_VERIFIED_VERSION = '1.2.0'
+export const AGY_VERIFIED_VERSION = '1.5.17'
 
 const Usage = z.looseObject({
   input_tokens: z.number().optional(),

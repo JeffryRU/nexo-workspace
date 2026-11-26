@@ -27,7 +27,7 @@ export const DEFAULT_LIMITS: SessionLimits = {
   interruptGraceMs: 3000,
 }
 
-/** Banderas de `agy` para cada modo normalizado (verificadas con `agy --help` 1.2.0; ver ARCHITECTURE). */
+/** Banderas de `agy` para cada modo normalizado (verificadas con `agy --help` 1.5.17; ver ARCHITECTURE). */
 export const PERMISSION_FLAGS: Record<PermissionMode, readonly string[]> = {
   ask: [],
   'accept-edits': ['--mode', 'accept-edits'],

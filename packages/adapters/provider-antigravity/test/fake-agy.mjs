@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// `agy` falso para las pruebas: imita lo que Nexo usa de la CLI real (`--version`, `models --output-format json`
+// `agy` falso para las pruebas: imita lo que Nexo usa de la CLI real (`--version`, `models`
 // y un turno con `--output-format stream-json --input-format stream-json`). El escenario lo elige la primera
 // palabra del mensaje. El formato sigue la documentación oficial de `agy` (headless); no es una captura real.
 import { appendFileSync } from 'node:fs'
@@ -16,7 +16,7 @@ const pace = () => sleep(Number(process.env.FAKE_AGY_DELAY_MS ?? 0))
 log({ argv, cwd: process.cwd() })
 
 if (argv[0] === '--version') {
-  console.log('1.2.0')
+  console.log('1.5.17')
   process.exit(0)
 }
 if (argv[0] === 'models') {
@@ -24,18 +24,15 @@ if (argv[0] === 'models') {
     console.error('Error: not signed in. Run agy and sign in.')
     process.exit(1)
   }
-  if (process.env.FAKE_AGY_MODELS_HANG === '1') await sleep(60000)
-  if (process.env.FAKE_AGY_MODELS_BROKEN === '1') console.log('esto no es JSON')
-  else {
-    console.log(
-      JSON.stringify({
-        models: [
-          { id: 'gemini-fake-pro', display_name: 'Gemini Fake Pro', default: true },
-          { id: 'gemini-fake-flash' },
-        ],
-      }),
-    )
+  // Como la CLI real (1.5.17): `models` no admite flags y sale con 1 si se le pasan.
+  if (argv.length > 1) {
+    console.error(`Error: flags provided but not defined: ${argv[1]}`)
+    process.exit(1)
   }
+  if (process.env.FAKE_AGY_MODELS_HANG === '1') await sleep(60000)
+  console.log('Fetching available models...')
+  if (process.env.FAKE_AGY_MODELS_BROKEN === '1') console.log('esto no es una lista')
+  else console.log('gemini-fake-pro\tGemini Fake Pro\ngemini-fake-flash\tGemini Fake Flash')
   process.exit(0)
 }
 

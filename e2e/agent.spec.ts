@@ -785,8 +785,9 @@ test.describe('proveedor Antigravity (agy falso)', () => {
       await openAgentTab(stack, app)
       await app.getByLabel('Proveedor').selectOption('antigravity')
       await expect(app.getByLabel('Modelo').locator('option')).toHaveText([
+        'Modelo predeterminado',
         'Gemini Fake Pro',
-        'gemini-fake-flash',
+        'Gemini Fake Flash',
       ])
       await expect(app.getByLabel('Esfuerzo').locator('option')).toHaveText([
         'Esfuerzo predeterminado',

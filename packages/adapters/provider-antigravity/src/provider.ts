@@ -26,7 +26,7 @@ import {
 } from './session.ts'
 import { line } from './text.ts'
 
-/** Esfuerzos de `--effort` en `agy` 1.2.0 (`agy --help`: low|medium|high). */
+/** Esfuerzos de `--effort` que usa Nexo (`agy` 1.5.17 admite además xhigh|max). */
 export const AGY_EFFORTS = ['low', 'medium', 'high'] as const
 
 /** Ids de conversación de Antigravity: UUID (supuesto no verificado; la prueba en vivo lo comprueba). */
@@ -189,7 +189,7 @@ class AntigravityProvider implements AgentProviderPort {
   }
 
   /**
-   * `agy models --output-format json`: sirve a la vez de comprobación de sesión (sin sesión falla) y de lista
+   * `agy models` (texto: una línea `id<TAB>nombre` por modelo): sirve a la vez de comprobación de sesión (sin sesión falla) y de lista
    * de modelos. Nexo no lee credenciales ni inicia sesión; la salida solo se usa para sacar los ids de modelo.
    */
   async #probeOnce(): Promise<Omit<Probe, 'at'>> {
@@ -206,7 +206,7 @@ class AntigravityProvider implements AgentProviderPort {
     const run = await runAgy({
       launcher: this.#launcher,
       command: resolved,
-      args: ['models', '--output-format', 'json'],
+      args: ['models'],
       cwd: process.cwd(),
       env: this.#o.env,
       timeoutMs,

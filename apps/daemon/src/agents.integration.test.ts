@@ -534,7 +534,10 @@ describe('proveedor Antigravity en el daemon real (agy falso)', () => {
       name: 'Antigravity',
       available: true,
       capabilities: {
-        defaultModel: 'gemini-fake-pro',
+        models: [
+          { id: 'gemini-fake-pro', label: 'Gemini Fake Pro' },
+          { id: 'gemini-fake-flash', label: 'Gemini Fake Flash' },
+        ],
         resume: true,
         streaming: true,
         efforts: ['low', 'medium', 'high'],

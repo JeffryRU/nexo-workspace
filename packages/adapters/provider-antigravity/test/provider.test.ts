@@ -16,7 +16,7 @@ describe('disponibilidad y capacidades', () => {
     const caps = await p.capabilities()
     expect(caps.models.map((m) => m.id)).toEqual(['gemini-fake-pro', 'gemini-fake-flash'])
     expect(caps.models[0]?.label).toBe('Gemini Fake Pro')
-    expect(caps.defaultModel).toBe('gemini-fake-pro')
+    expect(caps.defaultModel).toBeUndefined()
     expect(caps).toMatchObject({
       efforts: ['low', 'medium', 'high'],
       permissionModes: ['ask', 'accept-edits', 'plan', 'bypass'],
@@ -25,7 +25,7 @@ describe('disponibilidad y capacidades', () => {
       streaming: true,
     })
     const models = fake.readLog().find((l) => l.argv?.[0] === 'models')
-    expect(models?.argv).toEqual(['models', '--output-format', 'json'])
+    expect(models?.argv).toEqual(['models'])
   })
 
   it('sin la CLI queda no disponible con un motivo que dice cómo arreglarlo', async () => {
@@ -237,6 +237,17 @@ describe('agyErrorLine', () => {
 })
 
 describe('parseModels', () => {
+  it('lee el formato de texto real de `agy models` (id<TAB>nombre, con cabecera)', () => {
+    const out =
+      'Fetching available models...\r\ngemini-4-hydrogen-high\tGemini 4 Hydrogen (High)\r\nclaude-sonnet-4-6\tClaude Sonnet 4.6 (Thinking)\r\n'
+    expect(parseModels(out)).toEqual({
+      models: [
+        { id: 'gemini-4-hydrogen-high', label: 'Gemini 4 Hydrogen (High)' },
+        { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (Thinking)' },
+      ],
+      defaultModel: undefined,
+    })
+  })
   it('acepta listas, objetos con clave conocida, JSON por líneas y cadenas', () => {
     expect(parseModels('["a","b"]').models.map((m) => m.id)).toEqual(['a', 'b'])
     expect(parseModels('{"data":[{"slug":"s","label":"Eti","isDefault":true}]}')).toEqual({

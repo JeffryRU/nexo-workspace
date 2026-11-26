@@ -19,7 +19,7 @@ describe.skipIf(!live)('Antigravity real', () => {
     expect(await provider.isAvailable(), provider.unavailableReason?.()).toBe(true)
     const caps = await provider.capabilities()
     console.log(`modelos: ${caps.models.map((m) => m.id).join(', ') || '(lista no reconocida)'}`)
-    const session = await provider.open({ cwd: process.cwd(), permissionMode: 'plan' })
+    const session = await provider.open({ cwd: process.cwd(), permissionMode: 'ask' })
     const events: ProviderEvent[] = []
     session.onEvent((e) => {
       expect(ProviderEvent.safeParse(e).success).toBe(true)
@@ -45,7 +45,7 @@ describe.skipIf(!live)('Antigravity real', () => {
       const id = session.providerSessionId
       expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
       await session.close()
-      const again = await provider.open({ cwd: process.cwd(), permissionMode: 'plan', resume: id })
+      const again = await provider.open({ cwd: process.cwd(), permissionMode: 'ask', resume: id })
       const second: ProviderEvent[] = []
       again.onEvent((e) => second.push(e))
       try {

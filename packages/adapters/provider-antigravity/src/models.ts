@@ -24,10 +24,10 @@ function candidates(value: unknown): unknown[] {
 }
 
 /**
- * Lee la salida de `agy models --output-format json` (o `stream-json`). La forma exacta no está verificada
- * (no se pudo ejecutar con la cuenta del usuario), así que se acepta una lista, un objeto con la lista bajo
- * `models`/`data`/`items`, o JSON por líneas; cada modelo, como cadena o como objeto con `id`/`slug`/`model`/`name`.
- * Lo que no encaja se descarta: sin lista, el proveedor sigue siendo usable con el modelo por omisión de `agy`.
+ * Lee la salida de `agy models`. Formato verificado con agy 1.5.17: una cabecera («Fetching available
+ * models...») y una línea `id<TAB>nombre` por modelo; `agy models` no admite `--output-format`. Por si una
+ * versión futura cambia a JSON, también se acepta una lista, un objeto con la lista bajo `models`/`data`/`items`,
+ * o JSON por líneas. Lo que no encaja se descarta: sin lista, el proveedor sigue usable con el modelo por omisión.
  */
 export function parseModels(stdout: string): ParsedModels {
   const raw: unknown[] = []
@@ -36,7 +36,12 @@ export function parseModels(stdout: string): ParsedModels {
   try {
     raw.push(...candidates(JSON.parse(text)))
   } catch {
-    for (const l of text.split('\n')) {
+    for (const l of text.split(/\r?\n/)) {
+      const tab = l.indexOf('\t')
+      if (tab > 0) {
+        raw.push({ id: l.slice(0, tab).trim(), label: l.slice(tab + 1).trim() })
+        continue
+      }
       try {
         raw.push(...candidates(JSON.parse(l)))
       } catch {
