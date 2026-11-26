@@ -1,6 +1,8 @@
+import { mkdtempSync, rmSync } from 'node:fs'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   AgentDocument,
@@ -467,7 +469,22 @@ describe('proveedores ACP en el daemon real (agente ACP falso)', () => {
   })
 
   it('el Gemini por omisión sale no disponible si «gemini» no está instalado, con el motivo', async () => {
-    const daemon = await startTestDaemon({ agentProviders: ['gemini'] })
+    // Determinista: el daemon toma su entorno al arrancar, así que se arranca con un PATH vacío (no depende de
+    // que la máquina tenga o no «gemini» instalado) y se restaura enseguida.
+    const emptyBin = mkdtempSync(join(tmpdir(), 'nexo-sin-gemini-'))
+    const savedPath = process.env.PATH
+    const savedWinPath = process.env.Path
+    process.env.PATH = emptyBin
+    if (savedWinPath !== undefined) process.env.Path = emptyBin
+    let daemon: TestDaemon
+    try {
+      daemon = await startTestDaemon({ agentProviders: ['gemini'] })
+    } finally {
+      if (savedPath === undefined) delete process.env.PATH
+      else process.env.PATH = savedPath
+      if (savedWinPath !== undefined) process.env.Path = savedWinPath
+      rmSync(emptyBin, { recursive: true, force: true })
+    }
     daemons.push(daemon)
     const { client } = await connect(daemon)
     const { providers } = await client.call('agent.providers', {})
@@ -496,5 +513,67 @@ describe('proveedores ACP en el daemon real (agente ACP falso)', () => {
     const { providers } = await client.call('agent.providers', {})
     expect(providers[0]).toMatchObject({ id: 'gemini', available: false })
     expect(providers[0]?.reason).toMatch(/pide autenticación/)
+  })
+})
+
+describe('proveedor Antigravity en el daemon real (agy falso)', () => {
+  const fakeAgy = fileURLToPath(
+    new URL('../../../packages/adapters/provider-antigravity/test/fake-agy.mjs', import.meta.url),
+  )
+
+  it('agent.providers lista modelos; la conversación y las acciones con diff llegan al documento', async () => {
+    const daemon = await startTestDaemon({
+      agentProviders: ['antigravity'],
+      agyExecutable: fakeAgy,
+    })
+    daemons.push(daemon)
+    const { client } = await connect(daemon)
+    const { providers } = await client.call('agent.providers', {})
+    expect(providers[0]).toMatchObject({
+      id: 'antigravity',
+      name: 'Antigravity',
+      available: true,
+      capabilities: {
+        defaultModel: 'gemini-fake-pro',
+        resume: true,
+        streaming: true,
+        efforts: ['low', 'medium', 'high'],
+      },
+    })
+    const { session } = await newSession(client, 'antigravity')
+    expect(session.provider).toBe('antigravity')
+    const doc = await AgentDocument.open(client, session.id)
+    docs.push(doc)
+    const api = agentApi(client)
+    await api.send({ sessionId: session.id, text: 'simple hola' })
+    await until(() => doc.blocks().some((b) => b.type === 'usage'), 'fin del turno')
+    expect(doc.blocks().map((b) => b.type)).toEqual(['user', 'text', 'usage'])
+    expect(doc.blocks()[1]).toMatchObject({ text: 'Hola desde agy', complete: true })
+    // La ficha real de la conversación llega a la sesión tras el primer turno.
+    await until(
+      () => doc.session?.providerSessionId === '11111111-2222-3333-4444-555555555555',
+      'ficha de la conversación',
+    )
+
+    await api.send({ sessionId: session.id, text: 'tool' })
+    await until(() => doc.blocks().filter((b) => b.type === 'usage').length === 2, 'segundo turno')
+    const actions = doc.blocks().filter((b) => b.type === 'action')
+    expect(actions.map((a) => a.type === 'action' && a.status)).toEqual(['ok', 'ok', 'error'])
+    expect(actions[1]).toMatchObject({ kind: 'edit', path: 'src/a.ts' })
+  })
+
+  it('sin la CLI, sale no disponible con su motivo y crear da PROVIDER_UNAVAILABLE', async () => {
+    const daemon = await startTestDaemon({
+      agentProviders: ['antigravity'],
+      agyExecutable: '/no/existe/agy',
+    })
+    daemons.push(daemon)
+    const { client } = await connect(daemon)
+    const { providers } = await client.call('agent.providers', {})
+    expect(providers[0]).toMatchObject({ id: 'antigravity', available: false })
+    expect(providers[0]?.reason).toMatch(/No se encontró Antigravity/)
+    await expect(newSession(client, 'antigravity')).rejects.toMatchObject({
+      code: 'PROVIDER_UNAVAILABLE',
+    })
   })
 })

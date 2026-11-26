@@ -43,6 +43,16 @@ describe('parseEnv: proveedores de agente', () => {
     expect(parseEnv({ NEXO_CODEX_EXECUTABLE: '/opt/codex' }).codexExecutable).toBe('/opt/codex')
   })
 
+  it('acepta antigravity y lee NEXO_AGY_EXECUTABLE', () => {
+    expect(parseEnv({ NEXO_AGENT_PROVIDERS: 'claude,antigravity' }).agentProviders).toEqual([
+      'claude',
+      'antigravity',
+    ])
+    expect(parseEnv({}).agyExecutable).toBeUndefined()
+    expect(parseEnv({ NEXO_AGY_EXECUTABLE: '' }).agyExecutable).toBeUndefined()
+    expect(parseEnv({ NEXO_AGY_EXECUTABLE: '/opt/agy' }).agyExecutable).toBe('/opt/agy')
+  })
+
   it('NEXO_OLLAMA_URL: por omisión local, solo http(s) y sin credenciales', () => {
     expect(parseEnv({}).ollamaUrl).toBe('http://127.0.0.1:11434')
     expect(parseEnv({ NEXO_OLLAMA_URL: '' }).ollamaUrl).toBe('http://127.0.0.1:11434')
