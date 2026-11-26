@@ -6,7 +6,7 @@ const bool = z
   .optional()
   .transform((v) => v === '1' || v === 'true')
 
-export const AGENT_PROVIDER_IDS = ['claude', 'ollama', 'fake'] as const
+export const AGENT_PROVIDER_IDS = ['claude', 'codex', 'ollama', 'fake'] as const
 export type AgentProviderName = (typeof AGENT_PROVIDER_IDS)[number]
 
 const providerList = z
@@ -16,7 +16,7 @@ const providerList = z
     z
       .array(
         z.enum(AGENT_PROVIDER_IDS, {
-          error: 'proveedor desconocido (valen: claude, ollama, fake)',
+          error: 'proveedor desconocido (valen: claude, codex, ollama, fake)',
         }),
       )
       .min(1)
@@ -46,6 +46,7 @@ const EnvSchema = z.object({
   NEXO_PTY_MODE: z.enum(['host', 'direct']).optional(),
   NEXO_AGENT_PROVIDERS: providerList.optional(),
   NEXO_CLAUDE_EXECUTABLE: z.string().min(1).max(4096).optional(),
+  NEXO_CODEX_EXECUTABLE: z.string().min(1).max(4096).optional(),
   NEXO_OLLAMA_URL: ollamaUrl.default(DEFAULT_OLLAMA_URL),
   NEXO_LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   NEXO_MAX_CONNECTIONS: z.coerce.number().int().min(1).max(10000).default(128),
@@ -62,6 +63,8 @@ export type DaemonEnv = {
   agentProviders: AgentProviderName[]
   /** Ruta del ejecutable de Claude Code; por omisión, el que trae el SDK. */
   claudeExecutable: string | undefined
+  /** Ruta del ejecutable de Codex (`codex`); por omisión se busca en el PATH. */
+  codexExecutable: string | undefined
   /** URL base de la API de Ollama (`http://127.0.0.1:11434` por omisión). */
   ollamaUrl: string
   logLevel: 'debug' | 'info' | 'warn' | 'error'
@@ -79,6 +82,7 @@ export function parseEnv(env: Readonly<Record<string, string | undefined>>): Dae
     NEXO_AGENT_PROVIDERS: env.NEXO_AGENT_PROVIDERS === '' ? undefined : env.NEXO_AGENT_PROVIDERS,
     NEXO_CLAUDE_EXECUTABLE:
       env.NEXO_CLAUDE_EXECUTABLE === '' ? undefined : env.NEXO_CLAUDE_EXECUTABLE,
+    NEXO_CODEX_EXECUTABLE: env.NEXO_CODEX_EXECUTABLE === '' ? undefined : env.NEXO_CODEX_EXECUTABLE,
     NEXO_OLLAMA_URL: env.NEXO_OLLAMA_URL === '' ? undefined : env.NEXO_OLLAMA_URL,
     NEXO_LOG_LEVEL: env.NEXO_LOG_LEVEL,
     NEXO_MAX_CONNECTIONS: env.NEXO_MAX_CONNECTIONS,
@@ -97,6 +101,7 @@ export function parseEnv(env: Readonly<Record<string, string | undefined>>): Dae
     ptyMode: d.NEXO_PTY_MODE,
     agentProviders: d.NEXO_AGENT_PROVIDERS ?? ['claude'],
     claudeExecutable: d.NEXO_CLAUDE_EXECUTABLE,
+    codexExecutable: d.NEXO_CODEX_EXECUTABLE,
     ollamaUrl: d.NEXO_OLLAMA_URL,
     logLevel: d.NEXO_LOG_LEVEL,
     maxConnections: d.NEXO_MAX_CONNECTIONS,
