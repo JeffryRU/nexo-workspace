@@ -1,11 +1,16 @@
 import { createSignal } from 'solid-js'
 import { DEFAULT_KEYMAP, type KeyMap } from '../shortcuts/keymap.ts'
 
+export type MemoryJump = { sessionId: string; from: number; to: number }
+
 /** Estado de interfaz local (no viaja al daemon). */
 export function createUiState(keymap: KeyMap = DEFAULT_KEYMAP) {
   const [activeWorkspaceId, setActiveWorkspaceId] = createSignal<string | undefined>()
   const [helpOpen, setHelpOpen] = createSignal(false)
   const [searchOpen, setSearchOpen] = createSignal(false)
+  const [memoryOpen, setMemoryOpen] = createSignal(false)
+  /** Bloque de origen al que debe saltar el panel de una sesión (lo pide la vista de memoria). */
+  const [jump, setJump] = createSignal<MemoryJump | undefined>()
   const [error, setError] = createSignal<string | undefined>()
   const [swapSource, setSwapSource] = createSignal<string | undefined>()
   const [editing, setEditing] = createSignal<string | undefined>()
@@ -20,6 +25,10 @@ export function createUiState(keymap: KeyMap = DEFAULT_KEYMAP) {
     setHelpOpen,
     searchOpen,
     setSearchOpen,
+    memoryOpen,
+    setMemoryOpen,
+    jump,
+    setJump,
     error,
     swapSource,
     setSwapSource,

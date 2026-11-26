@@ -20,6 +20,9 @@ export function agentApi(client: Caller) {
       o?: CallOptions<MethodResult<'agent.snapshot'>>,
     ) => client.call('agent.snapshot', p, o),
     close: (p: MethodParams<'agent.close'>) => client.call('agent.close', p),
+    /** Renueva la sesión sembrándola con la memoria (F3.5.4); abrir la nueva puede tardar. */
+    renew: (p: MethodParams<'agent.renew'>, o?: CallOptions<MethodResult<'agent.renew'>>) =>
+      client.call('agent.renew', p, o),
   }
 }
 

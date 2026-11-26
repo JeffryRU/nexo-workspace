@@ -5,6 +5,8 @@ import { useAttentionEffects } from './attention/effects.ts'
 import type { InfoFailure } from './daemon/info.ts'
 import { es } from './i18n/es.ts'
 import { paneIdsOf } from './layout/tree.ts'
+import { MemoryDialog, MemoryToggle } from './memory/MemoryDialog.tsx'
+import { useMemoryEvents } from './memory/queries.ts'
 import { installShortcuts } from './shortcuts/handler.ts'
 import {
   ConnectionScreen,
@@ -52,6 +54,7 @@ function Workbench(props: { model: AppModel }) {
   const everOpened = createMemo<boolean>((was) => was || status() === 'open', false)
 
   useAttentionEffects(props.model)
+  useMemoryEvents()
   onMount(() => {
     const stop = installShortcuts(props.model)
     onCleanup(stop)
@@ -88,12 +91,14 @@ function Workbench(props: { model: AppModel }) {
           <SearchBar />
           <footer class="statusbar">
             <span>{es.appName}</span>
+            <MemoryToggle />
             <NotificationToggle />
             <Show when={info.data}>{(d) => <span class="muted">v{d().version}</span>}</Show>
           </footer>
         </div>
         <ReconnectBanner />
         <HelpDialog />
+        <MemoryDialog />
         <Toast />
       </div>
     </Show>

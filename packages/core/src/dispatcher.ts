@@ -104,10 +104,12 @@ export function createHandlers(s: DispatcherServices): Handlers {
     'agent.list': (p) => agents()['agent.list'](p),
     'agent.snapshot': (p) => agents()['agent.snapshot'](p),
     'agent.close': (p) => agents()['agent.close'](p),
+    'agent.renew': (p) => agents()['agent.renew'](p),
     'memory.status': (p) => memory()['memory.status'](p),
     'memory.list': (p) => memory()['memory.list'](p),
     'memory.search': (p) => memory()['memory.search'](p),
     'memory.recall': (p) => memory()['memory.recall'](p),
+    'memory.configure': (p) => memory()['memory.configure'](p),
   }
 }
 

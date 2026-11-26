@@ -9,10 +9,11 @@ import {
   type Reflection,
 } from '@nexo/contracts'
 import { AgentPrinter } from '../agent-render.ts'
-import { expectPositionals, intOption, parseArgv, str } from '../args.ts'
+import { expectPositionals, flag, intOption, parseArgv, str } from '../args.ts'
 import type { Ctx } from '../context.ts'
 import { usageError } from '../errors.ts'
 import {
+  MemoryConfigureOutput,
   MemoryListOutput,
   MemoryRecallOutput,
   MemorySearchOutput,
@@ -21,7 +22,7 @@ import {
 import { sanitize } from '../text.ts'
 import { resolveSession } from './agent.ts'
 
-const SUBCOMMANDS = ['status', 'ls', 'search', 'recall'] as const
+const SUBCOMMANDS = ['status', 'config', 'ls', 'search', 'recall'] as const
 
 export async function memoryCommand(ctx: Ctx, args: string[]): Promise<void> {
   // Las opciones globales pueden ir antes del subcomando (`nexo memory --json ls`).
@@ -31,6 +32,8 @@ export async function memoryCommand(ctx: Ctx, args: string[]): Promise<void> {
   switch (sub) {
     case 'status':
       return memoryStatus(ctx, rest)
+    case 'config':
+      return memoryConfig(ctx, rest)
     case 'ls':
       return memoryLs(ctx, rest)
     case 'search':
@@ -86,12 +89,13 @@ async function memoryStatus(ctx: Ctx, args: string[]): Promise<void> {
   const s = await client.call('memory.status', { cwd })
   ctx.emit(MemoryStatusOutput, s, () => {
     const lines = [
-      `Memoria: ${s.enabled ? 'activada' : 'apagada (NEXO_MEMORY=on la activa)'}`,
+      `Memoria: ${s.enabled ? 'activada' : 'apagada (`nexo memory config --on` la activa)'}`,
       `Resumidor: ${s.summarizer === undefined ? '(ninguno)' : sanitize(s.summarizer, 256)}`,
     ]
     if (s.pausedReason !== undefined) lines.push(`En pausa: ${sanitize(s.pausedReason, 256)}`)
     lines.push(
       `Umbrales: Observador ${s.thresholds.observerBatchTokens} tokens, Reflector ${s.thresholds.reflectorTokens} tokens`,
+      `Renovación automática: ${s.renewAtTokens === undefined ? 'apagada' : `a ~${s.renewAtTokens} tokens`}`,
       `Uso desde que arrancó el daemon: ${fmtUsage(s.usage)}`,
     )
     if (s.roles !== undefined) {
@@ -110,6 +114,41 @@ async function memoryStatus(ctx: Ctx, args: string[]): Promise<void> {
       lines.push(`Uso acumulado del proyecto: ${fmtUsage(s.projectUsage)}`)
     return lines.join('\n')
   })
+}
+
+// ---- config ----
+
+const CONFIG_USAGE = 'nexo memory config [--on|--off] [--renew-at N|off]'
+
+async function memoryConfig(ctx: Ctx, args: string[]): Promise<void> {
+  const parsed = parseArgv(args, {
+    on: { type: 'boolean' },
+    off: { type: 'boolean' },
+    'renew-at': { type: 'string' },
+  })
+  if (parsed.positionals.length > 0) throw usageError(`uso: ${CONFIG_USAGE}`)
+  if (flag(parsed, 'on') && flag(parsed, 'off')) throw usageError('--on y --off se excluyen')
+  const renewRaw = str(parsed, 'renew-at')
+  let renewAtTokens: number | null | undefined
+  if (renewRaw === 'off') renewAtTokens = null
+  else if (renewRaw !== undefined) {
+    renewAtTokens = intOption(parsed, 'renew-at', 0, 10_000, 5_000_000)
+  }
+  const enabled = flag(parsed, 'on') ? true : flag(parsed, 'off') ? false : undefined
+  if (enabled === undefined && renewAtTokens === undefined) {
+    throw usageError(`uso: ${CONFIG_USAGE}`)
+  }
+  const client = await ctx.client()
+  const r = await client.call('memory.configure', {
+    ...(enabled === undefined ? {} : { enabled }),
+    ...(renewAtTokens === undefined ? {} : { renewAtTokens }),
+  })
+  ctx.emit(
+    MemoryConfigureOutput,
+    r,
+    () =>
+      `Memoria: ${r.enabled ? 'activada' : 'apagada'}. Renovación automática: ${r.renewAtTokens === undefined ? 'apagada' : `a ~${r.renewAtTokens} tokens`}`,
+  )
 }
 
 // ---- ls ----

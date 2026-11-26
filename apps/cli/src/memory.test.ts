@@ -84,7 +84,7 @@ describe('nexo memory status', () => {
       usage: ZERO,
     }))
     expect(await run(off, 'memory', 'status')).toBe(0)
-    expect(off.cap.out).toContain('apagada (NEXO_MEMORY=on la activa)')
+    expect(off.cap.out).toContain('apagada (`nexo memory config --on` la activa)')
     expect(off.cap.out).toContain('(ninguno)')
 
     const paused = makeEnv()

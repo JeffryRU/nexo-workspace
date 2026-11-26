@@ -29,7 +29,16 @@ import { sanitize } from '../text.ts'
 import { readStdin } from './send.ts'
 
 const AGENT_EVENTS = ['agent.block', 'agent.delta', 'agent.status', 'agent.session'] as const
-const SUBCOMMANDS = ['new', 'send', 'ls', 'attach', 'interrupt', 'close', 'respond'] as const
+const SUBCOMMANDS = [
+  'new',
+  'send',
+  'ls',
+  'attach',
+  'interrupt',
+  'close',
+  'respond',
+  'renew',
+] as const
 
 export async function agentCommand(ctx: Ctx, args: string[]): Promise<void> {
   // Las opciones globales pueden ir antes del subcomando (`nexo agent --json ls`).
@@ -51,6 +60,8 @@ export async function agentCommand(ctx: Ctx, args: string[]): Promise<void> {
       return agentSimple(ctx, rest, 'close')
     case 'respond':
       return agentRespond(ctx, rest)
+    case 'renew':
+      return agentSimple(ctx, rest, 'renew')
     default:
       throw usageError(`uso: nexo agent ${SUBCOMMANDS.join('|')} (mira \`nexo agent --help\`)`)
   }
@@ -248,16 +259,23 @@ async function agentLs(ctx: Ctx, args: string[]): Promise<void> {
 
 // ---- interrupt / close ----
 
-async function agentSimple(ctx: Ctx, args: string[], action: 'interrupt' | 'close'): Promise<void> {
+async function agentSimple(
+  ctx: Ctx,
+  args: string[],
+  action: 'interrupt' | 'close' | 'renew',
+): Promise<void> {
   const [ref] = expectPositionals(parseArgv(args), 1, 1, `nexo agent ${action} <id>`) as [string]
   const { client, session } = await lookupSession(ctx, ref)
   const sessionId = AgentSessionId.parse(session.id)
   if (action === 'interrupt') await client.call('agent.interrupt', { sessionId })
+  else if (action === 'renew')
+    await client.call('agent.renew', { sessionId }, { timeoutMs: 120_000 })
   else await client.call('agent.close', { sessionId })
+  const done = { interrupt: 'interrumpida', close: 'cerrada', renew: 'renovada' }[action]
   ctx.emit(
     AgentActionOutput,
     { ok: true, action, sessionId },
-    () => `${action === 'interrupt' ? 'interrumpida' : 'cerrada'} la sesión ${session.id}`,
+    () => `${done} la sesión ${session.id}`,
   )
 }
 

@@ -305,3 +305,28 @@ describe('MemoryService adversarial: carreras y desbordes', () => {
     }
   })
 })
+
+describe('MemoryService adversarial: ajustes en caliente', () => {
+  it('encender y apagar mil veces no deja suscriptores duplicados ni sesiones fantasma', async () => {
+    const rig = createMemoryRig({ enabled: false })
+    const s = rig.open()
+    for (let i = 0; i < 1000; i++) await rig.service.configure({ enabled: i % 2 === 0 })
+    await rig.service.configure({ enabled: true })
+    for (let i = 0; i < 4; i++) rig.turn(s, 400)
+    rig.idle(s)
+    await rig.drain()
+    // un solo suscriptor: un solo lote observado
+    expect(rig.fake?.requests).toHaveLength(1)
+  })
+
+  it('apagar con una llamada al resumidor en curso no pierde ni duplica lo observado', async () => {
+    const rig = createMemoryRig()
+    const s = rig.open()
+    for (let i = 0; i < 4; i++) rig.turn(s, 400)
+    rig.idle(s)
+    await rig.service.configure({ enabled: false })
+    await rig.drain()
+    const memory = await rig.store.load('/work/app')
+    expect(new Set(memory.observations.map((o) => o.seq)).size).toBe(memory.observations.length)
+  })
+})

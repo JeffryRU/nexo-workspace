@@ -137,6 +137,8 @@ export type AgentHarnessOptions = {
   withSession?: boolean
   providers?: ProviderInfo[]
   providersFail?: boolean
+  /** Prepara el daemon falso antes de montar la aplicación (los métodos que se piden al montar). */
+  setup?: (client: FakeClient) => void
 }
 
 /** Aplicación montada con un panel de agente y un daemon falso que sirve `agent.snapshot` y `agent.providers`. */
@@ -162,6 +164,7 @@ export async function mountAgent(options: AgentHarnessOptions = {}) {
     if (options.providersFail === true) throw new Error('sin proveedores')
     return { providers: options.providers ?? [FAKE_PROVIDER] }
   })
+  options.setup?.(client)
   const pane = mkPane('p1', { kind: 'agent', ...(withSession ? { agentSessionId: SID } : {}) })
   const tab = { ...mkTab('t1', ['p1']), panes: [pane] }
   const app = await mountApp(snapshotOf([mkWorkspace('w1', [tab])]), client)

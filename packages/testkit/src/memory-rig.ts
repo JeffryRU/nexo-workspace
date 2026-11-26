@@ -10,6 +10,7 @@ import {
   DomainError,
   MemoryService,
   type MemoryServiceConfig,
+  type MemoryServiceDeps,
   type MemorySessionSource,
   type MemoryThresholds,
   type SummarizerPort,
@@ -97,6 +98,9 @@ export type MemoryRigOptions = {
   pausedReason?: string
   /** Sin fuente de sesiones (daemon sin agentes). */
   noSessions?: boolean
+  renewAtTokens?: number
+  /** Guarda de los ajustes en caliente (`memory.configure`); si lanza, no se aplican. */
+  onSettings?: MemoryServiceDeps['onSettings']
 }
 
 /** Un `MemoryService` con todos sus falsos, y atajos para simular una conversación. */
@@ -125,6 +129,8 @@ export class MemoryRig {
       clock: this.clock,
       logger: this.logger,
       enabled: options.enabled ?? true,
+      ...(options.renewAtTokens === undefined ? {} : { renewAtTokens: options.renewAtTokens }),
+      ...(options.onSettings === undefined ? {} : { onSettings: options.onSettings }),
       ...(options.summarizer === null ? {} : { summarizer: this.summarizer }),
       ...(options.pausedReason === undefined ? {} : { pausedReason: options.pausedReason }),
       ...(options.noSessions === true ? {} : { sessions: this.sessions }),

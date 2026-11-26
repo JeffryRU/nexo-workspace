@@ -35,7 +35,7 @@ Comandos:
   close <panel|pestaña|espacio>   cierra un panel, una pestaña o un espacio
   rename <pestaña|espacio> <nombre>   renombra
   agent <sub>                sesiones de agente (new, send, ls, attach, interrupt, close, respond)
-  memory <sub>               memoria observacional (status, ls, search, recall)
+  memory <sub>               memoria observacional (status, config, ls, search, recall)
   daemon status|stop|log     controla el daemon
 
 Los paneles, pestañas y espacios se indican con su id completo, un prefijo único del id
@@ -112,6 +112,8 @@ Cambia el título de una pestaña o el nombre de un espacio.
                                         pide la respuesta por teclado (número de opción, o texto)
   interrupt <id>                        interrumpe el turno en curso
   close <id>                            cierra la sesión
+  renew <id>                            renueva la sesión sembrándola con la memoria (misma pestaña; hace
+                                        falta la memoria encendida y entre turnos)
   respond <id> [--block <bloque>] <respuesta...>
         responde un permiso (número o id de opción) o una pregunta (números o etiquetas separados por
         comas; varias preguntas separadas por ";"; texto libre si la pregunta lo admite)
@@ -122,6 +124,9 @@ Cambia el título de una pestaña o el nombre de un espacio.
 
   status [--cwd <ruta>]                 estado de la memoria: activada o no, resumidor, motivo de una pausa,
                                         umbrales y uso (llamadas, tokens y costo del Observador y del Reflector)
+  config [--on|--off] [--renew-at N|off]
+                                        enciende o apaga la memoria en caliente y fija la renovación automática
+                                        (se guarda en el estado del daemon y manda sobre NEXO_MEMORY*)
   ls [--cwd <ruta>] [--limit N] [--from SEQ] [--scope session|project] [--min-priority high|medium|low]
                                         reflexión y observaciones del proyecto, con su prioridad y el rango
                                         de bloques de donde salieron
@@ -130,8 +135,8 @@ Cambia el título de una pestaña o el nombre de un espacio.
   recall <sesión> <desde[-hasta]>       texto original de un rango de bloques de una sesión abierta
                                         (5, 5-9, 5..9 o 5:9)
 
-El proyecto es la carpeta actual, o --cwd. La memoria viene apagada: se activa en el daemon con
-NEXO_MEMORY=on y NEXO_MEMORY_SUMMARIZER (mira el README). Con --json cada subcomando emite su resultado.
+El proyecto es la carpeta actual, o --cwd. La memoria viene apagada: se activa con
+nexo memory config --on (o NEXO_MEMORY=on) y hace falta NEXO_MEMORY_SUMMARIZER (mira el README). Con --json cada subcomando emite su resultado.
 `,
   daemon: `Uso: nexo daemon status|stop|log
 

@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync } from 'node:fs'
+import { readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { AgentDocument, agentApi, NexoClient, webSocketTransport } from '@nexo/client'
@@ -182,5 +183,95 @@ describe('inyección de memoria en el daemon real', () => {
     const after = await say(client, session, 'hola de nuevo')
     expect(agentTexts(after).at(-1)).toBe('Eco: hola de nuevo')
     expect(after.blocks().filter((b) => b.type === 'user')).toHaveLength(3)
+  })
+})
+
+describe('interfaz de la memoria en el daemon real (F3.5.4)', () => {
+  it('memory.configure enciende en caliente y se guarda: un daemon nuevo en el mismo estado lo recuerda', async () => {
+    const first = await boot({ memory: { summarizer: { kind: 'fake' }, thresholds: THRESHOLDS } })
+    const client = await connect(first.daemon)
+    expect((await client.call('memory.status', {})).enabled).toBe(false)
+    const cwd = workdir()
+    const a = await newSession(client, cwd)
+    await say(client, a.session, longText(1))
+    await say(client, a.session, longText(2))
+    // apagada: no observa
+    expect((await client.call('memory.list', { cwd })).observations).toHaveLength(0)
+    expect(await client.call('memory.configure', { enabled: true, renewAtTokens: 40_000 })).toEqual(
+      { enabled: true, renewAtTokens: 40_000 },
+    )
+    expect(await client.call('memory.status', {})).toMatchObject({
+      enabled: true,
+      renewAtTokens: 40_000,
+    })
+    await say(client, a.session, longText(3))
+    await say(client, a.session, longText(4))
+    await until(
+      async () => (await client.call('memory.list', { cwd })).observations.length > 0,
+      'observaciones tras encender',
+    )
+    const b = await newSession(client, cwd)
+    expect(b.session.memory).toMatchObject({ renewals: 0, renewing: false })
+    expect(b.session.memory?.seedTokens).toBeGreaterThan(0)
+    expect(a.session.memory).toBeUndefined()
+
+    // El mismo estado, otro daemon: lo guardado manda aunque el entorno diga otra cosa.
+    const { stateDir } = first.daemon
+    const file = JSON.parse(await readFile(join(stateDir, 'memory-settings.json'), 'utf8'))
+    expect(file).toEqual({ version: 1, enabled: true, renewAtTokens: 40_000 })
+    for (const c of clients.splice(0)) c.close()
+    await first.daemon.stop()
+    const second = await boot({
+      stateDir,
+      memory: { enabled: false, summarizer: { kind: 'fake' }, thresholds: THRESHOLDS },
+    })
+    const again = await connect(second.daemon)
+    expect(await again.call('memory.status', {})).toMatchObject({
+      enabled: true,
+      renewAtTokens: 40_000,
+    })
+    await again.call('memory.configure', { enabled: false, renewAtTokens: null })
+    expect(await again.call('memory.status', {})).not.toHaveProperty('renewAtTokens')
+  })
+
+  it('un archivo de ajustes roto o hostil se ignora y el daemon arranca con el entorno', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'nexo-set-'))
+    dirs.push(dir)
+    await writeFile(join(dir, 'memory-settings.json'), '{"version":1,"enabled":"sí","x":')
+    const { daemon } = await boot({ stateDir: dir, memory: { enabled: true } })
+    const client = await connect(daemon)
+    expect((await client.call('memory.status', {})).enabled).toBe(true)
+  })
+
+  it('agent.renew renueva a mano la sesión (sin umbral) y publica la memoria de la sesión', async () => {
+    const { daemon, provider } = await boot({
+      memory: { enabled: true, summarizer: { kind: 'fake' }, thresholds: THRESHOLDS },
+    })
+    const client = await connect(daemon)
+    const cwd = workdir()
+    const { session } = await newSession(client, cwd)
+    await say(client, session, longText(1))
+    await say(client, session, longText(2))
+    await until(
+      async () => (await client.call('memory.list', { cwd })).observations.length > 0,
+      'observaciones',
+    )
+    const { session: renewed } = await client.call('agent.renew', { sessionId: session.id })
+    expect(renewed.id).toBe(session.id)
+    expect(renewed.memory).toMatchObject({ renewals: 1, renewing: false })
+    expect(provider.opened).toHaveLength(2)
+    expect(provider.opened[1]?.memory).toContain('Últimos turnos (tal cual)')
+    const after = await say(client, session, 'hola de nuevo')
+    expect(agentTexts(after).at(-1)).toBe('Eco: hola de nuevo')
+  })
+
+  it('agent.renew con la memoria apagada o con una sesión inexistente responde con error', async () => {
+    const { daemon } = await boot({})
+    const client = await connect(daemon)
+    const { session } = await newSession(client, workdir())
+    await expect(client.call('agent.renew', { sessionId: session.id })).rejects.toBeDefined()
+    await expect(
+      client.call('agent.renew', { sessionId: 'agent-session-99999999' as never }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' })
   })
 })

@@ -160,9 +160,14 @@ describe('createDispatcher', () => {
         'memory.recall': () => {
           throw new DomainError('NOT_FOUND', 'sesión inexistente')
         },
+        'memory.configure': (p) => ({ enabled: p.enabled ?? false }),
       },
     })
     expect(await dispatch({ method: 'memory.status', params: {} })).toMatchObject({ ok: true })
+    expect(await dispatch({ method: 'memory.configure', params: { enabled: true } })).toEqual({
+      ok: true,
+      result: { enabled: true },
+    })
     expect(
       await dispatch({
         method: 'memory.recall',
@@ -195,6 +200,9 @@ describe('createDispatcher', () => {
           throw new Error('secreto interno')
         },
         'agent.close': noop,
+        'agent.renew': () => {
+          throw new DomainError('CONFLICT', 'hay un turno en curso')
+        },
       },
     })
     expect(await dispatch({ method: 'agent.list', params: {} })).toEqual({
