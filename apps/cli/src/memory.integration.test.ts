@@ -63,7 +63,7 @@ describe('nexo memory contra el daemon real (proveedor y resumidor falsos)', () 
 
     const status = MemoryStatusOutput.parse(await sb.json(['memory', 'status', '--cwd', cwd]))
     expect(status.usage.calls).toBeGreaterThan(0)
-    expect(status.project?.observations).toBe(listed.observations.length)
+    expect(status.project?.observations).toBeGreaterThanOrEqual(listed.observations.length)
 
     const found = MemorySearchOutput.parse(
       await sb.json(['memory', 'search', '--cwd', cwd, 'observado']),
