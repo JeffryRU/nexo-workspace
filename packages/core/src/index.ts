@@ -3,6 +3,11 @@ export * from './dispatcher.ts'
 export * from './errors.ts'
 export * from './layout.ts'
 export * from './layout-service.ts'
+export * from './memory-inject.ts'
+export * from './memory-model.ts'
+export * from './memory-policy.ts'
+export * from './memory-select.ts'
+export * from './memory-tokens.ts'
 export * from './output-batcher.ts'
 export type {
   AgentOpenOptions,
@@ -12,6 +17,20 @@ export type {
   AgentResponse,
 } from './ports/agent.ts'
 export { AgentProviderError } from './ports/agent.ts'
+export type {
+  AbortSignalLike,
+  MemoryStoreErrorCode,
+  MemoryStorePort,
+  ObserveContent,
+  ObserveRequest,
+  ProjectMemorySummary,
+  ReflectRequest,
+  SummarizeRequest,
+  SummarizeResponse,
+  SummarizerErrorCode,
+  SummarizerPort,
+} from './ports/memory.ts'
+export { MemoryStoreError, SummarizerError } from './ports/memory.ts'
 export type {
   BusEvent,
   ClockPort,
