@@ -89,6 +89,11 @@ notificación del sistema si la ventana no tiene el foco, y las mediciones de re
 
 ## F4 — Historial, límites y visor
 
+- **F4.1 fs-sandbox y archivos en el daemon** (hecho): `FileSystemPort` en `core` y adaptador `packages/adapters/fs-sandbox` (solo lectura dentro de
+  las carpetas de los espacios abiertos, `realpath`, rutas sensibles, UNC, `\\?\`, dispositivos de Windows, comprobación del descriptor), tipo por
+  firma y extensión con topes por tipo, métodos `fs.stat` y `fs.read` (trozos UTF-8 o base64), código de error `FORBIDDEN`, panel `viewer` en
+  contratos y core (`pane.split { kind: 'viewer', path }`, `viewer.open`), `fsApi` en `@nexo/client`, `nexo fs stat|cat` y marcador mínimo en la
+  web (el visor real es la F4.2). Ver «Archivos y visor (F4.1)».
 - Historial de los proveedores agrupado por proyecto; límites de uso (Claude, Codex); visor lateral
   (Markdown, imágenes, PDF) con `fs-sandbox`.
 

@@ -82,7 +82,7 @@ apps/*               raíces de composición: daemon (une core + adaptadores), w
 | `Workspace`    | Grupo de pestañas, normalmente una carpeta de proyecto (`cwd`).                                                                                                                                                                                                     |
 | `Tab`          | Una pestaña: su contenido es un **árbol de distribución** de paneles.                                                                                                                                                                                               |
 | `Layout`       | Árbol inmutable: hoja = panel; nodo = división `row`/`column` con proporciones que suman 1.                                                                                                                                                                         |
-| `Pane`         | Panel. `kind`: `terminal` o `agent` (más adelante `viewer`).                                                                                                                                                                                                        |
+| `Pane`         | Panel. `kind`: `terminal`, `agent` o `viewer` (con su `viewerPath`; ver «Archivos y visor (F4.1)»).                                                                                                                                                                 |
 | `Terminal`     | Proceso en un PTY con un búfer circular de salida (para reconectar y para `terminal.read`).                                                                                                                                                                         |
 | `AgentSession` | Conversación con un proveedor; su contenido es una lista de `Block` (documento).                                                                                                                                                                                    |
 | `Block`        | Pieza del documento, con `id`, `index` y `turn` estables: mensaje del usuario, texto del agente (Markdown), razonamiento, acción plegable (leer, editar con diff, ejecutar con salida, buscar, otra), permiso, pregunta, plan, error, uso del turno. Ver «Agentes». |
@@ -1288,6 +1288,112 @@ sesiones de proveedores distintos en la misma carpeta; la segunda recibe lo obse
 las instrucciones con que se abrió el hilo), se renueva a mano y los ajustes sobreviven a un reinicio. Capturas:
 `docs/capturas/f3-5-*.png` (`NEXO_CAPTURAS=1 pnpm e2e -g capturas`).
 
+## Archivos y visor (F4.1)
+
+`fs.stat` y `fs.read` dan acceso **de solo lectura** a archivos del disco, pensado para el visor lateral (F4.2: Markdown,
+imágenes, PDF y texto) y, si algún proveedor obliga a leer sus archivos de sesión, para el historial (F4.3, ADR 0008). Todo pasa
+por `FileSystemPort` (core) y su adaptador `packages/adapters/fs-sandbox` (`FsSandbox`); nada más en el daemon lee archivos a
+petición de un cliente.
+
+### Puerto y reglas puras (`core`)
+
+- `FileSystemPort { stat(path), read({ path, offset?, length?, encoding?, expectMtimeMs? }) }` con errores tipados
+  `FileSystemError` (`INVALID_PATH`, `INVALID_RANGE`, `FORBIDDEN`, `NOT_FOUND`, `NOT_A_FILE`, `TOO_LARGE`, `CONFLICT`, `IO`).
+  Sustituye al antiguo `FileSystemPort` genérico (lectura, escritura y borrado), que nadie usaba.
+- `FileService` traduce esos errores al protocolo: `INVALID_PATH`, `INVALID_RANGE` y `NOT_A_FILE` → `INVALID_PARAMS`; `FORBIDDEN` →
+  `FORBIDDEN` (código nuevo del protocolo); `NOT_FOUND`; `TOO_LARGE` → `PAYLOAD_TOO_LARGE`; `CONFLICT`; `IO` y lo inesperado →
+  `INTERNAL` sin mensaje (puede traer rutas). Los mensajes de error nunca incluyen la ruta pedida.
+- `file-rules.ts` (puro, sin `node:*`) reúne las reglas que comparten el adaptador real y el falso del testkit: sintaxis de rutas
+  (`checkPathSyntax`), rutas sensibles (`isSensitivePath`), contención (`isWithin`), tipo (`detectFileType`) y límites UTF-8.
+  `file-read.ts` (`statFile`, `readFileChunk`) implementa los topes, las codificaciones y los trozos sobre un `FileSource` que
+  solo sabe leer bytes: así el adaptador solo aporta la E/S y la resolución segura de la ruta.
+
+### Qué se acepta y qué se bloquea
+
+1. **Sintaxis** (antes de tocar el disco). Solo rutas absolutas (la CLI y la web resuelven lo relativo antes de pedir), de hasta
+   4096 caracteres, sin bytes nulos ni caracteres de control, sin segmento `..` (aunque el resultado quedara dentro).
+   En Windows además: se exige letra de unidad; se rechazan UNC (`\\servidor\recurso`), `\\?\`, `\\.\`, `\??\`, rutas con unidad
+   relativa (`C:a`), flujos alternos (`a.txt:flujo`, `::$DATA`), los caracteres `< > " | ? *`, segmentos que terminan en punto o
+   espacio y nombres de dispositivo (`CON`, `PRN`, `AUX`, `NUL`, `COM0-9`, `LPT0-9`, `CONIN$`, `CONOUT$`, `CLOCK$` y los
+   superíndices `COM¹²³`/`LPT¹²³`), con o sin extensión. Las reglas de cada plataforma se aplican según la del daemon; con
+   reglas POSIX una ruta de Windows ni siquiera es absoluta.
+2. **Raíces.** Las carpetas (`cwd`) de los espacios de trabajo abiertos, leídas en cada llamada: cerrar el espacio revoca el
+   acceso y un espacio sin carpeta no abre nada. Cada raíz se resuelve con `realpath`; se ignoran las relativas, las
+   inexistentes, la raíz de una unidad o del sistema y las que son una carpeta sensible.
+3. **`realpath`.** La ruta pedida se resuelve (en Windows con `realpath.native`, que expande nombres cortos 8.3 y uniones) y el
+   destino real debe seguir dentro de una raíz (comparando segmentos, nunca prefijos de texto; sin distinguir mayúsculas en
+   Windows y macOS). Un enlace simbólico que sale de la raíz, o que apunta a algo sensible, es `FORBIDDEN`; un bucle de enlaces,
+   `INVALID_PATH`. Lo que no existe y queda fuera de las raíces también es `FORBIDDEN`, para no revelar qué hay fuera.
+4. **Rutas sensibles**, en cualquier posición de la ruta lexical y de la real, sin distinguir mayúsculas ni puntos/espacios finales:
+   carpetas `.ssh`, `.gnupg`, `.aws`, `.azure`, `.kube`, `.docker`, `.codex`, `.claude`, `.gemini`, `.git` (su `config` puede traer
+   credenciales en la URL de un remoto), `.password-store`, `.terraform.d`; secuencias `.config/gcloud`, `.config/gh`,
+   `.local/share/keyrings`, `AppData/Roaming/gcloud`, `AppData/Roaming/Microsoft/{Credentials,Protect}`,
+   `AppData/Local/Microsoft/Credentials`; archivos `.netrc`, `_netrc`, `.npmrc`, `.pypirc`, `.git-credentials`, `.pgpass`,
+   `.vault-token`, `.credentials.json`, `id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519` (no sus `.pub`), `*.pfx`, `*.p12`, `*.kdbx`,
+   `*.ppk` y `.env` / `.env.*` (salvo `.env.example`, `.sample`, `.template`, `.dist`, `.defaults`). La política es `isSensitivePath`
+   y el adaptador admite otra (`FsSandboxOptions.isSensitive`) para usos con otro modelo de confianza; cualquier uso así se
+   documenta en un ADR. Nexo sigue sin leer credenciales de los proveedores.
+5. **Abrir y comprobar el descriptor (TOCTOU).** `lstat` de la ruta real (debe ser archivo regular o carpeta: un FIFO o un
+   dispositivo es `NOT_A_FILE` sin abrirlo), `open` con `O_RDONLY | O_NOFOLLOW | O_NONBLOCK`, `fstat` del descriptor (debe ser un
+   archivo regular con el mismo `dev`/`ino`), nueva resolución de la ruta (debe dar lo mismo) y, tras leer, `fstat` otra vez: si
+   el tamaño o la fecha cambiaron, `CONFLICT`. Limitación conocida: un enlace duro dentro de la raíz a un archivo de fuera no
+   se puede distinguir de un archivo normal.
+
+### Tipo y topes
+
+El tipo sale de los primeros 8 KiB y de la extensión; **la firma manda**: PNG, JPEG, GIF y WebP por sus cabeceras, PDF por `%PDF-`
+en el offset 0 (más adentro tomaría por PDF un texto que lo cite). Si no hay firma, el contenido decide texto o binario (UTF-8
+estricto, sin NUL ni controles raros; UTF-16 es binario) y la extensión afina: `.md`, `.markdown`, `.mdx`... → `markdown`; `.svg` →
+`svg` solo si la raíz del documento es `<svg>`, si no `text`. Una extensión nunca convierte un binario en texto ni al revés.
+
+| Tipo                         | `mime`                        | Tope de tamaño (`LIMITS`)   |
+| ---------------------------- | ----------------------------- | --------------------------- |
+| `markdown`, `text`           | `text/markdown`, `text/plain` | 8 MiB (`maxFsTextBytes`)    |
+| `svg`                        | `image/svg+xml`               | 2 MiB (`maxFsSvgBytes`)     |
+| `png`, `jpeg`, `gif`, `webp` | `image/*`                     | 32 MiB (`maxFsImageBytes`)  |
+| `pdf`                        | `application/pdf`             | 64 MiB (`maxFsPdfBytes`)    |
+| `binary`                     | `application/octet-stream`    | 16 MiB (`maxFsBinaryBytes`) |
+
+Un archivo por encima del tope de su tipo se informa en `fs.stat` (`tooLarge: true`, `maxBytes`) y `fs.read` responde
+`PAYLOAD_TOO_LARGE`, sea cual sea el rango pedido. El SVG se entrega como **datos**: quien lo muestre (F4.2) debe usarlo como
+imagen, nunca insertarlo en el DOM (puede traer scripts).
+
+### Métodos
+
+- `fs.stat { path }` → `{ path (real), kind: 'file' | 'directory', size, mtimeMs, type?, mime?, maxBytes?, tooLarge? }`; el tipo
+  solo en archivos.
+- `fs.read { path, offset?, length?, encoding?, expectMtimeMs? }` → `{ path, size, mtimeMs, type, mime, offset, length, encoding,
+  data, eof }`. `offset` y `length` son bytes del archivo; `length` es lo que cubre `data` (el siguiente `offset` es
+  `offset + length`).
+  - **Codificación.** `utf8` por omisión en `markdown`, `text` y `svg`; `base64` en el resto (`utf8` sobre un binario es
+    `INVALID_PARAMS`). El texto nunca parte un carácter: el trozo se recorta al último límite de carácter (salvo en el final del
+    archivo, donde los bytes inválidos salen como U+FFFD) y un `offset` en medio de un carácter es `INVALID_PARAMS`.
+  - **Trozos.** Máximo 128 KiB en UTF-8 (`maxFsTextChunkBytes`; con el peor escapado JSON, ×6, sigue por debajo de 1 MiB) y 512 KiB
+    en base64 (`maxFsChunkBytes`; ×4/3 ≈ 683 KiB), siempre dentro del mensaje máximo del protocolo. Se recorta sin error a lo
+    permitido; en UTF-8 el mínimo efectivo es de 4 bytes.
+  - **Consistencia.** `expectMtimeMs` (el `mtimeMs` de un trozo anterior) hace que un archivo modificado entre trozos sea `CONFLICT`;
+    uno que se acorta mientras se lee, también.
+- `viewer.open { paneId, path }` apunta un panel `viewer` a otro archivo (no lo lee ni lo comprueba: lo hace `fs.read`).
+
+`@nexo/client` ofrece `fsApi(client)` con `stat`, `read` y `readAll(path, { maxBytes, signal })`, que junta los trozos en base64 fijando
+el `mtimeMs` del primero. La CLI, `nexo fs stat <ruta>` y `nexo fs cat <ruta> [--max-bytes N] [--base64]` (el texto sale sin
+secuencias de escape; un binario exige `--base64`).
+
+### Panel `viewer` (F4.1)
+
+`Pane.kind` admite `viewer` (junto a `terminal` y `agent`) con `viewerPath` opcional: la ruta del archivo que muestra. Se crea con
+`pane.split { kind: 'viewer', path? }` (`path` con otro `kind` es `INVALID_PARAMS`) y se reapunta con `viewer.open`; el título es el
+nombre del archivo. La ruta es un dato del panel: lo único que la valida es `fs.read` cuando alguien la lee. La web pinta por ahora
+un marcador con la ruta (`ViewerPlaceholder`); el visor real es la F4.2.
+
+### Daemon y pruebas
+
+`startDaemon` compone `FsSandbox` con `roots = () => carpetas de los espacios abiertos` y `FileService`; `DaemonOptions.files` permite
+inyectar otro puerto (pruebas). El adaptador se prueba con la suite de conformidad `runFileSystemConformance` (el falso
+`FakeFileSystem` y `FsSandbox`) y con pruebas adversariales: enlaces simbólicos que salen de la raíz o en bucle, cambiar un archivo por
+un enlace mientras se lee, FIFO y dispositivos (Linux), archivos dispersos de 200 MiB, rutas hostiles de Windows y, solo en Windows,
+dispositivos, flujos y nombres cortos 8.3.
+
 ## Protocolo (v1)
 
 Todo mensaje que cruza un límite de proceso se valida con zod **al recibirlo** (el daemon valida lo que
@@ -1307,7 +1413,7 @@ Transporte: WebSocket con mensajes JSON de texto. Tamaño máximo de mensaje: 1 
 
 - `seq` crece de uno en uno por conexión; si un cliente detecta un hueco pide un `snapshot`.
 - Códigos de error estables (`INVALID_PARAMS`, `NOT_FOUND`, `UNAUTHORIZED`, `CONFLICT`, `INTERNAL`,
-  `PAYLOAD_TOO_LARGE`, `RATE_LIMITED`, `PROVIDER_UNAVAILABLE`).
+  `PAYLOAD_TOO_LARGE`, `RATE_LIMITED`, `PROVIDER_UNAVAILABLE`; `FORBIDDEN` desde la F4.1: ruta fuera de las carpetas permitidas o protegida).
 - Cada método tiene su esquema de `params` y de `result` en un registro (`methods.ts`), y cada evento el
   suyo (`events.ts`). Agregar un método = agregarlo al registro; el servidor y el cliente se generan del
   registro.
@@ -1316,7 +1422,7 @@ Transporte: WebSocket con mensajes JSON de texto. Tamaño máximo de mensaje: 1 
 
 Métodos de la fase 1 (terminal; los `agent.*` de la F2 se describen en «Agentes»): `auth` (solo como primer mensaje; el daemon lo resuelve antes de despachar), `daemon.info`, `daemon.shutdown` (apagado limpio; solo clientes autenticados), `snapshot`, `events.subscribe`,
 `workspace.{list,create,rename,close}`, `tab.{create,close,focus,move,rename}`,
-`pane.{split,close,focus,resize,swap}` (`pane.resize` admite dos formas: `{ paneId, delta }`, la frontera de un panel con su hermano directo, y `{ tabId, path, index, delta }`, la frontera entre los hijos `index` e `index+1` del split al que lleva `path`; camino ≤ 64 niveles, delta en [-1, 1], mínimo 5 % por panel; camino inexistente o que no apunta a un split → `NOT_FOUND`), `terminal.{spawn,write,resize,read,kill}`.
+`pane.{split,close,focus,resize,swap}` y `viewer.open` (`pane.split` admite `kind: 'viewer'` y `path`; los `fs.{stat,read}` están en «Archivos y visor (F4.1)»; `pane.resize` admite dos formas: `{ paneId, delta }`, la frontera de un panel con su hermano directo, y `{ tabId, path, index, delta }`, la frontera entre los hijos `index` e `index+1` del split al que lleva `path`; camino ≤ 64 niveles, delta en [-1, 1], mínimo 5 % por panel; camino inexistente o que no apunta a un split → `NOT_FOUND`), `terminal.{spawn,write,resize,read,kill}`.
 Eventos: `layout.changed`, `workspace.changed`, `terminal.output`, `terminal.exit`, `pane.title`, `pane.attention`,
 `client.resync` (contrapresión, ver "Servidor del daemon"); de la F2: `agent.block`, `agent.delta`, `agent.status`, `agent.session`.
 
