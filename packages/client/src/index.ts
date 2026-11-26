@@ -28,6 +28,7 @@ export {
   type HistoryTranscriptAll,
   historyApi,
 } from './history-api.ts'
+export { type LimitsApi, limitsApi } from './limits-api.ts'
 export { type MemoryApi, memoryApi } from './memory-api.ts'
 export {
   SUBPROTOCOL,

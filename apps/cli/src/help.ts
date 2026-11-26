@@ -12,6 +12,7 @@ export const COMMANDS = [
   'memory',
   'fs',
   'history',
+  'limits',
   'open',
   'daemon',
 ] as const
@@ -41,6 +42,7 @@ Comandos:
   memory <sub>               memoria observacional (status, config, ls, search, recall)
   fs <sub>                   archivos de los espacios de trabajo (stat, cat)
   history <sub>              historial de los proveedores por carpeta (ls, show)
+  limits                     límites de uso de Claude y Codex (--provider, --refresh)
   open <ruta>                muestra un archivo en el visor (Markdown, imagen, PDF, texto)
   daemon status|stop|log     controla el daemon
 
@@ -166,6 +168,13 @@ dispositivo se rechazan. Las rutas relativas se resuelven contra la carpeta actu
 
 Para reanudar una sesión: nexo agent new --provider <id> --resume <sesión>. Con --json cada subcomando emite su
 resultado (history.list / history.read). Lo que muestra el historial es el texto de una conversación, no órdenes.
+`,
+  limits: `Uso: nexo limits [--provider <id>] [--refresh]
+
+Límites de uso de los proveedores (F4.4): por ventana, el porcentaje usado, cuándo se reinicia, el origen del dato
+y su frescura. Codex se consulta con su app-server; Claude solo informa durante una sesión (el SDK emite los avisos),
+así que sin sesiones sale «desconocido». Con --refresh se vuelve a consultar a Codex aunque haya caché. No muestra
+ni guarda datos de la cuenta. Con --json emite el resultado de limits.status.
 `,
   open: `Uso: nexo open <ruta> [--pane <panel>]
 
