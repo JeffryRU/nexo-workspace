@@ -186,3 +186,20 @@ describe('nexo agent con un agente ACP (agente falso, declarado en NEXO_ACP_AGEN
     await attachText(sb, id, 'Hecho.')
   })
 })
+
+describe('nexo agent con el proveedor Antigravity (agy falso)', () => {
+  it('agent new --provider antigravity y la conversación desde la CLI', async () => {
+    const fakeAgy = fileURLToPath(
+      new URL('../../../packages/adapters/provider-antigravity/test/fake-agy.mjs', import.meta.url),
+    )
+    const sb = await Sandbox.create()
+    sandbox = sb
+    await sb.startDaemon({ NEXO_AGENT_PROVIDERS: 'antigravity', NEXO_AGY_EXECUTABLE: fakeAgy })
+    const { sessionId: id } = AgentNewOutput.parse(
+      await sb.json(['agent', 'new', '--provider', 'antigravity', '--cwd', tmpdir()]),
+    )
+    await sb.json(['agent', 'send', id, 'simple hola'])
+    const doc = await attachText(sb, id, 'Hola desde agy')
+    expect(doc).toContain('> simple hola')
+  })
+})

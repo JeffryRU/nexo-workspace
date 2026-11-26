@@ -5,6 +5,7 @@ import {
   createAcpProvider,
   effectiveAcpAgents,
 } from '@nexo/adapter-provider-acp'
+import { createAntigravityProvider } from '@nexo/adapter-provider-antigravity'
 import { createClaudeProvider } from '@nexo/adapter-provider-claude'
 import { createCodexProvider } from '@nexo/adapter-provider-codex'
 import { createOllamaProvider } from '@nexo/adapter-provider-ollama'
@@ -89,7 +90,7 @@ export type DaemonOptions = {
   ptyMode?: 'host' | 'direct'
   /**
    * Proveedores de agente. Por omisión se registra solo `claude`. Una lista de nombres (`NEXO_AGENT_PROVIDERS`)
-   * elige entre los incluidos (`claude`, `codex`, `ollama`, `fake`) y los agentes ACP (`acpAgents`); también se pueden inyectar puertos ya construidos.
+   * elige entre los incluidos (`claude`, `codex`, `antigravity`, `ollama`, `fake`) y los agentes ACP (`acpAgents`); también se pueden inyectar puertos ya construidos.
    * El primero es el que se precalienta. Una lista vacía deja el daemon sin agentes.
    */
   agentProviders?: readonly (AgentProviderName | AgentProviderPort)[]
@@ -97,6 +98,8 @@ export type DaemonOptions = {
   claudeExecutable?: string
   /** Ejecutable de Codex (por omisión, `codex` en el PATH). */
   codexExecutable?: string
+  /** Ejecutable de Antigravity (por omisión, `agy` en el PATH). */
+  agyExecutable?: string
   /**
    * Agentes ACP que se pueden registrar por nombre (cada uno es un proveedor): los declarados en `NEXO_ACP_AGENTS`.
    * Por omisión solo existe `gemini`.
@@ -242,6 +245,13 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
         env: childBaseEnv(),
         log: (entry) => logger[entry.level](`codex: ${entry.message}`),
         ...(options.codexExecutable === undefined ? {} : { executable: options.codexExecutable }),
+      })
+    }
+    if (name === 'antigravity') {
+      return createAntigravityProvider({
+        env: childBaseEnv(),
+        log: (entry) => logger[entry.level](`antigravity: ${entry.message}`),
+        ...(options.agyExecutable === undefined ? {} : { executable: options.agyExecutable }),
       })
     }
     if (name === 'ollama') {

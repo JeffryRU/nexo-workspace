@@ -2,7 +2,13 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import type { CDPSession, Page } from '@playwright/test'
-import { bufferText, expect, test } from './stack.ts'
+import {
+  multiProviderEnv,
+  STREAMING_PROVIDERS,
+  startAgentTab,
+  streamingOllama,
+} from './providers.ts'
+import { bufferText, ECHO_SCRIPT, expect, Stack, test } from './stack.ts'
 
 // Presupuesto del contrato (docs/ARCHITECTURE.md, "Rendimiento"): cambiar de pestaña con 10 terminales
 // activas tarda < 16 ms. En CI se acepta más margen por la variabilidad de los runners compartidos.
@@ -84,6 +90,67 @@ test('cambiar de pestaña con 10 terminales activas: p95 < 16 ms', async ({ stac
 
   expect(work.n).toBeGreaterThanOrEqual(SWITCHES)
   expect(work.p95).toBeLessThan(TAB_SWITCH_P95_MS)
+})
+
+// F3.4: cinco proveedores de agente distintos (el de prueba, Ollama, Codex, Gemini y Antigravity, todos falsos) en
+// pestañas distintas, emitiendo a la vez durante toda la medida. El umbral es el mismo que el de las terminales.
+const AGENT_CHUNKS = Number(process.env.NEXO_PERF_AGENT_CHUNKS ?? '1500')
+const AGENT_EMIT_MS = Number(process.env.NEXO_PERF_AGENT_EMIT_MS ?? '15')
+
+test('cambiar de pestaña con 5 agentes de proveedores distintos emitiendo a la vez: p95 < 16 ms', async ({
+  app,
+}) => {
+  const ollama = await streamingOllama(AGENT_CHUNKS, AGENT_EMIT_MS)
+  const stack = await Stack.start(
+    multiProviderEnv(ollama.url, { chunks: AGENT_CHUNKS, everyMs: AGENT_EMIT_MS }),
+  )
+  try {
+    await stack.newTab('base', ECHO_SCRIPT)
+    await app.goto(stack.url())
+    await expect(app.getByRole('tab', { name: 'base' })).toBeVisible()
+    for (const p of STREAMING_PROVIDERS) await startAgentTab(app, p.id, p.prompt(AGENT_CHUNKS))
+    const tabs = app.getByRole('tab')
+    const count = 1 + STREAMING_PROVIDERS.length
+    await expect(tabs).toHaveCount(count)
+    // Todos están emitiendo: cada panel ya tiene texto de su proveedor.
+    for (let i = 1; i < count; i++) {
+      await tabs.nth(i).click()
+      await expect(app.locator('.agent-panel:visible .blk-text').last()).toContainText('palabra')
+    }
+    await app.evaluate(() => {
+      globalThis.__NEXO_PERF__ = undefined
+    })
+
+    for (let i = 0; i < SWITCHES; i++) {
+      await tabs.nth((i + 1) % count).click()
+      await app.waitForFunction(
+        (n) => (globalThis.__NEXO_PERF__?.tabSwitch.length ?? 0) >= n,
+        i + 1,
+      )
+      await sleep(40)
+    }
+    // Seguían emitiendo mientras se medía: el panel a la vista no había terminado.
+    await expect(app.locator('.agent-panel:visible .usage')).toHaveCount(0)
+
+    const samples = await app.evaluate(() => globalThis.__NEXO_PERF__)
+    const work = summarize(samples?.tabSwitch ?? [])
+    const raw = summarize(samples?.tabSwitchRaw ?? [])
+    const result = {
+      providers: STREAMING_PROVIDERS.map((p) => p.id),
+      switches: SWITCHES,
+      emitMs: AGENT_EMIT_MS,
+      limitP95Ms: TAB_SWITCH_P95_MS,
+      work,
+      raw,
+    }
+    save('tab-switch-agents', result)
+    console.log(`tab-switch-agents (ms): ${JSON.stringify(result)}`)
+    expect(work.n).toBeGreaterThanOrEqual(SWITCHES)
+    expect(work.p95).toBeLessThan(TAB_SWITCH_P95_MS)
+  } finally {
+    await stack.dispose()
+    await ollama.close()
+  }
 })
 
 async function heapMb(cdp: CDPSession): Promise<number> {

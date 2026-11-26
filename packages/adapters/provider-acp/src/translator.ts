@@ -9,6 +9,7 @@ import {
 } from '@nexo/contracts'
 import type { z } from 'zod'
 import { unifiedDiff } from './diff.ts'
+import { relativeTo } from './paths.ts'
 import {
   ContentChunk,
   InfoUpdate,
@@ -136,8 +137,12 @@ function chunkText(content: ContentChunk['content']): string {
 }
 
 /** Bloque `action` de una llamada a herramienta ACP con los campos acumulados hasta ahora. */
-export function actionDraft(fields: ToolCallFields): ActionDraft {
-  const { diffs, texts, paths } = readToolContent(fields)
+export function actionDraft(fields: ToolCallFields, cwd?: string): ActionDraft {
+  const read = readToolContent(fields)
+  const { texts } = read
+  // Rutas relativas a la carpeta de la sesión cuando están dentro de ella (ver paths.ts).
+  const diffs = read.diffs.map((d) => ({ ...d, path: relativeTo(cwd, d.path) }))
+  const paths = read.paths.map((p) => relativeTo(cwd, p))
   const kind: ActionDraft['kind'] = diffs.length > 0 ? 'edit' : (KIND[fields.kind ?? ''] ?? 'other')
   let status = statusOf(fields.status)
   const tool = line(fields.name ?? fields.kind ?? 'tool', 128, 'tool')
@@ -184,6 +189,7 @@ export function actionDraft(fields: ToolCallFields): ActionDraft {
 export class AcpTranslator {
   readonly #nextRef: () => string
   readonly #mapMode: (id: string) => PermissionMode | undefined
+  readonly #cwd: string | undefined
   #text: TextState | undefined
   #calls = new Map<string, CallState>()
   #plans = new Map<string, { ref: string; serialized: string }>()
@@ -195,7 +201,10 @@ export class AcpTranslator {
     nextRef: () => string
     /** Modo de sesión del agente → modo normalizado (para `current_mode_update`). */
     mapMode?: (id: string) => PermissionMode | undefined
+    /** Carpeta de la sesión: las rutas de las acciones dentro de ella se muestran relativas. */
+    cwd?: string | undefined
   }) {
+    this.#cwd = options.cwd
     this.#nextRef = options.nextRef
     this.#mapMode = options.mapMode ?? (() => undefined)
   }
@@ -377,7 +386,7 @@ export class AcpTranslator {
       }
       // Un `tool_call_update` sin su `tool_call` se trata como el alta de la llamada.
       events.push(...this.#closeText())
-      const draft = actionDraft(fields)
+      const draft = actionDraft(fields, this.#cwd)
       const call: CallState = {
         ref: this.#nextRef(),
         fields,
@@ -407,7 +416,7 @@ export class AcpTranslator {
       ...(fields.rawOutput === undefined ? {} : { rawOutput: fields.rawOutput }),
     }
     known.fields = merged
-    const draft = actionDraft(merged)
+    const draft = actionDraft(merged, this.#cwd)
     const serialized = JSON.stringify(draft)
     if (serialized !== known.serialized) {
       known.draft = draft

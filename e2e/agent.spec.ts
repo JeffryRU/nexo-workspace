@@ -4,6 +4,13 @@ import type { AddressInfo } from 'node:net'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Page } from '@playwright/test'
+import {
+  FAKE_AGY,
+  multiProviderEnv,
+  STREAMING_PROVIDERS,
+  startAgentTab,
+  streamingOllama,
+} from './providers.ts'
 import { ECHO_SCRIPT, expect, Stack, test } from './stack.ts'
 
 declare global {
@@ -523,7 +530,7 @@ test.describe('proveedor ACP (agente ACP falso)', () => {
   test('se elige Gemini, el plan, el diff y el permiso salen como bloques y el permiso se responde en línea', async ({
     app,
   }) => {
-    const stack = await Stack.start(acpEnv())
+    const stack = await Stack.start(acpEnv({ FAKE_ACP_ROOT: 'cwd' }))
     try {
       await openAgentTab(stack, app)
       await app.getByLabel('Proveedor').selectOption('gemini')
@@ -541,6 +548,8 @@ test.describe('proveedor ACP (agente ACP falso)', () => {
       await expect(app.locator('.chip.fixed').first()).toHaveText('Gemini')
       await app.locator('.blk-action').nth(1).locator('.fold-head').click()
       await expect(app.locator('.blk-action .diff')).toContainText('const a = 10')
+      // Las rutas dentro de la carpeta de la sesión se muestran relativas (a/src/a.ts, no la absoluta).
+      await expect(app.locator('.blk-action .diff')).toContainText('+++ b/src/a.ts')
 
       await say(app, 'permiso')
       await expect(app.locator('section.perm.pending')).toContainText('Ejecutar: rm -rf build')
@@ -708,7 +717,7 @@ test.describe('capturas', () => {
 
   test('capturas del proveedor ACP (F3.3)', async ({ app }) => {
     await app.setViewportSize({ width: 1280, height: 800 })
-    const stack = await Stack.start(acpEnv())
+    const stack = await Stack.start(acpEnv({ FAKE_ACP_ROOT: 'cwd' }))
     try {
       await openAgentTab(stack, app)
       await app.getByLabel('Proveedor').selectOption('gemini')
@@ -758,5 +767,155 @@ test.describe('capturas', () => {
     await expect(agentTabWrap(app)).toHaveAttribute('data-attention', 'needs-input')
     await expect(app).toHaveTitle('(1) Nexo Workspace')
     await shot(app, 'atencion', 'f2-6')
+  })
+})
+
+const AGY_ENV = (extra: Record<string, string> = {}) => ({
+  NEXO_AGENT_PROVIDERS: 'fake,antigravity',
+  NEXO_AGY_EXECUTABLE: FAKE_AGY,
+  ...extra,
+})
+
+test.describe('proveedor Antigravity (agy falso)', () => {
+  test('se elige Antigravity, el texto llega por deltas y las acciones salen como bloques con diff relativo', async ({
+    app,
+  }) => {
+    const stack = await Stack.start(AGY_ENV())
+    try {
+      await openAgentTab(stack, app)
+      await app.getByLabel('Proveedor').selectOption('antigravity')
+      await expect(app.getByLabel('Modelo').locator('option')).toHaveText([
+        'Modelo predeterminado',
+        'Gemini Fake Pro',
+        'Gemini Fake Flash',
+      ])
+      await expect(app.getByLabel('Esfuerzo').locator('option')).toHaveText([
+        'Esfuerzo predeterminado',
+        'low',
+        'medium',
+        'high',
+      ])
+      await say(app, 'tool')
+      await expect(app.locator('.blk-action')).toHaveCount(3)
+      await expect(app.locator('.blk-text').last()).toContainText('Hecho: creé src/a.ts.')
+      await expect(app.locator('.chip.fixed').first()).toHaveText('Antigravity')
+      await app.locator('.blk-action').nth(1).locator('.fold-head').click()
+      await expect(app.locator('.blk-action .diff')).toContainText('export const a = 1')
+      // La ruta del diff es relativa a la carpeta de la sesión.
+      await expect(app.locator('.blk-action .diff')).toContainText('+++ b/src/a.ts')
+      await say(app, 'simple')
+      await expect(app.locator('.blk-text').last()).toContainText('Hola desde agy')
+    } finally {
+      await stack.dispose()
+    }
+  })
+
+  test('sin sesión iniciada sale deshabilitado con el motivo y sin repetir el nombre', async ({
+    app,
+  }) => {
+    const stack = await Stack.start(AGY_ENV({ FAKE_AGY_LOGGED_OUT: '1' }))
+    try {
+      await openAgentTab(stack, app)
+      const option = app.getByLabel('Proveedor').locator('option[value="antigravity"]')
+      await expect(option).toBeDisabled()
+      await expect(app.getByRole('note')).toContainText('Antigravity no tiene la sesión iniciada')
+      await expect(app.getByRole('note')).not.toContainText('Antigravity: Antigravity')
+    } finally {
+      await stack.dispose()
+    }
+  })
+})
+
+test.describe('varios proveedores a la vez (F3.4)', () => {
+  test('cinco paneles de agente, uno por proveedor, emiten a la vez y cada uno conserva lo suyo', async ({
+    app,
+  }) => {
+    const ollama = await streamingOllama(40, 20)
+    const stack = await Stack.start(multiProviderEnv(ollama.url, { chunks: 40, everyMs: 20 }))
+    try {
+      await stack.newTab('base', ECHO_SCRIPT)
+      await app.goto(stack.url())
+      await expect(app.getByRole('tab', { name: 'base' })).toBeVisible()
+      for (const p of STREAMING_PROVIDERS) await startAgentTab(app, p.id, p.prompt(40))
+      const tabs = app.getByRole('tab')
+      await expect(tabs).toHaveCount(1 + STREAMING_PROVIDERS.length)
+      // Cada pestaña terminó con lo de su proveedor, aunque se empezaron todas casi a la vez.
+      for (const [i, p] of STREAMING_PROVIDERS.entries()) {
+        await tabs.nth(i + 1).click()
+        const panel = app.locator('.agent-panel:visible')
+        await expect(panel.locator('.chip.fixed').first()).toHaveText(p.name)
+        await expect(panel.locator('.usage')).toBeVisible({ timeout: 30_000 })
+        await expect(panel.locator('.blk-text').last()).toContainText('palabra palabra')
+      }
+    } finally {
+      await stack.dispose()
+      await ollama.close()
+    }
+  })
+})
+
+test.describe('capturas F3.4', () => {
+  test.skip(process.env.NEXO_CAPTURAS === undefined, 'solo con NEXO_CAPTURAS=1')
+  const shot = async (app: Page, name: string) => {
+    // La carpeta real es la del entorno donde corre la prueba: se sustituye por una neutra en la captura.
+    await app.evaluate(() => {
+      for (const el of document.querySelectorAll('.chip.fixed.ellipsis'))
+        el.textContent = '~/proyecto'
+      for (const el of document.querySelectorAll<HTMLInputElement>('.chip-cwd')) {
+        el.placeholder = '~/proyecto'
+      }
+    })
+    mkdirSync(OUT, { recursive: true })
+    await app.screenshot({ path: join(OUT, `f3-4-${name}.png`) })
+  }
+
+  test('capturas de Antigravity', async ({ app }) => {
+    await app.setViewportSize({ width: 1280, height: 800 })
+    const stack = await Stack.start(AGY_ENV())
+    try {
+      await openAgentTab(stack, app)
+      await app.getByLabel('Proveedor').selectOption('antigravity')
+      await app.getByLabel('Esfuerzo').selectOption('high')
+      await shot(app, 'agy-selector')
+      await say(app, 'tool')
+      await expect(app.locator('.blk-action')).toHaveCount(3)
+      await expect(app.locator('.blk-text').last()).toContainText('Hecho')
+      await app.locator('.blk-action').nth(1).locator('.fold-head').click()
+      await expect(app.locator('.blk-action .diff')).toBeVisible()
+      await shot(app, 'agy-acciones')
+    } finally {
+      await stack.dispose()
+    }
+    const out = await Stack.start(AGY_ENV({ FAKE_AGY_LOGGED_OUT: '1' }))
+    try {
+      await app.goto('about:blank')
+      await openAgentTab(out, app)
+      await expect(app.getByRole('note')).toBeVisible()
+      await shot(app, 'agy-sin-sesion')
+    } finally {
+      await out.dispose()
+    }
+  })
+
+  test('capturas de varios proveedores a la vez', async ({ app }) => {
+    await app.setViewportSize({ width: 1280, height: 800 })
+    const ollama = await streamingOllama(400, 20)
+    const stack = await Stack.start(multiProviderEnv(ollama.url, { chunks: 400, everyMs: 20 }))
+    try {
+      await stack.newTab('base', ECHO_SCRIPT)
+      await app.goto(stack.url())
+      await expect(app.getByRole('tab', { name: 'base' })).toBeVisible()
+      for (const p of STREAMING_PROVIDERS) await startAgentTab(app, p.id, p.prompt(400))
+      const tabs = app.getByRole('tab')
+      await expect(tabs).toHaveCount(1 + STREAMING_PROVIDERS.length)
+      await tabs.nth(1 + STREAMING_PROVIDERS.length - 1).click()
+      await expect(app.locator('.agent-panel:visible .blk-text').last()).toContainText(
+        'palabra palabra',
+      )
+      await shot(app, 'varios-proveedores')
+    } finally {
+      await stack.dispose()
+      await ollama.close()
+    }
   })
 })

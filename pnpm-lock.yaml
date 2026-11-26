@@ -208,6 +208,9 @@ importers:
       '@nexo/adapter-provider-acp':
         specifier: workspace:*
         version: link:../../packages/adapters/provider-acp
+      '@nexo/adapter-provider-antigravity':
+        specifier: workspace:*
+        version: link:../../packages/adapters/provider-antigravity
       '@nexo/adapter-provider-claude':
         specifier: workspace:*
         version: link:../../packages/adapters/provider-claude
@@ -327,6 +330,22 @@ importers:
       '@nexo/jsonrpc':
         specifier: workspace:*
         version: link:../../jsonrpc
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@nexo/testkit':
+        specifier: workspace:*
+        version: link:../../testkit
+
+  packages/adapters/provider-antigravity:
+    dependencies:
+      '@nexo/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@nexo/core':
+        specifier: workspace:*
+        version: link:../../core
       zod:
         specifier: ^4.6.7
         version: 4.6.7

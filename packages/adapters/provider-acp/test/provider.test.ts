@@ -145,6 +145,9 @@ describe('tabla de modos de permiso', () => {
     expect(c('full-access')).toBe('bypass')
     expect(c('x1', 'Auto Edit')).toBe('accept-edits')
     expect(c('raro')).toBeUndefined()
+    // dontAsk deniega lo no preaprobado (no es acceso total) y auto no tiene un alcance común: no se mapean.
+    expect(c('dontAsk', "Don't Ask")).toBeUndefined()
+    expect(c('auto')).toBeUndefined()
     expect(Object.keys(MODE_ALIASES).sort()).toEqual(['accept-edits', 'ask', 'bypass', 'plan'])
   })
 
@@ -286,6 +289,19 @@ describe('proveedor ACP: turnos', () => {
       sessionId: 'fake-session-1',
       prompt: [{ type: 'text', text: 'simple' }],
     })
+  })
+
+  it('las rutas dentro de la carpeta de la sesión salen relativas (a/src/a.ts, no la ruta absoluta)', async () => {
+    const { session, events } = await h.open({ FAKE_ACP_ROOT: 'cwd' })
+    await session.send('rich')
+    await wait(() => h.turnEnds(events).length === 1)
+    const ends = events.flatMap((e) =>
+      e.type === 'block-end' && e.block?.type === 'action' ? [e.block] : [],
+    )
+    expect(ends[0]).toMatchObject({ kind: 'read', path: 'src/a.ts' })
+    expect(ends[1]).toMatchObject({ kind: 'edit', path: 'src/a.ts', diff: { path: 'src/a.ts' } })
+    expect(ends[1]?.diff?.patch).toContain('--- a/src/a.ts')
+    expect(ends[1]?.diff?.patch).toContain('+++ b/src/a.ts')
   })
 
   it('pensamiento, plan, lectura, edición con diff y comando fallido', async () => {

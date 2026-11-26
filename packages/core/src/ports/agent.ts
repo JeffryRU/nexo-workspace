@@ -61,7 +61,10 @@ export type AgentResponse =
  * - Un `onEvent` cancelado no recibe nada más.
  */
 export interface AgentProviderSession {
-  /** Ficha para reanudar con `AgentOpenOptions.resume`; estable durante la vida de la sesión. */
+  /**
+   * Ficha para reanudar con `AgentOpenOptions.resume`; estable durante la vida de la sesión. Excepción: Antigravity no
+   * conoce la suya hasta el primer turno (antes es provisional) y la anuncia con `session-info`.
+   */
   readonly providerSessionId: string
   /** Empieza un turno. Resuelve cuando el proveedor lo aceptó; el progreso llega por eventos. */
   send(text: string): Promise<void>
