@@ -1,6 +1,6 @@
 import { type BigIntStats, constants, realpath } from 'node:fs'
 import { type FileHandle, lstat, open } from 'node:fs/promises'
-import { basename } from 'node:path'
+import { basename, dirname } from 'node:path'
 import { promisify } from 'node:util'
 import type { FsReadParams, FsReadResult, FsStat } from '@nexo/contracts'
 import {
@@ -117,7 +117,8 @@ export class FsSandbox implements FileSystemPort {
       const code = errno(error)
       if (code === 'ENOENT' || code === 'ENOTDIR') {
         // No revela si existe algo fuera de las raíces.
-        if (!this.#inside(roots, lexical)) {
+        const probable = await this.#probableReal(path, lexical)
+        if (!this.#inside(roots, probable) || this.#sensitive(probable)) {
           throw new FileSystemError('FORBIDDEN', 'fuera de las raíces')
         }
         throw new FileSystemError('NOT_FOUND', 'no existe')
@@ -133,6 +134,28 @@ export class FsSandbox implements FileSystemPort {
       throw new FileSystemError('FORBIDDEN', 'fuera de las raíces o protegida')
     }
     return real
+  }
+
+  /**
+   * Segmentos de dónde caería una ruta inexistente: el ancestro más cercano que existe, resuelto con `realpath`
+   * (en Windows expande nombres cortos 8.3), más lo que falta. Así se compara con las raíces ya resueltas.
+   */
+  async #probableReal(path: string, lexical: string[]): Promise<string[]> {
+    let current = path
+    const missing: string[] = []
+    for (let depth = 0; depth < 4096; depth++) {
+      const parent = dirname(current)
+      missing.unshift(basename(current))
+      if (parent === current) break
+      current = parent
+      try {
+        const real = stripVerbatim(await realpathNative(current))
+        return [...pathSegments(real, this.#platform), ...missing]
+      } catch {
+        // sigue subiendo
+      }
+    }
+    return lexical
   }
 
   async #lstat(real: string): Promise<BigIntStats> {
