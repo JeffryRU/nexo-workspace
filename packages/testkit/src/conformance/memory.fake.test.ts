@@ -1,4 +1,6 @@
 import { FakeMemoryStore, FakeSummarizer } from '../fake-memory.ts'
+import { FakeMemoryInjection } from '../fake-memory-injection.ts'
+import { runMemoryInjectionConformance } from './memory-injection.ts'
 import { runMemoryStoreConformance } from './memory-store.ts'
 import { runSummarizerConformance } from './summarizer.ts'
 
@@ -11,3 +13,5 @@ runSummarizerConformance('FakeSummarizer (texto)', () => ({ summarizer: new Fake
 runSummarizerConformance('FakeSummarizer (estructurado)', () => ({
   summarizer: new FakeSummarizer('fake-json', { structured: true }),
 }))
+
+runMemoryInjectionConformance('FakeMemoryInjection', () => new FakeMemoryInjection())

@@ -189,4 +189,15 @@ describe('parseEnv: memoria observacional (F3.5.2)', () => {
     expect(() => parseEnv({ NEXO_MEMORY_REFLECTOR_TOKENS: '11000' })).toThrow(/al menos el doble/)
     expect(() => parseEnv({ NEXO_MEMORY_REFLECTOR_TOKENS: '12000' })).not.toThrow()
   })
+
+  it('NEXO_MEMORY_RENEW_TOKENS: apagada por omisión; entero entre 10000 y 5000000', () => {
+    expect(parseEnv({}).memory.renewTokens).toBeUndefined()
+    expect(parseEnv({ NEXO_MEMORY_RENEW_TOKENS: '' }).memory.renewTokens).toBeUndefined()
+    expect(parseEnv({ NEXO_MEMORY_RENEW_TOKENS: '80000' }).memory.renewTokens).toBe(80000)
+    for (const bad of ['9999', '5000001', 'abc', '1.5', '-1', '0x10']) {
+      expect(() => parseEnv({ NEXO_MEMORY_RENEW_TOKENS: bad }), bad).toThrow(
+        /NEXO_MEMORY_RENEW_TOKENS/,
+      )
+    }
+  })
 })

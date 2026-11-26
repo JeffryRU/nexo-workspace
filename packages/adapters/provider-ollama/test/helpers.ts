@@ -33,7 +33,7 @@ export function useFake() {
 
   async function open(
     options: OllamaProviderOptions = {},
-    openOptions: { model?: string; effort?: string } = {},
+    openOptions: { model?: string; effort?: string; memory?: string } = {},
   ) {
     const provider = createOllamaProvider({ baseUrl: fake.url, probeCacheMs: 0, ...options })
     const session = await provider.open({ cwd: '/tmp', ...openOptions })

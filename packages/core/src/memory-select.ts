@@ -148,3 +148,58 @@ export function pendingObserverTokens(blocks: readonly Block[], observedThrough:
   })
   return all?.tokens ?? 0
 }
+
+/** Tokens estimados del texto que un agente tendría que releer de los bloques con `index > after` (sin recortar). */
+export function blocksContextTokens(blocks: readonly Block[], after: number): number {
+  let total = 0
+  for (const b of blocks) {
+    if (b.index <= after) continue
+    switch (b.type) {
+      case 'user':
+      case 'text':
+      case 'reasoning':
+        total += estimateTokens(b.text) + 4
+        break
+      case 'action':
+        total +=
+          estimateTokens(b.title) +
+          estimateTokens(b.input ?? '') +
+          estimateTokens(b.output ?? '') +
+          8
+        break
+      case 'error':
+        total += estimateTokens(b.message) + 4
+        break
+      default:
+        break
+    }
+  }
+  return total
+}
+
+/**
+ * Últimos turnos tal cual: mensajes del usuario y respuestas completas del agente (de más antiguo a más
+ * reciente) que caben en `maxTokens`. El texto va sin escapar: `buildMemoryBlock` lo escapa al armar el bloque.
+ */
+export function recentTurnsFromBlocks(
+  blocks: readonly Block[],
+  maxTokens: number,
+): { role: 'usuario' | 'agente'; text: string }[] {
+  const sorted = [...blocks].sort((a, b) => a.index - b.index)
+  const out: { role: 'usuario' | 'agente'; text: string }[] = []
+  let used = 0
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const b = sorted[i] as Block
+    let turn: { role: 'usuario' | 'agente'; text: string } | undefined
+    if (b.type === 'user') turn = { role: 'usuario', text: b.text }
+    else if (b.type === 'text' && b.complete && b.text.trim() !== '') {
+      turn = { role: 'agente', text: b.text }
+    }
+    if (turn === undefined) continue
+    const cost = estimateTokens(turn.text) + 4
+    if (used + cost > maxTokens && out.length > 0) break
+    out.unshift(turn)
+    used += cost
+  }
+  return out
+}

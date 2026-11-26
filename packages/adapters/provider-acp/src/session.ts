@@ -107,6 +107,7 @@ export class AcpSession implements AgentProviderSession {
   #refs = 0
   #requests = 0
   #announced = false
+  #memory: string | undefined
   #closed = false
   #exited = false
   #active: Turn | undefined
@@ -125,6 +126,8 @@ export class AcpSession implements AgentProviderSession {
     label: string
     /** Carpeta de la sesión (rutas relativas en las acciones). */
     cwd?: string | undefined
+    /** Bloque de memoria: va como primer bloque de contenido del primer `session/prompt`. */
+    memory?: string | undefined
   }) {
     this.providerSessionId = options.sessionId
     this.#client = options.client
@@ -134,6 +137,7 @@ export class AcpSession implements AgentProviderSession {
     this.#log = options.log
     this.#now = options.now ?? Date.now
     this.#label = options.label
+    this.#memory = options.memory
     this.#translator = new AcpTranslator({
       nextRef: () => `blk-${++this.#refs}`,
       mapMode: options.mapMode,
@@ -190,7 +194,7 @@ export class AcpSession implements AgentProviderSession {
     this.#client
       .call(
         'session/prompt',
-        { sessionId: this.providerSessionId, prompt: [{ type: 'text', text }] },
+        { sessionId: this.providerSessionId, prompt: this.#promptFor(text) },
         PromptResult,
         0,
       )
@@ -199,6 +203,18 @@ export class AcpSession implements AgentProviderSession {
         (error: unknown) => this.#onPromptError(turn, error),
       )
     return Promise.resolve()
+  }
+
+  /** Contenido del `session/prompt`: la memoria solo precede al primer mensaje. */
+  #promptFor(text: string): { type: 'text'; text: string }[] {
+    const memory = this.#memory
+    this.#memory = undefined
+    return memory === undefined
+      ? [{ type: 'text', text }]
+      : [
+          { type: 'text', text: memory },
+          { type: 'text', text },
+        ]
   }
 
   async interrupt(): Promise<void> {

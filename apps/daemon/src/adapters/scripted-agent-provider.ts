@@ -5,6 +5,9 @@ import {
   type AgentProviderPort,
   type AgentProviderSession,
   type AgentResponse,
+  assertMemoryBlock,
+  checkPreparedMemory,
+  type MemoryInjectionPort,
   type Unsubscribe,
 } from '@nexo/core'
 
@@ -22,6 +25,7 @@ import {
  * - `charla [n]`: n párrafos cortos (20 por omisión, hasta 5 000) de 10 trozos cada uno: una conversación larga y continua, sin
  *   un único bloque enorme (a diferencia de `lento 10000`).
  * - `bloques [n]`: n bloques de texto completos (100 por omisión, hasta 9 000) para documentos largos.
+ * - `memoria`: responde con el bloque de memoria con el que se abrió la sesión (`ninguna` si no lo hubo).
  * - cualquier otro: `Eco: <texto>`.
  */
 export type ScriptedProviderOptions = {
@@ -63,11 +67,23 @@ type Waiter = { resolve: (response: AgentResponse) => void; kind: 'permission' |
 
 class Cancelled extends Error {}
 
+/** Inyección de memoria del proveedor de prueba: valida y entrega el bloque tal cual. */
+class ScriptedMemoryInjection implements MemoryInjectionPort {
+  readonly providerId = 'fake'
+  readonly delivery = 'system-prompt' as const
+  readonly onCompact = 'reseed' as const
+  prepare(block: string): string {
+    assertMemoryBlock(block)
+    return block
+  }
+}
+
 export class ScriptedSession implements AgentProviderSession {
   readonly providerSessionId: string
   readonly #listeners = new Set<(event: ProviderEvent) => void>()
   readonly #waiters = new Map<string, Waiter>()
   readonly #chunkMs: number
+  readonly memory: string | undefined
   #active = false
   #closed = false
   #exited = false
@@ -76,9 +92,10 @@ export class ScriptedSession implements AgentProviderSession {
   #wake: (() => void) | undefined
   #n = 0
 
-  constructor(id: string, chunkMs: number) {
+  constructor(id: string, chunkMs: number, memory?: string) {
     this.providerSessionId = id
     this.#chunkMs = chunkMs
+    this.memory = memory
   }
 
   get closed(): boolean {
@@ -156,6 +173,10 @@ export class ScriptedSession implements AgentProviderSession {
 
   async #turn(text: string, epoch: number): Promise<void> {
     const word = text.split(/\s+/, 1)[0] ?? ''
+    if (word === 'memoria') {
+      await this.#text([`Memoria: ${this.memory ?? 'ninguna'}`], epoch)
+      return
+    }
     if (word === 'largo') {
       const ref = `text-${++this.#n}`
       this.#emit({ type: 'block-start', ref, block: { type: 'text', text: '', complete: false } })
@@ -328,6 +349,9 @@ export class ScriptedAgentProvider implements AgentProviderPort {
   readonly warmed: string[] = []
   /** Sesiones abiertas (para que las pruebas comprueben que se cierran). */
   readonly sessions: ScriptedSession[] = []
+  readonly memoryInjection: MemoryInjectionPort = new ScriptedMemoryInjection()
+  /** Opciones de cada `open` (para ver la `memory` recibida). */
+  readonly opened: AgentOpenOptions[] = []
   readonly #chunkMs: number
   readonly #known = new Set<string>()
   #n = 0
@@ -366,7 +390,9 @@ export class ScriptedAgentProvider implements AgentProviderPort {
       id = `fake-session-${++this.#n}`
       this.#known.add(id)
     }
-    const session = new ScriptedSession(id, this.#chunkMs)
+    const memory = checkPreparedMemory(options.memory)
+    this.opened.push(options)
+    const session = new ScriptedSession(id, this.#chunkMs, memory)
     this.sessions.push(session)
     return session
   }

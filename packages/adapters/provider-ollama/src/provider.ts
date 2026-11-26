@@ -5,8 +5,10 @@ import {
   AgentProviderError,
   type AgentProviderPort,
   type AgentProviderSession,
+  checkPreparedMemory,
 } from '@nexo/core'
 import { type FetchLike, OllamaClient, OllamaRequestError } from './client.ts'
+import { OllamaMemoryInjection } from './memory-injection.ts'
 import { DEFAULT_LIMITS, type LogEntry, OllamaSession, type SessionLimits } from './session.ts'
 
 export const DEFAULT_OLLAMA_URL = 'http://127.0.0.1:11434'
@@ -53,6 +55,7 @@ export function createOllamaProvider(options: OllamaProviderOptions = {}): Agent
 class OllamaProvider implements AgentProviderPort {
   readonly id = 'ollama'
   readonly displayName = 'Ollama'
+  readonly memoryInjection = new OllamaMemoryInjection()
   readonly #client: OllamaClient
   readonly #origin: string
   readonly #options: OllamaProviderOptions
@@ -106,6 +109,7 @@ class OllamaProvider implements AgentProviderPort {
     if (open.permissionMode !== undefined && open.permissionMode !== 'ask') {
       throw invalid('Ollama no usa herramientas: solo admite el modo de permisos «ask»')
     }
+    const memory = checkPreparedMemory(open.memory)
     const probe = await this.#probeNow()
     if (!probe.available) {
       throw new AgentProviderError('UNAVAILABLE', probe.reason ?? 'Ollama no está disponible')
@@ -122,6 +126,7 @@ class OllamaProvider implements AgentProviderPort {
       ...(open.effort === undefined ? {} : { think: open.effort === 'think' }),
       limits: this.#limits,
       log: (entry) => this.#options.log?.(entry),
+      ...(memory === undefined ? {} : { system: memory }),
     })
   }
 

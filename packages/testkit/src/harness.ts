@@ -1,5 +1,6 @@
 import type { PaneId } from '@nexo/contracts'
 import {
+  type AgentMemorySource,
   AgentService,
   type AgentServiceConfig,
   createDispatcher,
@@ -18,7 +19,12 @@ export type HarnessOptions = {
   pty?: FakePtyPort
   ids?: IdPort
   /** Con él se arma un `AgentService` con un `FakeAgentProvider` (id `fake`) sobre el reloj del arnés. */
-  agents?: { config?: AgentServiceConfig; provider?: Omit<FakeAgentProviderOptions, 'clock'> }
+  agents?: {
+    config?: AgentServiceConfig
+    provider?: Omit<FakeAgentProviderOptions, 'clock'>
+    /** Memoria del proyecto (F3.5.3). */
+    memory?: AgentMemorySource
+  }
 }
 
 /** Todos los servicios de core conectados a los falsos, para pruebas de integración en memoria. */
@@ -46,6 +52,7 @@ export function createHarness(options: HarnessOptions = {}) {
           clock,
           ids,
           panes: layout,
+          ...(options.agents.memory === undefined ? {} : { memory: options.agents.memory }),
           ...(options.agents.config === undefined ? {} : { config: options.agents.config }),
         })
   const workspaces = new WorkspaceService({

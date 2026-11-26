@@ -22,6 +22,8 @@ import {
 import type { AgentHandlers } from './dispatcher.ts'
 import { DomainError } from './errors.ts'
 import type { AgentPaneDirectory } from './layout-service.ts'
+import { blocksContextTokens } from './memory-select.ts'
+import { estimateTokens } from './memory-tokens.ts'
 import { OutputBatcher } from './output-batcher.ts'
 import {
   AgentProviderError,
@@ -48,6 +50,19 @@ export type AgentServiceConfig = {
   maxConsecutiveInvalid?: number
   /** Espera tras `interrupt` antes de dar la sesión por perdida si el turno no termina. */
   interruptTimeoutMs?: number
+  /**
+   * Renovación de sesión (ADR 0007, punto 5): al terminar un turno, si el contexto estimado pasa de estos tokens, la
+   * sesión se reabre sembrada con la memoria y los últimos turnos. Apagada por omisión; necesita `deps.memory`.
+   */
+  renewAtTokens?: number
+}
+
+/** Lo que `AgentService` necesita de la memoria: el bloque (ya armado y escapado) o `null` si no hay o está apagada. */
+export type AgentMemorySource = {
+  /** Bloque para una sesión nueva en `cwd`. */
+  newSession(cwd: string): Promise<string | null>
+  /** Bloque para renovar una sesión: memoria del proyecto más sus últimos turnos tal cual. */
+  renewal(cwd: string, sessionId: AgentSessionId, blocks: readonly Block[]): Promise<string | null>
 }
 
 export type AgentServiceDeps = {
@@ -57,6 +72,8 @@ export type AgentServiceDeps = {
   ids: IdPort
   panes: AgentPaneDirectory
   logger?: LoggerPort
+  /** Memoria del proyecto (F3.5.3). Sin ella, o apagada, las sesiones se abren como siempre. */
+  memory?: AgentMemorySource
   config?: AgentServiceConfig
 }
 
@@ -114,6 +131,13 @@ type Entry = {
   offEvents?: Unsubscribe
   stats: AgentStats
   invalidStreak: number
+  /** Bloques con `index` hasta este valor ya no cuentan para el contexto (se renovó la sesión ahí). */
+  renewBase: number
+  /** Tokens de la siembra con la que se abrió la sesión actual del proveedor. */
+  seedTokens: number
+  renewing: boolean
+  /** La renovación falló o no había nada que sembrar: no se reintenta. */
+  renewOff: boolean
 }
 
 /** Un mensaje de una sola línea para `reason` (sin control ni sustitutos sueltos). */
@@ -243,6 +267,7 @@ export class AgentService {
   readonly #blockLimit: number
   readonly #maxInvalid: number
   readonly #interruptTimeoutMs: number
+  readonly #renewAt: number
 
   constructor(deps: AgentServiceDeps) {
     this.#deps = deps
@@ -263,6 +288,7 @@ export class AgentService {
     this.#blockLimit = Math.max(1024, maxMessage - ENVELOPE_MARGIN)
     this.#maxInvalid = c.maxConsecutiveInvalid ?? DEFAULT_MAX_CONSECUTIVE_INVALID
     this.#interruptTimeoutMs = c.interruptTimeoutMs ?? DEFAULT_INTERRUPT_TIMEOUT_MS
+    this.#renewAt = c.renewAtTokens !== undefined && c.renewAtTokens > 0 ? c.renewAtTokens : 0
   }
 
   /** Los manejadores de `agent.*` para `createDispatcher({ agents })`. */
@@ -335,9 +361,13 @@ export class AgentService {
 
     this.#opening.add(params.paneId)
     let provider: AgentProviderSession
+    let memoryText: string | undefined
     try {
+      // Una sesión reanudada ya tiene su contexto: no se le inyecta memoria. Un fallo de memoria nunca impide abrir.
+      if (params.resume === undefined) memoryText = await this.#memoryFor(port, cwd)
       provider = await port.open({
         cwd,
+        ...(memoryText === undefined ? {} : { memory: memoryText }),
         ...(params.model === undefined ? {} : { model: params.model }),
         ...(params.effort === undefined ? {} : { effort: params.effort }),
         ...(params.permissionMode === undefined ? {} : { permissionMode: params.permissionMode }),
@@ -387,6 +417,10 @@ export class AgentService {
       }),
       stats: { invalidEvents: 0, droppedBlocks: 0, droppedDeltas: 0 },
       invalidStreak: 0,
+      renewBase: -1,
+      seedTokens: memoryText === undefined ? 0 : estimateTokens(memoryText),
+      renewing: false,
+      renewOff: false,
     }
     this.#sessions.set(id, entry)
     entry.offEvents = provider.onEvent((event) => this.#onProviderEvent(entry, event))
@@ -399,6 +433,7 @@ export class AgentService {
     const e = this.#get(params.sessionId)
     if (e.dead || e.closing) throw new DomainError('CONFLICT', 'la sesión está cerrada o en error')
     if (e.active) throw new DomainError('CONFLICT', 'ya hay un turno en curso')
+    if (e.renewing) throw new DomainError('CONFLICT', 'la sesión se está renovando')
     if (e.blocks.length >= this.#maxBlocks - this.#reserved) {
       throw new DomainError('CONFLICT', 'la sesión alcanzó el máximo de bloques', {
         limit: this.#maxBlocks,
@@ -1021,6 +1056,93 @@ export class AgentService {
     if (event.stopReason === 'interrupted') this.#setStatus(e, 'idle')
     else if (event.stopReason === 'error') this.#setStatus(e, 'error', 'el turno terminó con error')
     else this.#setStatus(e, 'done')
+    if (!e.dead && !e.closing) this.#maybeRenew(e)
+  }
+
+  // ---- Memoria ----
+
+  /** Bloque de memoria ya preparado para el proveedor, o `undefined` si no hay que inyectar nada. */
+  async #memoryFor(port: AgentProviderPort, cwd: string): Promise<string | undefined> {
+    const injection = port.memoryInjection
+    const source = this.#deps.memory
+    if (injection === undefined || source === undefined) return undefined
+    try {
+      const block = await source.newSession(cwd)
+      return block === null ? undefined : injection.prepare(block)
+    } catch (error) {
+      this.#deps.logger?.warn('no se pudo preparar la memoria para la sesión nueva', { error })
+      return undefined
+    }
+  }
+
+  /** Contexto estimado de la sesión actual del proveedor: la siembra más lo dicho desde entonces. */
+  contextTokens(sessionId: AgentSessionId): number | undefined {
+    const e = this.#sessions.get(sessionId)
+    return e === undefined ? undefined : e.seedTokens + blocksContextTokens(e.blocks, e.renewBase)
+  }
+
+  #maybeRenew(e: Entry): void {
+    if (this.#renewAt === 0 || e.renewing || e.renewOff || e.status === 'error') return
+    if (
+      this.#deps.memory === undefined ||
+      this.#providers.get(e.providerId)?.memoryInjection === undefined
+    )
+      return
+    // Si la siembra ya pesa casi como el umbral, renovar en cada turno no serviría de nada.
+    const limit = Math.max(this.#renewAt, e.seedTokens * 2)
+    if ((this.contextTokens(e.id) ?? 0) < limit) return
+    e.renewing = true
+    void this.#renew(e)
+      .catch((error: unknown) => {
+        e.renewOff = true
+        this.#deps.logger?.warn('no se pudo renovar la sesión; sigue la actual', { error })
+      })
+      .finally(() => {
+        e.renewing = false
+      })
+  }
+
+  /**
+   * Abre una sesión nueva del proveedor sembrada con la memoria y los últimos turnos, y cierra la anterior. El
+   * documento, el id de sesión y el panel no cambian (se ve como la misma pestaña). Si algo falla, la sesión
+   * actual queda como estaba.
+   */
+  async #renew(e: Entry): Promise<void> {
+    const port = this.#providers.get(e.providerId)
+    const injection = port?.memoryInjection
+    const source = this.#deps.memory
+    if (port === undefined || injection === undefined || source === undefined) return
+    const block = await source.renewal(e.cwd, e.id, e.blocks)
+    if (block === null) {
+      e.renewOff = true
+      return
+    }
+    const prepared = injection.prepare(block)
+    const next = await port.open({
+      cwd: e.cwd,
+      ...(e.model === undefined ? {} : { model: e.model }),
+      ...(e.effort === undefined ? {} : { effort: e.effort }),
+      permissionMode: e.permissionMode,
+      memory: prepared,
+    })
+    if (e.dead || e.closing || e.active) {
+      await next.close().catch(() => undefined)
+      return
+    }
+    const old = e.provider
+    e.offEvents?.()
+    e.provider = next
+    e.offEvents = next.onEvent((event) => this.#onProviderEvent(e, event))
+    const token = ProviderSessionToken.safeParse(next.providerSessionId)
+    if (token.success) e.providerSessionId = token.data
+    else delete e.providerSessionId
+    e.renewBase = e.blocks.reduce((max, b) => Math.max(max, b.index), -1)
+    e.seedTokens = estimateTokens(prepared)
+    e.updatedAt = this.#deps.clock.now()
+    this.#publishSession(e)
+    await old.close().catch((error: unknown) => {
+      this.#deps.logger?.warn('no se pudo cerrar la sesión anterior del proveedor', { error })
+    })
   }
 }
 

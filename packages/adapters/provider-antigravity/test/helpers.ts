@@ -34,7 +34,8 @@ export function useFakeAgy() {
   beforeAll(() => {
     dir = mkdtempSync(join(tmpdir(), 'nexo-agy-test-'))
   })
-  afterAll(() => rmSync(dir, { recursive: true, force: true }))
+  // En Windows el último proceso falso puede tardar en soltar la carpeta: se reintenta el borrado.
+  afterAll(() => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }))
   afterEach(async () => {
     for (const s of sessions.splice(0)) await s.close().catch(() => {})
     logs.length = 0
@@ -63,6 +64,7 @@ export function useFakeAgy() {
       effort?: string
       permissionMode?: 'ask' | 'accept-edits' | 'plan' | 'bypass'
       resume?: string
+      memory?: string
     } = {},
   ) {
     const p = provider(env, options)

@@ -29,6 +29,7 @@ async function main(): Promise<number> {
       memory: {
         enabled: env.memory.enabled,
         ...(env.memory.summarizer === undefined ? {} : { summarizer: env.memory.summarizer }),
+        ...(env.memory.renewTokens === undefined ? {} : { renewAtTokens: env.memory.renewTokens }),
         thresholds: {
           ...(env.memory.observerTokens === undefined
             ? {}

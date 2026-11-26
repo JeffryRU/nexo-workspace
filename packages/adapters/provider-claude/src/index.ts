@@ -1,4 +1,5 @@
 export { AUTH_MESSAGE } from './errors.ts'
+export { ClaudeMemoryInjection, claudeMemoryOptions } from './memory-injection.ts'
 export {
   CLAUDE_EFFORTS,
   type ClaudeProviderOptions,

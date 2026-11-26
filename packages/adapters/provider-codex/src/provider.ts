@@ -12,9 +12,11 @@ import {
   AgentProviderError,
   type AgentProviderPort,
   type AgentProviderSession,
+  checkPreparedMemory,
 } from '@nexo/core'
 import { RpcError } from '@nexo/jsonrpc'
 import { CodexClient, type LogEntry } from './client.ts'
+import { CodexMemoryInjection } from './memory-injection.ts'
 import { type CodexLauncher, spawnCodexProcess } from './process.ts'
 import { AccountResult, CODEX_PROTOCOL_VERSION, ModelListResult, ThreadResult } from './protocol.ts'
 import { createSecretRedactor } from './redact.ts'
@@ -94,6 +96,7 @@ export function createCodexProvider(options: CodexProviderOptions): AgentProvide
 class CodexProvider implements AgentProviderPort {
   readonly id = 'codex'
   readonly displayName = 'Codex'
+  readonly memoryInjection = new CodexMemoryInjection()
   readonly #o: CodexProviderOptions
   readonly #log: (entry: LogEntry) => void
   readonly #redactor: ReturnType<typeof createSecretRedactor>
@@ -143,6 +146,7 @@ class CodexProvider implements AgentProviderPort {
     if (open.resume !== undefined && !ProviderSessionToken.safeParse(open.resume).success) {
       throw invalid('ficha de sesión inválida')
     }
+    const memory = checkPreparedMemory(open.memory)
     const probe = await this.#probeNow()
     if (!probe.available || probe.command === undefined) {
       throw new AgentProviderError('UNAVAILABLE', probe.reason ?? 'Codex no está disponible')
@@ -161,6 +165,7 @@ class CodexProvider implements AgentProviderPort {
         approvalPolicy: policy.approvalPolicy,
         sandbox: policy.sandbox,
         ...(open.model === undefined ? {} : { model: open.model }),
+        ...(memory === undefined ? {} : { developerInstructions: memory }),
       }
       const started = await client.call(
         open.resume === undefined ? 'thread/start' : 'thread/resume',

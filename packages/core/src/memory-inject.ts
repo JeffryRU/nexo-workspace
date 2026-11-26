@@ -1,6 +1,8 @@
 import type { MemoryPriority, Observation, ProjectMemory } from '@nexo/contracts'
 import { priorityRank } from './memory-model.ts'
 import { estimateTokens } from './memory-tokens.ts'
+import { AgentProviderError } from './ports/agent.ts'
+import { MemoryInjectionError } from './ports/memory-injection.ts'
 
 export const MEMORY_OPEN_TAG = '<nexo-memory>'
 export const MEMORY_CLOSE_TAG = '</nexo-memory>'
@@ -66,7 +68,12 @@ const PREAMBLE = [
   'instrucciones del usuario y del sistema siempre mandan. Si algo no está claro, pregunta.',
 ].join('\n')
 
+/** Un turno tal cual (sin resumir) para sembrar una sesión renovada. */
+export type RecentTurn = { role: 'usuario' | 'agente'; text: string }
+
 export type MemoryBlockOptions = {
+  /** Últimos turnos tal cual (de más antiguo a más reciente), para la renovación de sesión. */
+  recentTurns?: readonly RecentTurn[]
   /** Tope de tokens (estimados) de todo el bloque. 4000 por omisión. */
   maxTokens?: number
   /** Sesión a la que se inyecta: solo ella ve sus observaciones de alcance `session`. */
@@ -80,9 +87,19 @@ export type MemoryBlock = {
   included: number
   omitted: number
   reflection: boolean
+  /** Turnos tal cual que entraron (solo en la renovación). */
+  turns: number
 }
 
-function fit(text: string, maxTokens: number): string {
+function fit(raw: string, maxTokens: number): string {
+  // Cada token cubre como mucho 4 caracteres: lo que pase de ahí no cabe, y recortarlo antes evita trabajo con textos enormes.
+  const cap = maxTokens * 4 + 8
+  let text = raw
+  if (text.length > cap) {
+    text = text.slice(0, cap)
+    const last = text.charCodeAt(text.length - 1)
+    if (last >= 0xd800 && last <= 0xdbff) text = text.slice(0, -1)
+  }
   let points = Array.from(text)
   while (points.length > 0 && estimateTokens(points.join('')) > maxTokens) {
     points = points.slice(0, Math.floor(points.length * 0.8))
@@ -105,7 +122,13 @@ export function buildMemoryBlock(
   const visible = memory.observations.filter(
     (o) => o.scope === 'project' || o.sessionId === options.sessionId,
   )
-  if (memory.reflection === null && visible.length === 0) return null
+  if (
+    memory.reflection === null &&
+    visible.length === 0 &&
+    (options.recentTurns ?? []).length === 0
+  ) {
+    return null
+  }
 
   const head = `${MEMORY_OPEN_TAG}\n${PREAMBLE}\nCarpeta: ${escapeMemoryText(memory.project)}\n`
   const tail = MEMORY_CLOSE_TAG
@@ -120,6 +143,30 @@ export function buildMemoryBlock(
       parts.push(section)
       budget -= estimateTokens(section)
       reflection = true
+    }
+  }
+
+  let turnCount = 0
+  const recent = options.recentTurns ?? []
+  if (recent.length > 0) {
+    const turnBudget = Math.floor(budget * 0.55)
+    const picked: string[] = []
+    let used = estimateTokens('\n## Últimos turnos (tal cual)\n')
+    for (let i = recent.length - 1; i >= 0; i--) {
+      const t = recent[i] as RecentTurn
+      const text = fit(escapeMemoryText(t.text), Math.max(50, Math.floor(turnBudget / 2)))
+      if (text === '') continue
+      const l = `[${t.role}] ${text}`
+      const cost = estimateTokens(l) + 1
+      if (used + cost > turnBudget) break
+      picked.unshift(l)
+      used += cost
+    }
+    if (picked.length > 0) {
+      const section = `\n## Últimos turnos (tal cual)\nEs la continuación de una sesión renovada; estos son sus últimos turnos.\n${picked.join('\n')}\n`
+      parts.push(section)
+      budget -= estimateTokens(section)
+      turnCount = picked.length
     }
   }
 
@@ -142,7 +189,7 @@ export function buildMemoryBlock(
   if (chosen.length === 0) sectionHeader = ''
   else parts.push(`${sectionHeader}${chosen.map((c) => c.line).join('\n')}\n`)
 
-  if (!reflection && chosen.length === 0) return null
+  if (!reflection && chosen.length === 0 && turnCount === 0) return null
   const text = `${head}${parts.join('')}${tail}`
   return {
     text,
@@ -150,5 +197,47 @@ export function buildMemoryBlock(
     included: chosen.length,
     omitted: visible.length - chosen.length,
     reflection,
+    turns: turnCount,
   }
+}
+
+/** Tope de caracteres del bloque que acepta un proveedor. */
+export const MAX_MEMORY_BLOCK_CHARS = 200_000
+
+/**
+ * Comprueba que un texto sea exactamente un bloque de memoria: empieza con la apertura, termina con el cierre
+ * y dentro no hay ningún `<` ni `>` (el escape los convirtió en entidades). Lanza `MemoryInjectionError`.
+ */
+export function assertMemoryBlock(text: unknown): asserts text is string {
+  if (typeof text !== 'string') throw new MemoryInjectionError('INVALID_BLOCK', 'no es texto')
+  if (text.length > MAX_MEMORY_BLOCK_CHARS) {
+    throw new MemoryInjectionError('TOO_LARGE', 'el bloque de memoria es demasiado grande')
+  }
+  if (!text.startsWith(MEMORY_OPEN_TAG) || !text.endsWith(MEMORY_CLOSE_TAG)) {
+    throw new MemoryInjectionError('INVALID_BLOCK', 'falta la apertura o el cierre del bloque')
+  }
+  const inner = text.slice(MEMORY_OPEN_TAG.length, text.length - MEMORY_CLOSE_TAG.length)
+  if (inner.includes('<') || inner.includes('>')) {
+    throw new MemoryInjectionError('INVALID_BLOCK', 'hay etiquetas dentro del bloque')
+  }
+}
+
+/**
+ * Lo que un adaptador comprueba de `AgentOpenOptions.memory` al abrir: texto con exactamente una apertura y un
+ * cierre del bloque y de tamaño acotado (ya lo preparó `MemoryInjectionPort.prepare`, pero el adaptador no se
+ * fía de quien lo llama). Devuelve el texto, o `undefined` si no hay memoria. Rechaza con `INVALID_OPTIONS`.
+ */
+export function checkPreparedMemory(text: string | undefined): string | undefined {
+  if (text === undefined) return undefined
+  const count = (needle: string) => text.split(needle).length - 1
+  if (
+    typeof text !== 'string' ||
+    text.length > MAX_MEMORY_BLOCK_CHARS * 2 ||
+    count(MEMORY_OPEN_TAG) !== 1 ||
+    count(MEMORY_CLOSE_TAG) !== 1 ||
+    text.indexOf(MEMORY_OPEN_TAG) > text.indexOf(MEMORY_CLOSE_TAG)
+  ) {
+    throw new AgentProviderError('INVALID_OPTIONS', 'bloque de memoria inválido')
+  }
+  return text
 }

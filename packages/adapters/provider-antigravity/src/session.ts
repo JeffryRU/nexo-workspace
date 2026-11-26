@@ -119,6 +119,7 @@ export class AgySession implements AgentProviderSession {
   #known: boolean
   #refs = 0
   #announced = false
+  #memory: string | undefined
   #closed = false
   #exited = false
   #active: Turn | undefined
@@ -137,6 +138,8 @@ export class AgySession implements AgentProviderSession {
     log: (entry: LogEntry) => void
     redactor: SecretRedactor
     maxLineLength: number
+    /** Prefijo ya preparado (bloque de memoria y separador) del primer mensaje. */
+    memory?: string | undefined
   }) {
     this.#launcher = options.launcher
     this.#command = options.command
@@ -149,6 +152,7 @@ export class AgySession implements AgentProviderSession {
     this.#log = options.log
     this.#redactor = options.redactor
     this.#maxLineLength = options.maxLineLength
+    this.#memory = options.memory
     this.#id = options.resume ?? randomUUID()
     this.#known = options.resume !== undefined
     this.#translator = new AgyTranslator({
@@ -223,7 +227,9 @@ export class AgySession implements AgentProviderSession {
     })
     turn.proc.onStderr((chunk) => this.#onStderr(turn, chunk))
     turn.proc.onExit((info) => this.#onProcessExit(turn, info))
-    turn.proc.writeAndClose(userMessageLine(text))
+    const prefix = this.#memory
+    this.#memory = undefined
+    turn.proc.writeAndClose(userMessageLine(prefix === undefined ? text : `${prefix}${text}`))
     return Promise.resolve()
   }
 

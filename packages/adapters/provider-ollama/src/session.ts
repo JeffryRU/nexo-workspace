@@ -54,6 +54,7 @@ export class OllamaSession implements AgentProviderSession {
   readonly #log: (entry: LogEntry) => void
   readonly #listeners = new Set<(event: ProviderEvent) => void>()
   readonly #effort: string | undefined
+  readonly #system: string | undefined
   #history: Message[] = []
   #historyBytes = 0
   #closed = false
@@ -70,6 +71,8 @@ export class OllamaSession implements AgentProviderSession {
     think?: boolean
     limits: SessionLimits
     log: (entry: LogEntry) => void
+    /** Mensaje de sistema (bloque de memoria); no cuenta en el historial ni se descarta. */
+    system?: string
   }) {
     this.providerSessionId = options.id
     this.#client = options.client
@@ -78,6 +81,7 @@ export class OllamaSession implements AgentProviderSession {
     this.#think = options.think
     this.#limits = options.limits
     this.#log = options.log
+    this.#system = options.system
   }
 
   onEvent(listener: (event: ProviderEvent) => void): Unsubscribe {
@@ -219,7 +223,10 @@ export class OllamaSession implements AgentProviderSession {
     }
     const request: ChatRequest = {
       model: this.#model,
-      messages: this.#history.map(({ role, content }) => ({ role, content })),
+      messages: [
+        ...(this.#system === undefined ? [] : [{ role: 'system' as const, content: this.#system }]),
+        ...this.#history.map(({ role, content }) => ({ role, content })),
+      ],
       ...(this.#think === undefined ? {} : { think: this.#think }),
     }
     try {

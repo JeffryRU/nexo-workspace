@@ -34,6 +34,12 @@ export type {
 } from './ports/memory.ts'
 export { MemoryStoreError, SummarizerError } from './ports/memory.ts'
 export type {
+  MemoryDelivery,
+  MemoryInjectionErrorCode,
+  MemoryInjectionPort,
+} from './ports/memory-injection.ts'
+export { MemoryInjectionError } from './ports/memory-injection.ts'
+export type {
   BusEvent,
   ClockPort,
   EventBusPort,

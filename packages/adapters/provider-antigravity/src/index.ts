@@ -1,3 +1,4 @@
+export { AntigravityMemoryInjection } from './memory-injection.ts'
 export { parseModels } from './models.ts'
 export type { AgyLauncher, AgyProcess, ExitInfo, LaunchOptions } from './process.ts'
 export { AGY_VERIFIED_VERSION } from './protocol.ts'

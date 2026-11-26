@@ -9,6 +9,7 @@ import type {
   Query,
   SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk'
+import { claudeMemoryOptions } from './memory-injection.ts'
 import {
   type ClaudeTransport,
   type ClaudeTransportSession,
@@ -214,6 +215,7 @@ class SdkTransport implements ClaudeTransport {
       ...(o.permissionMode === 'bypassPermissions'
         ? { allowDangerouslySkipPermissions: true }
         : {}),
+      ...(o.memory === undefined ? {} : claudeMemoryOptions(o.memory)),
     }
     return wrap(sdk.query({ prompt: fresh, options }), fresh, sessionId)
   }
@@ -222,7 +224,9 @@ class SdkTransport implements ClaudeTransport {
   #claim(o: TransportStartOptions): Warm | undefined {
     const warm = this.#warm.get(o.cwd)
     if (warm === undefined) return undefined
+    // El prompt de sistema y los hooks solo se fijan al arrancar: con memoria no sirve un proceso precalentado.
     if (
+      o.memory !== undefined ||
       o.resume !== undefined ||
       o.effort !== undefined ||
       o.permissionMode === 'bypassPermissions'

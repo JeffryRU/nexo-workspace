@@ -127,6 +127,11 @@ export type DaemonOptions = {
     summarizer?: MemorySummarizerSpec | SummarizerPort
     thresholds?: Partial<MemoryThresholds>
     config?: MemoryServiceConfig
+    /**
+     * Renovación de sesión (F3.5.3): con la memoria encendida, al terminar un turno cuyo contexto estimado pasa de
+     * estos tokens, la sesión se reabre sembrada con la memoria y los últimos turnos. Apagada por omisión.
+     */
+    renewAtTokens?: number
   }
   /** Se llama (tras responder) cuando un cliente pide `daemon.shutdown`; por omisión detiene el daemon. */
   onShutdownRequested?: (stop: () => Promise<void>) => void
@@ -234,7 +239,17 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
           ids,
           panes: layout,
           logger,
-          ...(options.agents === undefined ? {} : { config: options.agents }),
+          // La memoria se crea después (necesita las sesiones): se resuelve al usarla.
+          memory: {
+            newSession: (cwd) => memory.newSession(cwd),
+            renewal: (cwd, id, blocks) => memory.renewal(cwd, id, blocks),
+          },
+          config: {
+            ...options.agents,
+            ...(options.memory?.renewAtTokens === undefined || !(options.memory.enabled ?? false)
+              ? {}
+              : { renewAtTokens: options.memory.renewAtTokens }),
+          },
         })
   const memory = await createMemory()
   const stopWarmup = watchAgentPanes({ bus, panes: layout, provider: providers[0], logger })

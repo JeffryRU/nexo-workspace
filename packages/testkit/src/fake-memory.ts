@@ -262,3 +262,33 @@ export const arbProjectMemory: fc.Arbitrary<ProjectMemory> = fc
 export const arbBlockDocument: fc.Arbitrary<Block[]> = fc
   .array(arbBlock, { maxLength: 30 })
   .map((blocks) => blocks.map((b, index) => ({ ...b, index }) as Block))
+
+/** Registro de proyecto con una reflexión y tres observaciones (una de alcance `session`). */
+export function sampleMemory(over: Partial<ProjectMemory> = {}): ProjectMemory {
+  const at = 1_700_000_000_000
+  return {
+    version: 1,
+    project: '/work/app',
+    updatedAt: at + 10,
+    nextSeq: 4,
+    observations: [1, 2, 3].map((seq) => ({
+      seq,
+      at: at + seq,
+      priority: seq === 1 ? ('high' as const) : ('medium' as const),
+      scope: seq === 3 ? ('session' as const) : ('project' as const),
+      sessionId: SAMPLE_SESSION,
+      range: { from: seq, to: seq + 1 },
+      text: `El proyecto usa pnpm y vitest, dato ${seq}.`,
+    })),
+    reflection: {
+      generation: 2,
+      createdAt: at + 5,
+      coversThroughSeq: 0,
+      text: 'Monorepo con pnpm; las pruebas corren con vitest.',
+      sources: [],
+    },
+    sessions: [],
+    usage: { calls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 },
+    ...over,
+  }
+}

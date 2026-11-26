@@ -13,10 +13,12 @@ import {
   AgentProviderError,
   type AgentProviderPort,
   type AgentProviderSession,
+  checkPreparedMemory,
 } from '@nexo/core'
 import { RpcError } from '@nexo/jsonrpc'
 import { AcpClient, AcpVersionError, type LogEntry } from './client.ts'
 import type { AcpAgentConfig } from './config.ts'
+import { AcpMemoryInjection } from './memory-injection.ts'
 import { type AgentLauncher, spawnAgentProcess } from './process.ts'
 import {
   ACP_PROTOCOL_VERSION,
@@ -143,6 +145,7 @@ export function createAcpProvider(options: AcpProviderOptions): AgentProviderPor
 class AcpProvider implements AgentProviderPort {
   readonly id: string
   readonly displayName: string
+  readonly memoryInjection: AcpMemoryInjection
   readonly #o: AcpProviderOptions
   readonly #env: Readonly<Record<string, string | undefined>>
   readonly #log: (entry: LogEntry) => void
@@ -156,6 +159,7 @@ class AcpProvider implements AgentProviderPort {
     this.#o = options
     this.id = options.agent.id
     this.displayName = options.agent.name
+    this.memoryInjection = new AcpMemoryInjection(this.id)
     this.#env = { ...options.env, ...options.agent.env }
     this.#log = options.log ?? (() => {})
     this.#redactor = createSecretRedactor(this.#env)
@@ -222,6 +226,7 @@ class AcpProvider implements AgentProviderPort {
       throw invalid(`${this.displayName} no ofrece el modo de permisos «${mode}»`)
     }
     const cwd = resolve(open.cwd)
+    const memory = checkPreparedMemory(open.memory)
     const client = this.#client(probe.command, cwd)
     try {
       const init = await client.handshake(this.#limits.startupTimeoutMs)
@@ -289,6 +294,7 @@ class AcpProvider implements AgentProviderPort {
         log: this.#log,
         ...(this.#o.now === undefined ? {} : { now: this.#o.now }),
         label: this.displayName,
+        ...(memory === undefined ? {} : { memory }),
       })
     } catch (error) {
       const tail = client.stderrTail()

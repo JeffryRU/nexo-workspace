@@ -5,6 +5,7 @@ import type {
   QuestionAnswer,
   Token,
 } from '@nexo/contracts'
+import type { MemoryInjectionPort } from './memory-injection.ts'
 import type { Unsubscribe } from './pty.ts'
 
 export type AgentProviderErrorCode =
@@ -37,6 +38,11 @@ export type AgentOpenOptions = {
   permissionMode?: PermissionMode
   /** Ficha (`providerSessionId`) de una sesión anterior para reanudarla. Solo si `capabilities.resume`. */
   resume?: string
+  /**
+   * Bloque de memoria ya preparado por `MemoryInjectionPort.prepare` del propio proveedor. Solo llega si el proveedor
+   * declara `memoryInjection` y la memoria está encendida; el adaptador lo entrega por su mecanismo nativo.
+   */
+  memory?: string
 }
 
 /** Respuesta del usuario a una solicitud del proveedor (`permission-request` o `question-request`). */
@@ -88,6 +94,8 @@ export interface AgentProviderPort {
   open(options: AgentOpenOptions): Promise<AgentProviderSession>
   /** Opcional (`capabilities.warmup`): arranca el proceso antes del primer mensaje; es idempotente. */
   warmUp?(options: Pick<AgentOpenOptions, 'cwd'>): Promise<void>
+  /** Opcional: cómo recibe la memoria del proyecto (ADR 0007). Sin él, el proveedor no recibe memoria. */
+  readonly memoryInjection?: MemoryInjectionPort
   /** Opcional: por qué `isAvailable()` dio `false` (la interfaz lo muestra); `undefined` si lo está o no se sabe. */
   unavailableReason?(): string | undefined
 }

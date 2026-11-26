@@ -122,6 +122,7 @@ const EnvSchema = z.object({
   NEXO_MEMORY_SUMMARIZER: memorySummarizer.optional(),
   NEXO_MEMORY_OBSERVER_TOKENS: z.coerce.number().int().min(500).max(200_000).optional(),
   NEXO_MEMORY_REFLECTOR_TOKENS: z.coerce.number().int().min(1000).max(2_000_000).optional(),
+  NEXO_MEMORY_RENEW_TOKENS: z.coerce.number().int().min(10_000).max(5_000_000).optional(),
   NEXO_LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   NEXO_MAX_CONNECTIONS: z.coerce.number().int().min(1).max(10000).default(128),
   NEXO_AUTH_TIMEOUT_MS: z.coerce.number().int().min(100).max(60000).default(5000),
@@ -153,6 +154,8 @@ export type DaemonEnv = {
     observerTokens: number | undefined
     /** Tokens de observaciones de un proyecto que disparan al Reflector (40000 por omisión). */
     reflectorTokens: number | undefined
+    /** Renovación de sesión (F3.5.3): contexto estimado, en tokens, a partir del cual se reabre sembrada. Apagada sin valor. */
+    renewTokens: number | undefined
   }
   logLevel: 'debug' | 'info' | 'warn' | 'error'
   maxConnections: number
@@ -180,6 +183,8 @@ export function parseEnv(env: Readonly<Record<string, string | undefined>>): Dae
       env.NEXO_MEMORY_OBSERVER_TOKENS === '' ? undefined : env.NEXO_MEMORY_OBSERVER_TOKENS,
     NEXO_MEMORY_REFLECTOR_TOKENS:
       env.NEXO_MEMORY_REFLECTOR_TOKENS === '' ? undefined : env.NEXO_MEMORY_REFLECTOR_TOKENS,
+    NEXO_MEMORY_RENEW_TOKENS:
+      env.NEXO_MEMORY_RENEW_TOKENS === '' ? undefined : env.NEXO_MEMORY_RENEW_TOKENS,
     NEXO_LOG_LEVEL: env.NEXO_LOG_LEVEL,
     NEXO_MAX_CONNECTIONS: env.NEXO_MAX_CONNECTIONS,
     NEXO_AUTH_TIMEOUT_MS: env.NEXO_AUTH_TIMEOUT_MS,
@@ -225,6 +230,7 @@ export function parseEnv(env: Readonly<Record<string, string | undefined>>): Dae
       summarizer: d.NEXO_MEMORY_SUMMARIZER,
       observerTokens,
       reflectorTokens,
+      renewTokens: d.NEXO_MEMORY_RENEW_TOKENS,
     },
     logLevel: d.NEXO_LOG_LEVEL,
     maxConnections: d.NEXO_MAX_CONNECTIONS,
