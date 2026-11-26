@@ -39,6 +39,9 @@ const fail = (id, code, message, data) =>
   out({ id, error: { code, message, ...(data ? { data } : {}) } })
 const notify = (method, params) => out({ method, params })
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+// Carpeta de los archivos que el agente dice tocar: una ficticia, o (FAKE_ACP_ROOT=cwd) la de la sesión.
+let sessionCwd = ''
+const root = () => (process.env.FAKE_ACP_ROOT === 'cwd' ? sessionCwd : '/proyecto')
 const update = (sessionId, u) => notify('session/update', { sessionId, update: u })
 const chunk = (sessionId, kind, text) =>
   update(sessionId, { sessionUpdate: kind, content: { type: 'text', text } })
@@ -136,6 +139,15 @@ async function runPrompt(id, sessionId, text) {
     case 'hang':
       chunk(sessionId, 'agent_message_chunk', 'colgado')
       return
+    // Salida continua (para medir la interfaz con varios proveedores emitiendo a la vez).
+    case 'stream': {
+      const n = Number(process.env.FAKE_ACP_STREAM_N ?? 300)
+      for (let i = 0; i < n; i++) {
+        chunk(sessionId, 'agent_message_chunk', 'palabra ')
+        await sleep(Number(process.env.FAKE_ACP_STREAM_MS ?? 10))
+      }
+      return done('end_turn')
+    }
     case 'permiso': {
       update(sessionId, {
         sessionUpdate: 'tool_call',
@@ -209,7 +221,7 @@ async function runPrompt(id, sessionId, text) {
         title: 'Leer src/a.ts',
         kind: 'read',
         status: 'in_progress',
-        locations: [{ path: '/proyecto/src/a.ts', line: 1 }],
+        locations: [{ path: `${root()}/src/a.ts`, line: 1 }],
       })
       update(sessionId, {
         sessionUpdate: 'tool_call_update',
@@ -231,7 +243,7 @@ async function runPrompt(id, sessionId, text) {
         content: [
           {
             type: 'diff',
-            path: '/proyecto/src/a.ts',
+            path: `${root()}/src/a.ts`,
             oldText: 'const a = 1\nconst b = 2\n',
             newText: 'const a = 10\nconst b = 2\nconst c = 3\n',
           },
@@ -275,7 +287,7 @@ async function runPrompt(id, sessionId, text) {
         sessionUpdate: 'tool_call_update',
         toolCallId: 'e1',
         status: 'completed',
-        content: [{ type: 'diff', path: '/proyecto/a.txt', oldText: null, newText: 'hola\n' }],
+        content: [{ type: 'diff', path: `${root()}/a.txt`, oldText: null, newText: 'hola\n' }],
       })
       chunk(sessionId, 'agent_message_chunk', 'Edición aplicada.')
       return done('end_turn')
@@ -393,6 +405,7 @@ function onRequest(msg) {
       if (process.env.FAKE_ACP_AUTH === '1') return fail(id, -32000, 'Authentication required')
       const sessionId = `fake-session-${++sessions}`
       known.add(sessionId)
+      sessionCwd = String(params?.cwd ?? '').replace(/[\\/]+$/, '')
       note({ sessionNew: params })
       return respond(id, { sessionId, ...sessionPayload(sessionId) })
     }

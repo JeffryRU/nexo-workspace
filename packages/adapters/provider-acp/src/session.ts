@@ -123,6 +123,8 @@ export class AcpSession implements AgentProviderSession {
     log: (entry: LogEntry) => void
     now?: () => number
     label: string
+    /** Carpeta de la sesión (rutas relativas en las acciones). */
+    cwd?: string | undefined
   }) {
     this.providerSessionId = options.sessionId
     this.#client = options.client
@@ -135,6 +137,7 @@ export class AcpSession implements AgentProviderSession {
     this.#translator = new AcpTranslator({
       nextRef: () => `blk-${++this.#refs}`,
       mapMode: options.mapMode,
+      cwd: options.cwd,
     })
     options.client.setHandlers({
       onNotification: (n) => this.#onNotification(n),

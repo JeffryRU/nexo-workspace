@@ -37,13 +37,15 @@ import { line } from './text.ts'
 /**
  * Modos de sesión del agente que corresponden a cada modo de permisos normalizado: se comparan el id y el
  * nombre del modo, en minúsculas y solo con letras y dígitos. Es parte del contrato del adaptador (tabla en
- * `docs/ARCHITECTURE.md`, «Proveedor ACP (F3.3)»). Un modo que no aparece aquí no se ofrece.
+ * `docs/ARCHITECTURE.md`, «Proveedor ACP (F3.3)»). Un modo que no aparece aquí no se ofrece: `dontAsk` (Claude Code
+ * deniega lo no preaprobado, no da acceso total) y `auto` (su alcance cambia de un agente a otro: aprueba además
+ * comandos, o los revisa un clasificador) no equivalen a ningún modo normalizado y se dejan fuera a propósito.
  */
 export const MODE_ALIASES: Record<PermissionMode, readonly string[]> = {
   ask: ['default', 'ask', 'normal', 'manual', 'askbeforeedits'],
-  'accept-edits': ['acceptedits', 'autoedit', 'autoapproveedits', 'edit', 'auto'],
+  'accept-edits': ['acceptedits', 'autoedit', 'autoapproveedits', 'edit'],
   plan: ['plan', 'planning', 'readonly'],
-  bypass: ['bypasspermissions', 'yolo', 'fullaccess', 'dangerfullaccess', 'bypass', 'dontask'],
+  bypass: ['bypasspermissions', 'yolo', 'fullaccess', 'dangerfullaccess', 'bypass'],
 }
 
 const squash = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -282,6 +284,7 @@ class AcpProvider implements AgentProviderPort {
         model,
         permissionMode: mode,
         mapMode: (id) => reverse.get(id),
+        cwd: open.cwd,
         limits: this.#limits,
         log: this.#log,
         ...(this.#o.now === undefined ? {} : { now: this.#o.now }),
