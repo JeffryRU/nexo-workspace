@@ -3,7 +3,6 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { normalizeProjectPath } from '@nexo/core'
-import { FakeLogger } from '@nexo/testkit'
 
 export async function tempStateDir(): Promise<{ dir: string; cleanup: () => Promise<void> }> {
   const dir = await mkdtemp(join(tmpdir(), 'nexo-memory-'))
@@ -15,5 +14,3 @@ export function fileFor(stateDir: string, project: string): string {
   const hash = createHash('sha256').update(normalizeProjectPath(project)).digest('hex').slice(0, 32)
   return join(stateDir, 'memory', `${hash}.json`)
 }
-
-export { FakeLogger }

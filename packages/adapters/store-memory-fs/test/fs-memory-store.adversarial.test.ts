@@ -2,9 +2,10 @@ import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { type AgentSessionId, ProjectMemory } from '@nexo/contracts'
 import { appendObservations, MemoryStoreError } from '@nexo/core'
+import { FakeLogger } from '@nexo/testkit'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { DEFAULT_MAX_PROJECT_BYTES, FsMemoryStore } from '../src/index.ts'
-import { FakeLogger, fileFor, tempStateDir } from './helpers.ts'
+import { fileFor, tempStateDir } from './helpers.ts'
 
 const S1 = 's1' as AgentSessionId
 const PROJECT = '/work/app'
