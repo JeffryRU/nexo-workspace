@@ -247,6 +247,15 @@ export const methods = {
     }),
   },
   'agent.close': { params: z.strictObject({ sessionId: AgentSessionId }), result: Ok },
+  /**
+   * Renueva la sesión a mano (F3.5.4): abre una sesión nueva del proveedor sembrada con la memoria y los
+   * últimos turnos, y cierra la anterior. Misma pestaña, mismo `sessionId`. `CONFLICT` si hay un turno en
+   * curso, ya se está renovando o no hay nada que sembrar; `PROVIDER_UNAVAILABLE` si el proveedor no admite memoria.
+   */
+  'agent.renew': {
+    params: z.strictObject({ sessionId: AgentSessionId }),
+    result: z.strictObject({ session: AgentSession }),
+  },
   ...memoryMethods,
 } as const
 

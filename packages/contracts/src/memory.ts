@@ -143,6 +143,8 @@ export type ProjectMemory = z.infer<typeof ProjectMemory>
 
 const Cwd = Path
 const MinPriority = MemoryPriority
+/** Rango de `NEXO_MEMORY_RENEW_TOKENS`. */
+export const RenewTokens = z.int().min(10_000).max(5_000_000)
 const ProjectStats = z.strictObject({
   cwd: Cwd,
   observations: z.int().nonnegative(),
@@ -176,7 +178,25 @@ export const memoryMethods = {
         .optional(),
       /** Uso acumulado guardado en el proyecto (todas las ejecuciones del daemon). */
       projectUsage: MemoryUsageTotals.optional(),
+      /** Contexto estimado a partir del cual una sesión se renueva sola (F3.5.4); ausente = renovación automática apagada. */
+      renewAtTokens: RenewTokens.optional(),
     }),
+  },
+  /**
+   * Ajustes en caliente (F3.5.4): enciende o apaga la memoria y fija (o quita, con `null`) la renovación
+   * automática. Se guardan en el estado del daemon y mandan sobre `NEXO_MEMORY*` en los siguientes arranques.
+   * El resumidor y los umbrales siguen siendo de entorno.
+   */
+  'memory.configure': {
+    params: z
+      .strictObject({
+        enabled: z.boolean().optional(),
+        renewAtTokens: RenewTokens.nullable().optional(),
+      })
+      .refine((p) => p.enabled !== undefined || p.renewAtTokens !== undefined, {
+        message: 'indica enabled o renewAtTokens',
+      }),
+    result: z.strictObject({ enabled: z.boolean(), renewAtTokens: RenewTokens.optional() }),
   },
   /** Reflexión (solo en la primera página) y observaciones del proyecto con `seq >= fromSeq`. */
   'memory.list': {

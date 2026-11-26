@@ -90,6 +90,13 @@ export type MemoryServiceDeps = {
   logger?: LoggerPort
   /** `false` (por omisión en el daemon): no escucha ni llama al resumidor; los métodos solo leen lo guardado. */
   enabled: boolean
+  /** Contexto estimado a partir del cual una sesión se renueva sola (F3.5.3); sin él, renovación automática apagada. */
+  renewAtTokens?: number
+  /**
+   * Guarda los ajustes de `memory.configure` (el daemon los persiste). Si lanza, no se aplican y el método falla.
+   * Sin él, los ajustes solo viven mientras viva el servicio.
+   */
+  onSettings?: (settings: { enabled: boolean; renewAtTokens: number | undefined }) => Promise<void>
   thresholds?: Partial<MemoryThresholds>
   config?: MemoryServiceConfig
 }
@@ -204,6 +211,9 @@ export class MemoryService {
   readonly #reflectCooldown = new Map<string, number>()
   readonly #roles = { observer: zeroTotals(), reflector: zeroTotals() }
   #off: Unsubscribe | undefined
+  #enabled: boolean
+  #renewAtTokens: number | undefined
+  #configuring: Promise<unknown> = Promise.resolve()
   #running = false
   #pausedUntil = 0
   #pausedReason: string | undefined
@@ -211,6 +221,8 @@ export class MemoryService {
 
   constructor(deps: MemoryServiceDeps) {
     this.#d = deps
+    this.#enabled = deps.enabled
+    this.#renewAtTokens = deps.renewAtTokens
     this.#thresholds = resolveThresholds(deps.thresholds ?? DEFAULT_MEMORY_THRESHOLDS)
     const c = deps.config ?? {}
     this.#retryDelays = c.retryDelaysMs ?? DEFAULT_RETRY_DELAYS_MS
@@ -228,11 +240,17 @@ export class MemoryService {
     'memory.list': (p) => this.list(p),
     'memory.search': (p) => this.search(p),
     'memory.recall': (p) => this.recall(p),
+    'memory.configure': (p) => this.configure(p),
+  }
+
+  /** Umbral de renovación automática vigente (`undefined` = apagada); lo consulta `AgentService`. */
+  renewAtTokens(): number | undefined {
+    return this.#enabled ? this.#renewAtTokens : undefined
   }
 
   /** Empieza a escuchar el bus (si la memoria está activada). Idempotente. */
   start(): void {
-    if (this.#running || !this.#d.enabled || this.#stopper.aborted) return
+    if (this.#running || !this.#enabled || this.#stopper.aborted) return
     this.#running = true
     this.#off = this.#d.bus.subscribe((event) => this.#onEvent(event))
     try {
@@ -247,6 +265,48 @@ export class MemoryService {
         () => {},
       ),
     )
+  }
+
+  /**
+   * Ajustes en caliente (`memory.configure`). Las llamadas se encolan (una a la vez); se guarda primero y se
+   * aplica después, así que un fallo al guardar no deja el servicio a medias. Al apagar, deja de escuchar el bus;
+   * una llamada ya en curso al resumidor termina sola (acotada por sus propios plazos).
+   */
+  configure(params: MethodParams<'memory.configure'>): Promise<MethodResult<'memory.configure'>> {
+    const run = this.#configuring.then(async () => {
+      const enabled = params.enabled ?? this.#enabled
+      const renew =
+        params.renewAtTokens === undefined
+          ? this.#renewAtTokens
+          : (params.renewAtTokens ?? undefined)
+      if (this.#d.onSettings !== undefined) {
+        try {
+          await this.#d.onSettings({ enabled, renewAtTokens: renew })
+        } catch (error) {
+          this.#d.logger?.error('memoria: no se pudieron guardar los ajustes', { error })
+          throw new DomainError('INTERNAL', 'no se pudieron guardar los ajustes de la memoria')
+        }
+      }
+      this.#renewAtTokens = renew
+      if (enabled !== this.#enabled) {
+        this.#enabled = enabled
+        if (enabled) this.start()
+        else this.#listenOff()
+      }
+      return {
+        enabled: this.#enabled,
+        ...(renew === undefined ? {} : { renewAtTokens: renew }),
+      }
+    })
+    this.#configuring = run.catch(() => undefined)
+    return run
+  }
+
+  #listenOff(): void {
+    this.#running = false
+    this.#off?.()
+    this.#off = undefined
+    this.#sessions.clear()
   }
 
   /** Hay trabajo de fondo en curso (comprobaciones, llamadas al resumidor, esperas de reintento). */
@@ -292,17 +352,18 @@ export class MemoryService {
       projectUsage = memory.usage
     }
     return {
-      enabled: this.#d.enabled,
+      enabled: this.#enabled,
       ...(summarizer === undefined ? {} : { summarizer: summarizer.slice(0, 256) }),
       thresholds: {
         observerBatchTokens: this.#thresholds.observerBatchTokens,
         reflectorTokens: this.#thresholds.reflectorTokens,
       },
-      ...(this.#d.enabled && pausedReason !== undefined ? { pausedReason } : {}),
+      ...(this.#enabled && pausedReason !== undefined ? { pausedReason } : {}),
       ...(project === undefined ? {} : { project }),
       usage: total,
       roles: { observer: { ...o }, reflector: { ...r } },
       ...(projectUsage === undefined ? {} : { projectUsage }),
+      ...(this.#renewAtTokens === undefined ? {} : { renewAtTokens: this.#renewAtTokens }),
     }
   }
 
@@ -381,7 +442,7 @@ export class MemoryService {
    * almacén falla: la memoria nunca impide abrir una sesión.
    */
   async newSession(cwd: string): Promise<string | null> {
-    if (!this.#d.enabled) return null
+    if (!this.#enabled) return null
     return this.#block(cwd, {})
   }
 
@@ -391,7 +452,7 @@ export class MemoryService {
     sessionId: AgentSessionId,
     blocks: readonly Block[],
   ): Promise<string | null> {
-    if (!this.#d.enabled) return null
+    if (!this.#enabled) return null
     const recentTurns = recentTurnsFromBlocks(blocks, this.#seedTurnTokens)
     return this.#block(cwd, { sessionId, recentTurns, extraTokens: this.#seedTurnTokens })
   }

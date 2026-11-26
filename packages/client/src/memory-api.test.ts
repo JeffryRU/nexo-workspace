@@ -14,12 +14,14 @@ describe('memoryApi', () => {
     await api.status({ cwd: '/x' })
     await api.list({ cwd: '/x', limit: 5 })
     await api.search({ cwd: '/x', query: 'pnpm' })
+    await api.configure({ enabled: true, renewAtTokens: null })
     await api.recall({ sessionId: 's1' as never, range: { from: 0, to: 2 } })
     expect(calls).toEqual([
       { method: 'memory.status', params: {} },
       { method: 'memory.status', params: { cwd: '/x' } },
       { method: 'memory.list', params: { cwd: '/x', limit: 5 } },
       { method: 'memory.search', params: { cwd: '/x', query: 'pnpm' } },
+      { method: 'memory.configure', params: { enabled: true, renewAtTokens: null } },
       { method: 'memory.recall', params: { sessionId: 's1', range: { from: 0, to: 2 } } },
     ])
   })

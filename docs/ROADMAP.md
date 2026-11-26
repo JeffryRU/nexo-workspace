@@ -65,13 +65,21 @@ notificación del sistema si la ventana no tiene el foco, y las mediciones de re
   (`packages/adapters/summarizer-ollama`) y «vía proveedor» (`ProviderSummarizer`: un turno de solo texto sin abrir pestaña), prompts en
   español con escape y sin copiar órdenes, `NEXO_MEMORY`, `NEXO_MEMORY_SUMMARIZER`, `NEXO_MEMORY_OBSERVER_TOKENS` y
   `NEXO_MEMORY_REFLECTOR_TOKENS` (apagada por omisión), contabilidad por papel, métodos `memory.*` en el registro, evento
-  `memory.updated` y `nexo memory status|ls|search|recall`. F3.5.4 sigue abierta; el ADR 0007 queda «propuesta» hasta F3.5.4.
+  `memory.updated` y `nexo memory status|ls|search|recall`.
 - **F3.5.3 Inyección por proveedor y renovación** (hecho): puerto `MemoryInjectionPort` con una implementación por proveedor (Claude:
   `systemPrompt.append` y hook `SessionStart` de origen `compact`; Codex: `developerInstructions` del hilo; ACP: primer bloque del primer
   `session/prompt`; Antigravity: prefijo del primer mensaje; Ollama: mensaje de sistema), con su falso y su suite de conformidad. Una
   sesión nueva en una carpeta con la memoria encendida recibe reflexiones y observaciones dentro del bloque delimitado y escapado; con
   la memoria apagada no cambia nada. Renovación opcional (`NEXO_MEMORY_RENEW_TOKENS`, apagada por omisión): sesión nueva sembrada con
   reflexiones, observaciones y los últimos turnos tal cual, en la misma pestaña. Pruebas adversariales, de propiedades y de integración.
+- **F3.5.4 Interfaz y cierre** (hecho): botón y ventana de memoria (interruptor y renovación automática en caliente con
+  `memory.configure`, guardados en el estado del daemon; costo del Observador y del Reflector; reflexión y observaciones de la carpeta con
+  texto original y salto al bloque de origen, refrescadas con `memory.updated`), indicador en el panel de las sesiones que recibieron
+  memoria (`AgentSession.memory`), renovación manual (`agent.renew`, botón y `nexo agent renew`), `nexo memory config`, E2E con dos
+  proveedores falsos y el Observador falso, capturas `f3-5-*` y ADR 0007 «aceptada». `memory.search` y `memory.recall` por MCP quedan
+  para F5 (cuando exista `apps/mcp`).
+
+**F3.5 completa.**
 
 - Observador y Reflector en el daemon sobre la transcripción normalizada (`SummarizerPort`; Ollama,
   Haiku o Gemini Flash), con alcance por sesión y por proyecto.

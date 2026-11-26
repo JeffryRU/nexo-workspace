@@ -42,6 +42,7 @@ import { UuidIds } from './adapters/uuid-ids.ts'
 import { watchAgentPanes } from './agent-warmup.ts'
 import { generateToken } from './auth.ts'
 import type { AgentProviderName, MemorySummarizerSpec } from './config.ts'
+import { loadMemorySettings, saveMemorySettings } from './memory-settings.ts'
 import { probeDaemon } from './probe.ts'
 import { createRedactor } from './redact.ts'
 import { DaemonServer, type ServerOptions, type ServerStats } from './server.ts'
@@ -129,7 +130,8 @@ export type DaemonOptions = {
     config?: MemoryServiceConfig
     /**
      * Renovación de sesión (F3.5.3): con la memoria encendida, al terminar un turno cuyo contexto estimado pasa de
-     * estos tokens, la sesión se reabre sembrada con la memoria y los últimos turnos. Apagada por omisión.
+     * estos tokens, la sesión se reabre sembrada con la memoria y los últimos turnos. Apagada por omisión. Los ajustes
+     * guardados con `memory.configure` (F3.5.4) mandan sobre `enabled` y esto.
      */
     renewAtTokens?: number
   }
@@ -243,13 +245,9 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
           memory: {
             newSession: (cwd) => memory.newSession(cwd),
             renewal: (cwd, id, blocks) => memory.renewal(cwd, id, blocks),
+            renewAtTokens: () => memory.renewAtTokens(),
           },
-          config: {
-            ...options.agents,
-            ...(options.memory?.renewAtTokens === undefined || !(options.memory.enabled ?? false)
-              ? {}
-              : { renewAtTokens: options.memory.renewAtTokens }),
-          },
+          config: { ...options.agents },
         })
   const memory = await createMemory()
   const stopWarmup = watchAgentPanes({ bus, panes: layout, provider: providers[0], logger })
@@ -268,7 +266,13 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
 
   async function createMemory(): Promise<MemoryService> {
     const m = options.memory ?? {}
-    const enabled = m.enabled ?? false
+    // Lo guardado desde la interfaz (`memory.configure`) manda sobre el entorno.
+    const saved = await loadMemorySettings(paths.dir, (reason) =>
+      logger.warn('ajustes de memoria guardados ignorados', { reason }),
+    )
+    const enabled = saved?.enabled ?? m.enabled ?? false
+    const renewAtTokens =
+      saved?.renewAtTokens === undefined ? m.renewAtTokens : (saved.renewAtTokens ?? undefined)
     const spec = m.summarizer
     let summarizer: SummarizerPort | undefined
     let summarizerLabel: string | undefined
@@ -316,6 +320,8 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       clock,
       logger,
       enabled,
+      ...(renewAtTokens === undefined ? {} : { renewAtTokens }),
+      onSettings: (settings) => saveMemorySettings(paths.dir, settings),
       ...(summarizer === undefined ? {} : { summarizer }),
       ...(summarizerLabel === undefined ? {} : { summarizerLabel }),
       ...(pausedReason === undefined ? {} : { pausedReason }),

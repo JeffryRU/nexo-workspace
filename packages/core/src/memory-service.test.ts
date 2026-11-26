@@ -690,9 +690,10 @@ describe('MemoryService: contabilidad y métodos', () => {
     }
   })
 
-  it('el despachador recibe los cuatro manejadores', () => {
+  it('el despachador recibe los cinco manejadores', () => {
     const rig = createMemoryRig()
     expect(Object.keys(rig.service.handlers).sort()).toEqual([
+      'memory.configure',
       'memory.list',
       'memory.recall',
       'memory.search',
@@ -702,5 +703,77 @@ describe('MemoryService: contabilidad y métodos', () => {
 
   it('usa la petición de ejemplo del testkit sin tocar nada (sanidad del rig)', () => {
     expect(sampleObserveRequest().kind).toBe('observe')
+  })
+})
+
+describe('MemoryService: ajustes en caliente (memory.configure)', () => {
+  it('encender empieza a observar sin reiniciar y apagar deja de escuchar', async () => {
+    const rig = createMemoryRig({ enabled: false })
+    expect((await rig.service.status({})).enabled).toBe(false)
+    const s = rig.open()
+    for (let i = 0; i < 4; i++) rig.turn(s, 400)
+    await rig.drain()
+    expect(rig.fake?.requests).toHaveLength(0)
+    expect(await rig.service.configure({ enabled: true })).toEqual({ enabled: true })
+    expect(await rig.service.newSession('/work/app')).toBeNull() // aún no hay nada guardado
+    for (let i = 0; i < 4; i++) rig.turn(s, 400)
+    rig.idle(s)
+    await rig.drain()
+    expect(rig.fake?.requests).toHaveLength(1)
+    expect(await rig.service.configure({ enabled: false })).toEqual({ enabled: false })
+    const before = rig.fake?.requests.length ?? 0
+    for (let i = 0; i < 4; i++) rig.turn(s, 400)
+    rig.idle(s)
+    await rig.drain()
+    expect(rig.fake?.requests).toHaveLength(before)
+    expect(await rig.service.newSession('/work/app')).toBeNull()
+    // lo guardado se sigue leyendo con la memoria apagada
+    expect((await rig.service.list({ cwd: '/work/app' })).observations.length).toBeGreaterThan(0)
+  })
+
+  it('la renovación automática se fija, se quita con null y solo vale con la memoria encendida', async () => {
+    const rig = createMemoryRig({ enabled: false, renewAtTokens: 30_000 })
+    expect(rig.service.renewAtTokens()).toBeUndefined()
+    await rig.service.configure({ enabled: true })
+    expect(rig.service.renewAtTokens()).toBe(30_000)
+    expect(await rig.service.configure({ renewAtTokens: 80_000 })).toEqual({
+      enabled: true,
+      renewAtTokens: 80_000,
+    })
+    expect((await rig.service.status({})).renewAtTokens).toBe(80_000)
+    expect(await rig.service.configure({ renewAtTokens: null })).toEqual({ enabled: true })
+    expect(rig.service.renewAtTokens()).toBeUndefined()
+    expect((await rig.service.status({})).renewAtTokens).toBeUndefined()
+  })
+
+  it('guarda primero: si no se puede guardar, falla y no cambia nada', async () => {
+    const saved: unknown[] = []
+    let fail = true
+    const rig = createMemoryRig({
+      enabled: false,
+      onSettings: async (s) => {
+        if (fail) throw new Error('disco lleno')
+        saved.push(s)
+      },
+    })
+    await expect(rig.service.configure({ enabled: true })).rejects.toMatchObject({
+      code: 'INTERNAL',
+    })
+    expect((await rig.service.status({})).enabled).toBe(false)
+    fail = false
+    await rig.service.configure({ enabled: true, renewAtTokens: 50_000 })
+    expect(saved).toEqual([{ enabled: true, renewAtTokens: 50_000 }])
+  })
+
+  it('varias órdenes seguidas se aplican en orden', async () => {
+    const rig = createMemoryRig({ enabled: false })
+    const results = await Promise.all([
+      rig.service.configure({ enabled: true }),
+      rig.service.configure({ enabled: false }),
+      rig.service.configure({ enabled: true, renewAtTokens: 10_000 }),
+    ])
+    expect(results.map((r) => r.enabled)).toEqual([true, false, true])
+    expect((await rig.service.status({})).renewAtTokens).toBe(10_000)
+    expect(rig.service.handlers['memory.configure']).toBeTypeOf('function')
   })
 })

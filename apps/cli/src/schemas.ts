@@ -137,7 +137,7 @@ export const AgentSendOutput = z.strictObject({
 
 export const AgentActionOutput = z.strictObject({
   ok: z.literal(true),
-  action: z.enum(['interrupt', 'close', 'respond']),
+  action: z.enum(['interrupt', 'close', 'respond', 'renew']),
   sessionId: Id,
   blockId: Id.optional(),
 })
@@ -159,6 +159,7 @@ export const AgentAttachLine = z.discriminatedUnion('event', [
 // ---- memoria (F3.5.2): la salida es la de los métodos `memory.*` ----
 
 export const MemoryStatusOutput = memoryMethods['memory.status'].result
+export const MemoryConfigureOutput = memoryMethods['memory.configure'].result
 export const MemoryListOutput = memoryMethods['memory.list'].result
 export const MemorySearchOutput = memoryMethods['memory.search'].result
 export const MemoryRecallOutput = z.strictObject({

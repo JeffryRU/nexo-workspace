@@ -15,6 +15,7 @@ import type {
 } from '@nexo/contracts'
 import { AgentSessionId as AgentSessionIdSchema, BlockId } from '@nexo/contracts'
 import { type Accessor, createSignal, type Setter } from 'solid-js'
+import { locateBlock } from '../memory/view.ts'
 
 export type AgentClient = Pick<NexoClient, 'call' | 'on'>
 
@@ -36,6 +37,9 @@ export type CreateOptions = {
   permissionMode?: PermissionMode | undefined
   cwd?: string | undefined
 }
+
+/** Abrir la sesión nueva de un proveedor (Claude, Codex...) puede tardar más que una llamada normal. */
+const RENEW_TIMEOUT_MS = 120_000
 
 export type PaneDocState = 'none' | 'opening' | 'live' | 'failed'
 
@@ -385,6 +389,24 @@ export class AgentPaneModel {
     } finally {
       this.#busy.set(false)
     }
+  }
+
+  /** Renueva la sesión sembrándola con la memoria (`agent.renew`); `true` si el daemon la renovó. */
+  async renew(): Promise<boolean> {
+    const id = this.#sid.get()
+    if (id === undefined) return false
+    const r = await this.#run((api) =>
+      api.renew({ sessionId: AgentSessionIdSchema.parse(id) }, { timeoutMs: RENEW_TIMEOUT_MS }),
+    )
+    return r !== undefined
+  }
+
+  /** Posición en `ids()` del bloque de origen de una observación (el primero del rango o el siguiente). */
+  positionOfBlockRange(range: { from: number; to: number }): number | undefined {
+    return locateBlock(
+      this.#ids.get().map((id) => this.#blockSignal(id).get()?.index),
+      range,
+    )
   }
 
   async interrupt(): Promise<void> {

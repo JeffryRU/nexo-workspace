@@ -11,6 +11,7 @@ export function memoryApi(client: Caller) {
       client.call('memory.list', p, o),
     search: (p: MethodParams<'memory.search'>, o?: CallOptions<MethodResult<'memory.search'>>) =>
       client.call('memory.search', p, o),
+    configure: (p: MethodParams<'memory.configure'>) => client.call('memory.configure', p),
     recall: (p: MethodParams<'memory.recall'>, o?: CallOptions<MethodResult<'memory.recall'>>) =>
       client.call('memory.recall', p, o),
   }

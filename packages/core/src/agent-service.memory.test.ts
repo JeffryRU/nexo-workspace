@@ -222,3 +222,96 @@ describe('AgentService: renovación de sesión', () => {
     expect(t.provider.sessions.every((s) => s.closed)).toBe(true)
   })
 })
+
+describe('AgentService: indicador de memoria y renovación manual (F3.5.4)', () => {
+  const boot = async (over: Partial<AgentMemorySource> = {}, injection = true) => {
+    const s = source(over)
+    const t = await bootAgentHarness({
+      provider: injection ? { memoryInjection: new FakeMemoryInjection() } : {},
+      memory: s.src,
+    })
+    t.provider.script = () => textTurn([big(50)])
+    return { t, ...s }
+  }
+
+  it('la sesión muestra la memoria recibida solo si hubo siembra', async () => {
+    const a = await boot()
+    const { session } = await a.t.create()
+    expect(session.memory).toMatchObject({ renewals: 0, renewing: false })
+    expect(session.memory?.seedTokens).toBeGreaterThan(0)
+    const b = await boot({ newSession: async () => null })
+    expect((await b.t.create()).session.memory).toBeUndefined()
+    const c = await boot({}, false)
+    expect((await c.t.create()).session.memory).toBeUndefined()
+  })
+
+  it('agent.renew renueva sin umbral: misma sesión, cuenta la renovación y publica el estado', async () => {
+    const { t, calls } = await boot()
+    const { session, fake } = await t.create()
+    await t.service.send({ sessionId: session.id, text: 'hola' })
+    t.settle()
+    await flush()
+    const events: unknown[] = []
+    t.bus.subscribe((e) => {
+      if (e.event === 'agent.session' && 'session' in e.data) events.push(e.data.session.memory)
+    })
+    const { session: renewed } = await t.service.renew({ sessionId: session.id })
+    expect(renewed.id).toBe(session.id)
+    expect(renewed.memory?.renewals).toBe(1)
+    expect(calls.renewal).toHaveLength(1)
+    expect(t.provider.opened).toHaveLength(2)
+    expect(fake.closed).toBe(true)
+    // «renovando» y luego el resultado
+    expect(events.some((m) => (m as { renewing: boolean }).renewing)).toBe(true)
+    expect(t.service.list().sessions[0]?.memory?.renewing).toBe(false)
+  })
+
+  it('agent.renew rechaza: turno en curso, sesión ajena, proveedor sin memoria y nada que sembrar', async () => {
+    const { t } = await boot()
+    const { session } = await t.create()
+    await t.service.send({ sessionId: session.id, text: 'hola' })
+    await expect(t.service.renew({ sessionId: session.id })).rejects.toMatchObject({
+      code: 'CONFLICT',
+    })
+    await expect(
+      t.service.renew({ sessionId: 'agent-session-99999999' as AgentSessionId }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    const plain = await boot({}, false)
+    const p = await plain.t.create()
+    await expect(plain.t.service.renew({ sessionId: p.session.id })).rejects.toMatchObject({
+      code: 'PROVIDER_UNAVAILABLE',
+    })
+    const empty = await boot({ renewal: async () => null })
+    const e = await empty.t.create()
+    await expect(empty.t.service.renew({ sessionId: e.session.id })).rejects.toMatchObject({
+      code: 'CONFLICT',
+    })
+    // y una renovación manual fallida no apaga la automática de esa sesión
+    expect(empty.t.provider.opened).toHaveLength(1)
+  })
+
+  it('un fallo al abrir la sesión nueva deja la actual y responde con error', async () => {
+    const { t } = await boot()
+    const { session, fake } = await t.create()
+    t.provider.available = false
+    await expect(t.service.renew({ sessionId: session.id })).rejects.toBeDefined()
+    expect(fake.closed).toBe(false)
+    expect(t.service.list().sessions[0]?.memory?.renewing).toBe(false)
+  })
+
+  it('el umbral automático se lee en caliente de la fuente', async () => {
+    let limit: number | undefined
+    const { t, calls } = await boot({ renewAtTokens: () => limit })
+    t.provider.script = () => textTurn([big(300)])
+    const { session } = await t.create()
+    await t.service.send({ sessionId: session.id, text: 'a' })
+    t.settle()
+    await flush()
+    expect(calls.renewal).toHaveLength(0)
+    limit = 500
+    await t.service.send({ sessionId: session.id, text: 'b' })
+    t.settle()
+    await flush()
+    expect(calls.renewal).toHaveLength(1)
+  })
+})

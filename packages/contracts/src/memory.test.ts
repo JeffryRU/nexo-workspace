@@ -61,9 +61,20 @@ describe('contratos de memoria', () => {
     expect(Reflection.safeParse({ ...r, text: big }).success).toBe(false)
   })
 
+  it('memory.configure: enabled y/o renewAtTokens, con el rango de NEXO_MEMORY_RENEW_TOKENS', () => {
+    const p = memoryMethods['memory.configure'].params
+    expect(p.safeParse({ enabled: true }).success).toBe(true)
+    expect(p.safeParse({ renewAtTokens: 10_000 }).success).toBe(true)
+    expect(p.safeParse({ renewAtTokens: null }).success).toBe(true)
+    expect(p.safeParse({ enabled: false, renewAtTokens: 5_000_000 }).success).toBe(true)
+    for (const bad of [{}, { renewAtTokens: 9_999 }, { renewAtTokens: 5_000_001 }, { enabled: 1 }])
+      expect(p.safeParse(bad).success, JSON.stringify(bad)).toBe(false)
+  })
+
   it('métodos memory.*: parámetros estrictos y con tope', () => {
     expect(MEMORY_METHOD_NAMES).toEqual([
       'memory.status',
+      'memory.configure',
       'memory.list',
       'memory.search',
       'memory.recall',

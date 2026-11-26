@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/solid-query'
 import { createEffect, createMemo, Show, untrack } from 'solid-js'
 import { useModel } from '../app/model.tsx'
 import { es, format } from '../i18n/es.ts'
+import { MemoryBar } from '../memory/MemoryBar.tsx'
 import { AgentModelContext, BlockView, estimateHeight } from './blocks.tsx'
 import { Composer } from './Composer.tsx'
 import { VirtualList, type VirtualListApi } from './VirtualList.tsx'
@@ -52,6 +53,18 @@ export function AgentPanel(props: {
     providers: providers.data ?? [],
     retry: () => void providers.refetch(),
   }))
+
+  // Salto al bloque de origen de una observación (lo pide la vista de memoria).
+  createEffect(() => {
+    const jump = app.ui.jump()
+    const ids = agent.ids()
+    if (jump === undefined || agent.sessionId !== jump.sessionId || ids.length === 0) return
+    const at = untrack(() => agent.positionOfBlockRange(jump))
+    if (at === undefined) return
+    app.ui.setJump(undefined)
+    // Tras revelar el panel (que puede estar oculto) la lista ya tiene su altura.
+    queueMicrotask(() => list?.scrollToIndex(at))
+  })
 
   const pending = () => agent.pendingIds()
   const hasSession = () => props.sessionId !== undefined || agent.sessionId !== undefined
@@ -137,6 +150,7 @@ export function AgentPanel(props: {
             <kbd>Alt+Shift+↓</kbd>
           </div>
         </Show>
+        <MemoryBar model={agent} />
         <Composer model={agent} providers={providersState()} defaultCwd={props.defaultCwd} />
       </div>
     </AgentModelContext.Provider>

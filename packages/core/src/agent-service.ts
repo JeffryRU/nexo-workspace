@@ -63,6 +63,8 @@ export type AgentMemorySource = {
   newSession(cwd: string): Promise<string | null>
   /** Bloque para renovar una sesión: memoria del proyecto más sus últimos turnos tal cual. */
   renewal(cwd: string, sessionId: AgentSessionId, blocks: readonly Block[]): Promise<string | null>
+  /** Umbral vigente de renovación automática (puede cambiar en caliente); sin él vale `config.renewAtTokens`. */
+  renewAtTokens?(): number | undefined
 }
 
 export type AgentServiceDeps = {
@@ -136,6 +138,9 @@ type Entry = {
   /** Tokens de la siembra con la que se abrió la sesión actual del proveedor. */
   seedTokens: number
   renewing: boolean
+  /** Se inyectó memoria al abrir la sesión (o al renovarla). */
+  seeded: boolean
+  renewals: number
   /** La renovación falló o no había nada que sembrar: no se reintenta. */
   renewOff: boolean
 }
@@ -267,7 +272,7 @@ export class AgentService {
   readonly #blockLimit: number
   readonly #maxInvalid: number
   readonly #interruptTimeoutMs: number
-  readonly #renewAt: number
+  readonly #renewAtConfig: number
 
   constructor(deps: AgentServiceDeps) {
     this.#deps = deps
@@ -288,7 +293,7 @@ export class AgentService {
     this.#blockLimit = Math.max(1024, maxMessage - ENVELOPE_MARGIN)
     this.#maxInvalid = c.maxConsecutiveInvalid ?? DEFAULT_MAX_CONSECUTIVE_INVALID
     this.#interruptTimeoutMs = c.interruptTimeoutMs ?? DEFAULT_INTERRUPT_TIMEOUT_MS
-    this.#renewAt = c.renewAtTokens !== undefined && c.renewAtTokens > 0 ? c.renewAtTokens : 0
+    this.#renewAtConfig = c.renewAtTokens !== undefined && c.renewAtTokens > 0 ? c.renewAtTokens : 0
   }
 
   /** Los manejadores de `agent.*` para `createDispatcher({ agents })`. */
@@ -301,6 +306,7 @@ export class AgentService {
     'agent.list': () => this.list(),
     'agent.snapshot': (p) => this.snapshot(p),
     'agent.close': (p) => this.close(p),
+    'agent.renew': (p) => this.renew(p),
   }
 
   /** Contadores de la sesión (eventos inválidos, bloques y deltas descartados); `undefined` si no existe. */
@@ -420,6 +426,8 @@ export class AgentService {
       renewBase: -1,
       seedTokens: memoryText === undefined ? 0 : estimateTokens(memoryText),
       renewing: false,
+      seeded: memoryText !== undefined,
+      renewals: 0,
       renewOff: false,
     }
     this.#sessions.set(id, entry)
@@ -605,6 +613,9 @@ export class AgentService {
       status: e.status,
       turn: e.turn,
       blockCount: e.blocks.length,
+      ...(e.seeded || e.renewals > 0 || e.renewing
+        ? { memory: { seedTokens: e.seedTokens, renewals: e.renewals, renewing: e.renewing } }
+        : {}),
       createdAt: e.createdAt,
       updatedAt: e.updatedAt,
     } as AgentSession
@@ -1081,24 +1092,67 @@ export class AgentService {
     return e === undefined ? undefined : e.seedTokens + blocksContextTokens(e.blocks, e.renewBase)
   }
 
+  #renewLimit(): number {
+    const source = this.#deps.memory
+    const live = source?.renewAtTokens === undefined ? this.#renewAtConfig : source.renewAtTokens()
+    return live !== undefined && live > 0 ? live : 0
+  }
+
+  /**
+   * Renovación manual (`agent.renew`): la misma que la automática, a petición y sin esperar al umbral. Solo con la
+   * memoria encendida (sin ella no hay nada que sembrar) y entre turnos.
+   */
+  async renew(params: MethodParams<'agent.renew'>): Promise<MethodResult<'agent.renew'>> {
+    const e = this.#get(params.sessionId)
+    if (e.dead || e.closing) throw new DomainError('CONFLICT', 'la sesión está cerrada o en error')
+    if (e.active) throw new DomainError('CONFLICT', 'hay un turno en curso')
+    if (e.renewing) throw new DomainError('CONFLICT', 'la sesión ya se está renovando')
+    if (e.status === 'needs-input')
+      throw new DomainError('CONFLICT', 'la sesión espera una respuesta')
+    if (
+      this.#deps.memory === undefined ||
+      this.#providers.get(e.providerId)?.memoryInjection === undefined
+    ) {
+      throw new DomainError('PROVIDER_UNAVAILABLE', 'el proveedor no admite memoria')
+    }
+    e.renewing = true
+    this.#publishSession(e)
+    let done: boolean
+    try {
+      done = await this.#renew(e, false)
+    } catch (error) {
+      throw mapProviderError(error)
+    } finally {
+      e.renewing = false
+      this.#publishSession(e)
+    }
+    if (!done) {
+      throw new DomainError('CONFLICT', 'no hay memoria que sembrar (¿está apagada o vacía?)')
+    }
+    return { session: this.#view(e) }
+  }
+
   #maybeRenew(e: Entry): void {
-    if (this.#renewAt === 0 || e.renewing || e.renewOff || e.status === 'error') return
+    const renewAt = this.#renewLimit()
+    if (renewAt === 0 || e.renewing || e.renewOff || e.status === 'error') return
     if (
       this.#deps.memory === undefined ||
       this.#providers.get(e.providerId)?.memoryInjection === undefined
     )
       return
     // Si la siembra ya pesa casi como el umbral, renovar en cada turno no serviría de nada.
-    const limit = Math.max(this.#renewAt, e.seedTokens * 2)
+    const limit = Math.max(renewAt, e.seedTokens * 2)
     if ((this.contextTokens(e.id) ?? 0) < limit) return
     e.renewing = true
-    void this.#renew(e)
+    this.#publishSession(e)
+    void this.#renew(e, true)
       .catch((error: unknown) => {
         e.renewOff = true
         this.#deps.logger?.warn('no se pudo renovar la sesión; sigue la actual', { error })
       })
       .finally(() => {
         e.renewing = false
+        this.#publishSession(e)
       })
   }
 
@@ -1107,15 +1161,15 @@ export class AgentService {
    * documento, el id de sesión y el panel no cambian (se ve como la misma pestaña). Si algo falla, la sesión
    * actual queda como estaba.
    */
-  async #renew(e: Entry): Promise<void> {
+  async #renew(e: Entry, auto: boolean): Promise<boolean> {
     const port = this.#providers.get(e.providerId)
     const injection = port?.memoryInjection
     const source = this.#deps.memory
-    if (port === undefined || injection === undefined || source === undefined) return
+    if (port === undefined || injection === undefined || source === undefined) return false
     const block = await source.renewal(e.cwd, e.id, e.blocks)
     if (block === null) {
-      e.renewOff = true
-      return
+      if (auto) e.renewOff = true
+      return false
     }
     const prepared = injection.prepare(block)
     const next = await port.open({
@@ -1127,7 +1181,7 @@ export class AgentService {
     })
     if (e.dead || e.closing || e.active) {
       await next.close().catch(() => undefined)
-      return
+      return false
     }
     const old = e.provider
     e.offEvents?.()
@@ -1138,11 +1192,14 @@ export class AgentService {
     else delete e.providerSessionId
     e.renewBase = e.blocks.reduce((max, b) => Math.max(max, b.index), -1)
     e.seedTokens = estimateTokens(prepared)
+    e.seeded = true
+    e.renewals++
     e.updatedAt = this.#deps.clock.now()
     this.#publishSession(e)
     await old.close().catch((error: unknown) => {
       this.#deps.logger?.warn('no se pudo cerrar la sesión anterior del proveedor', { error })
     })
+    return true
   }
 }
 

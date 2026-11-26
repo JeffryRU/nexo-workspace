@@ -67,3 +67,39 @@ describe('adversarial: memoria', () => {
     expect(p.safeParse({ cwd: '', query: 'x' }).success).toBe(false)
   })
 })
+
+describe('memory.configure y agent.renew: entradas hostiles', () => {
+  const configure = memoryMethods['memory.configure'].params
+  it('rechaza claves de más, tipos cambiados, números raros y prototipos', () => {
+    const hostile: unknown[] = [
+      null,
+      [],
+      'on',
+      { enabled: 'true' },
+      { enabled: true, extra: 1 },
+      { renewAtTokens: '50000' },
+      { renewAtTokens: 50_000.5 },
+      { renewAtTokens: Number.NaN },
+      { renewAtTokens: Number.POSITIVE_INFINITY },
+      { renewAtTokens: -1 },
+      { renewAtTokens: 1e21 },
+      { renewAtTokens: [50_000] },
+      JSON.parse('{"__proto__":{"enabled":true},"enabled":true}'),
+      JSON.parse('{"constructor":{"prototype":{}},"enabled":true}'),
+    ]
+    for (const h of hostile) expect(configure.safeParse(h).success, JSON.stringify(h)).toBe(false)
+  })
+  it('agent.renew exige un id de sesión válido y nada más', async () => {
+    const { methods } = await import('./methods.ts')
+    const p = methods['agent.renew'].params
+    expect(p.safeParse({ sessionId: 'agent-session-00000001' }).success).toBe(true)
+    for (const h of [
+      {},
+      { sessionId: '' },
+      { sessionId: 'x'.repeat(500) },
+      { sessionId: 1 },
+      { sessionId: 'agent-session-00000001', a: 1 },
+    ])
+      expect(p.safeParse(h).success, JSON.stringify(h)).toBe(false)
+  })
+})

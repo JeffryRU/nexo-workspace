@@ -195,7 +195,7 @@ decidió, qué falló) y las condensa cuando crecen; así lo que hizo un agente 
 [ADR 0007](docs/adr/0007-memoria-observacional.md). Trabaja en segundo plano y nunca frena las sesiones. Nada sale de tu máquina salvo
 hacia el modelo que elijas (con Ollama no sale nada) y Nexo no lee tus credenciales.
 
-Se activa en el **daemon** con variables de entorno (la memoria viene apagada: sin `NEXO_MEMORY=on` no pasa nada):
+La memoria **viene apagada**. Se enciende desde la interfaz (botón «Memoria» de la barra de estado; el ajuste se guarda en el estado del daemon y manda sobre el entorno) o con `nexo memory config --on`, y el modelo que resume se elige al arrancar el daemon con variables de entorno:
 
 ```
 # Con un modelo local de Ollama (nada sale de tu máquina):
@@ -219,6 +219,7 @@ motivo a la vista y se retoma sola; no es un error. Para verla desde la terminal
 
 - `nexo memory status`: si está activada, qué resumidor usa, el motivo de una pausa y cuánto ha gastado (llamadas, tokens y costo del
   Observador y del Reflector).
+- `nexo memory config [--on|--off] [--renew-at N|off]`: enciende o apaga la memoria en caliente y fija la renovación automática.
 - `nexo memory ls`: la reflexión y las observaciones de la carpeta actual (o `--cwd`), con su prioridad y el rango de bloques de origen.
 - `nexo memory search <consulta>`: búsqueda por términos.
 - `nexo memory recall <sesión> <rango>`: el texto original detrás de una observación (`5-9`), mientras la sesión siga abierta.
@@ -226,8 +227,19 @@ motivo a la vista y se retoma sola; no es un error. Para verla desde la terminal
 Las observaciones se guardan en el directorio de estado (`memory/`). **Al abrir una sesión nueva** en una carpeta con memoria, el agente
 recibe las reflexiones y observaciones del proyecto dentro de un bloque `<nexo-memory>` (como prompt de sistema en Claude y Ollama, como
 instrucciones del hilo en Codex, y como primer contexto o prefijo del primer mensaje en Gemini y Antigravity), escapado y marcado como
-datos, no como instrucciones; con la memoria apagada no cambia nada. Con `NEXO_MEMORY_RENEW_TOKENS` la sesión se renueva sola al
-crecer el contexto (pierdes la caché de prompts del CLI). La interfaz llega en F3.5.4 ([hoja de ruta](docs/ROADMAP.md)). Una prueba opcional con Ollama real (usa tu máquina):
+datos, no como instrucciones; con la memoria apagada no cambia nada. Con `NEXO_MEMORY_RENEW_TOKENS` (o el selector de la ventana) la sesión se renueva sola al
+crecer el contexto (pierdes la caché de prompts del CLI), y con el botón «Renovar sesión» (o `nexo agent renew`) la renuevas a mano.
+
+**Interfaz.** La ventana «Memoria» tiene el interruptor y la renovación automática, el costo del Observador y del Reflector, y la
+reflexión y las observaciones de la carpeta, cada una con su prioridad, el texto original de donde salió (mientras la sesión siga
+abierta) y un salto a su bloque. Una sesión que recibió memoria lo indica en su panel. Todo el texto de la memoria se muestra como
+texto plano: nada de lo que haya dentro se interpreta ni se ejecuta. `memory.search` y `memory.recall` por MCP llegan con F5.
+
+![Ventana de memoria con las observaciones y el costo](docs/capturas/f3-5-observaciones.png)
+
+![Una sesión de otro proveedor que recibió la memoria](docs/capturas/f3-5-sesion.png)
+
+Una prueba opcional con Ollama real (usa tu máquina):
 `NEXO_LIVE_MEMORY_OLLAMA=1 pnpm --filter @nexo/adapter-summarizer-ollama test:live`; con un proveedor real consume tu cuota:
 `NEXO_LIVE_MEMORY_PROVIDER=claude pnpm --filter @nexo/daemon test:live`.
 

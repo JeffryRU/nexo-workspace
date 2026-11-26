@@ -24,6 +24,8 @@ if (process.argv[2] !== 'app-server') {
 
 const threadId = randomUUID()
 let turnCount = 0
+// `developerInstructions` de thread/start (la memoria inyectada); lo devuelve el turno `memoria`.
+let instructions = ''
 let current // { id, mode, interrupted, resolveInterrupt }
 let serverIds = 0
 const waiting = new Map() // id de solicitud al cliente -> resolve
@@ -105,6 +107,15 @@ async function runTurn(turn, text) {
     case 'hang':
       item(turn, agentMessage('m1', ''), 'item/started')
       return
+    // Responde con la memoria que recibió el hilo (E2E de la memoria, F3.5.4).
+    case 'memoria': {
+      const reply = `Memoria: ${instructions === '' ? 'ninguna' : instructions}`
+      item(turn, agentMessage('m1', ''), 'item/started')
+      notify('item/agentMessage/delta', { ...base(turn), itemId: 'm1', delta: reply })
+      item(turn, agentMessage('m1', reply), 'item/completed')
+      done(turn)
+      return
+    }
     // Salida continua (para medir la interfaz con varios proveedores emitiendo a la vez).
     case 'stream': {
       item(turn, agentMessage('m1', ''), 'item/started')
@@ -528,6 +539,8 @@ function handle(msg) {
       return reply({ data: models, nextCursor: null })
     }
     case 'thread/start':
+      instructions =
+        typeof params?.developerInstructions === 'string' ? params.developerInstructions : ''
       return reply({
         thread: { id: threadId },
         model: 'gpt-fake',
