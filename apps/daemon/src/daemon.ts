@@ -1,6 +1,7 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { FsSandbox } from '@nexo/adapter-fs-sandbox'
 import {
   type AcpAgentConfig,
   createAcpProvider,
@@ -20,6 +21,8 @@ import {
   type AgentServiceConfig,
   createDispatcher,
   type EventBusPort,
+  FileService,
+  type FileSystemPort,
   LayoutService,
   type LoggerPort,
   MemoryService,
@@ -118,6 +121,8 @@ export type DaemonOptions = {
   /** URL base de Ollama (por omisión `http://127.0.0.1:11434`). */
   ollamaUrl?: string
   agents?: AgentServiceConfig
+  /** Puerto de archivos para `fs.*` (pruebas); por omisión, `FsSandbox` sobre las carpetas de los espacios abiertos. */
+  files?: FileSystemPort
   /**
    * Memoria observacional (F3.5.2). Apagada por omisión. `summarizer` es una elección de `NEXO_MEMORY_SUMMARIZER`
    * o un puerto ya construido (pruebas). Sin resumidor, o si no está disponible, la memoria queda en pausa con un
@@ -256,6 +261,13 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     terminals,
     ...(agentService === undefined ? {} : { agents: agentService }),
   })
+  // Raíces del sandbox de archivos: las carpetas de los espacios de trabajo abiertos, leídas en cada llamada.
+  const files = new FileService(
+    options.files ??
+      new FsSandbox({
+        roots: () => layout.snapshot().flatMap((w) => (w.cwd === undefined ? [] : [w.cwd])),
+      }),
+  )
   const identity = { version: DAEMON_VERSION, pid: process.pid, startedAt }
 
   const webRoot =
@@ -393,6 +405,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
         terminals,
         ...(agentService === undefined ? {} : { agents: agentService.handlers }),
         memory: memory.handlers,
+        files: files.handlers,
         snapshot: new SnapshotService({ layout, identity, currentSeq: hooks.currentSeq }),
         subscribe: hooks.subscribe,
         shutdown: () => {
