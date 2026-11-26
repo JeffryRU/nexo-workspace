@@ -21,6 +21,7 @@ async function main(): Promise<number> {
       dev: env.dev,
       logLevel: env.logLevel,
       agentProviders: env.agentProviders,
+      acpAgents: env.acpAgents,
       ...(env.claudeExecutable === undefined ? {} : { claudeExecutable: env.claudeExecutable }),
       ...(env.codexExecutable === undefined ? {} : { codexExecutable: env.codexExecutable }),
       ollamaUrl: env.ollamaUrl,

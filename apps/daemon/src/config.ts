@@ -1,3 +1,4 @@
+import { type AcpAgentConfig, effectiveAcpAgents, parseAcpAgents } from '@nexo/adapter-provider-acp'
 import { DEFAULT_OLLAMA_URL, parseOllamaUrl } from '@nexo/adapter-provider-ollama'
 import { z } from 'zod'
 
@@ -6,23 +7,40 @@ const bool = z
   .optional()
   .transform((v) => v === '1' || v === 'true')
 
-export const AGENT_PROVIDER_IDS = ['claude', 'codex', 'ollama', 'fake'] as const
-export type AgentProviderName = (typeof AGENT_PROVIDER_IDS)[number]
+/** Proveedores incluidos; además valen `gemini` y los ids declarados en `NEXO_ACP_AGENTS`. */
+export const BUILTIN_PROVIDER_IDS = ['claude', 'codex', 'ollama', 'fake'] as const
+/** Id de un proveedor registrable (un incluido o un agente ACP). */
+export type AgentProviderName = string
 
-const providerList = z
-  .string()
-  .transform((v) => v.split(',').map((p) => p.trim()))
-  .pipe(
-    z
-      .array(
-        z.enum(AGENT_PROVIDER_IDS, {
-          error: 'proveedor desconocido (valen: claude, codex, ollama, fake)',
-        }),
-      )
-      .min(1)
-      .max(AGENT_PROVIDER_IDS.length),
-  )
-  .refine((list) => new Set(list).size === list.length, 'proveedor repetido')
+const acpAgentsEnv = z.string().transform((v, ctx) => {
+  try {
+    return parseAcpAgents(v)
+  } catch (error) {
+    ctx.addIssue({
+      code: 'custom',
+      message: `NEXO_ACP_AGENTS inválido (${error instanceof Error ? error.message : 'no válido'})`,
+    })
+    return z.NEVER
+  }
+})
+
+/** Lista de `NEXO_AGENT_PROVIDERS`: sin repetidos y solo ids conocidos (`known`). */
+function providerList(known: readonly string[]) {
+  return z
+    .string()
+    .transform((v) => v.split(',').map((p) => p.trim()))
+    .pipe(
+      z
+        .array(
+          z.string().refine((id) => known.includes(id), {
+            error: `proveedor desconocido (valen: ${known.join(', ')})`,
+          }),
+        )
+        .min(1)
+        .max(known.length),
+    )
+    .refine((list) => new Set(list).size === list.length, 'proveedor repetido')
+}
 
 const ollamaUrl = z
   .string()
@@ -44,7 +62,8 @@ const EnvSchema = z.object({
   NEXO_DEV: bool,
   NEXO_STATE_DIR: z.string().min(1).optional(),
   NEXO_PTY_MODE: z.enum(['host', 'direct']).optional(),
-  NEXO_AGENT_PROVIDERS: providerList.optional(),
+  NEXO_AGENT_PROVIDERS: z.string().optional(),
+  NEXO_ACP_AGENTS: acpAgentsEnv.optional(),
   NEXO_CLAUDE_EXECUTABLE: z.string().min(1).max(4096).optional(),
   NEXO_CODEX_EXECUTABLE: z.string().min(1).max(4096).optional(),
   NEXO_OLLAMA_URL: ollamaUrl.default(DEFAULT_OLLAMA_URL),
@@ -65,6 +84,8 @@ export type DaemonEnv = {
   claudeExecutable: string | undefined
   /** Ruta del ejecutable de Codex (`codex`); por omisión se busca en el PATH. */
   codexExecutable: string | undefined
+  /** Agentes ACP efectivos: `gemini` por omisión más los declarados en `NEXO_ACP_AGENTS`. */
+  acpAgents: AcpAgentConfig[]
   /** URL base de la API de Ollama (`http://127.0.0.1:11434` por omisión). */
   ollamaUrl: string
   logLevel: 'debug' | 'info' | 'warn' | 'error'
@@ -83,6 +104,7 @@ export function parseEnv(env: Readonly<Record<string, string | undefined>>): Dae
     NEXO_CLAUDE_EXECUTABLE:
       env.NEXO_CLAUDE_EXECUTABLE === '' ? undefined : env.NEXO_CLAUDE_EXECUTABLE,
     NEXO_CODEX_EXECUTABLE: env.NEXO_CODEX_EXECUTABLE === '' ? undefined : env.NEXO_CODEX_EXECUTABLE,
+    NEXO_ACP_AGENTS: env.NEXO_ACP_AGENTS === '' ? undefined : env.NEXO_ACP_AGENTS,
     NEXO_OLLAMA_URL: env.NEXO_OLLAMA_URL === '' ? undefined : env.NEXO_OLLAMA_URL,
     NEXO_LOG_LEVEL: env.NEXO_LOG_LEVEL,
     NEXO_MAX_CONNECTIONS: env.NEXO_MAX_CONNECTIONS,
@@ -94,12 +116,25 @@ export function parseEnv(env: Readonly<Record<string, string | undefined>>): Dae
     throw new Error(`variable de entorno inválida ${name}: ${issue?.message ?? 'valor no válido'}`)
   }
   const d = r.data
+  const acpAgents = effectiveAcpAgents(d.NEXO_ACP_AGENTS ?? [])
+  const known = [...BUILTIN_PROVIDER_IDS, ...acpAgents.map((a) => a.id)]
+  let agentProviders: AgentProviderName[] = ['claude']
+  if (d.NEXO_AGENT_PROVIDERS !== undefined) {
+    const list = providerList(known).safeParse(d.NEXO_AGENT_PROVIDERS)
+    if (!list.success) {
+      throw new Error(
+        `variable de entorno inválida NEXO_AGENT_PROVIDERS: ${list.error.issues[0]?.message ?? 'valor no válido'}`,
+      )
+    }
+    agentProviders = list.data
+  }
   return {
     port: d.NEXO_PORT,
     dev: d.NEXO_DEV,
     stateDir: d.NEXO_STATE_DIR,
     ptyMode: d.NEXO_PTY_MODE,
-    agentProviders: d.NEXO_AGENT_PROVIDERS ?? ['claude'],
+    agentProviders,
+    acpAgents,
     claudeExecutable: d.NEXO_CLAUDE_EXECUTABLE,
     codexExecutable: d.NEXO_CODEX_EXECUTABLE,
     ollamaUrl: d.NEXO_OLLAMA_URL,
