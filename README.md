@@ -135,6 +135,32 @@ si solo hay el `codex.cmd` de npm, su `codex.js` con Node) sin pasar por un shel
 
 ![Aprobación de un comando de Codex en línea](docs/capturas/f3-2-aprobacion.png)
 
+**Usar Gemini u otro agente ACP.** Nexo habla el [Agent Client Protocol](https://agentclientprotocol.com) con cualquier agente que lo
+implemente; cada agente es un proveedor. Por omisión existe `gemini` (Gemini CLI: `npm i -g @google/gemini-cli`; Nexo lo lanza con
+`gemini --acp`). Inicia sesión **tú** en el agente (Nexo no hace login ni lee credenciales); sin el comando o sin sesión, el
+proveedor sale deshabilitado con su motivo:
+
+```
+export NEXO_AGENT_PROVIDERS=claude,gemini      # PowerShell: $env:NEXO_AGENT_PROVIDERS = 'claude,gemini'
+nexo agent new --provider gemini --cwd .
+```
+
+Para **declarar otro agente ACP** se usa `NEXO_ACP_AGENTS` (JSON: lista de `{ id, name, command, args?, env? }`; el `id` no puede ser
+`claude`, `codex`, `ollama` ni `fake`) y se añade su id a `NEXO_AGENT_PROVIDERS`:
+
+```
+export NEXO_ACP_AGENTS='[{"id":"mi-agente","name":"Mi agente","command":"mi-agente-cli","args":["--acp"]}]'
+export NEXO_AGENT_PROVIDERS=claude,gemini,mi-agente
+nexo agent new --provider mi-agente --cwd .
+```
+
+Declarar un agente con id `gemini` sustituye al de omisión (p. ej. para cambiar sus argumentos). Los modos de permiso, los modelos
+y la reanudación salen de lo que anuncie el agente (los modos `default`, `autoEdit`, `plan` y `yolo` de Gemini equivalen a `ask`,
+`accept-edits`, `plan` y `bypass`; tabla en [la arquitectura](docs/ARCHITECTURE.md)). Nexo no ofrece `fs` ni `terminal` al agente.
+Una prueba opcional con un agente real (usa tu cuenta y consume cuota): `NEXO_LIVE_ACP=1 pnpm --filter @nexo/adapter-provider-acp test:live`.
+
+![Plan de un agente ACP](docs/capturas/f3-3-plan.png)
+
 ## Estructura
 
 ```
