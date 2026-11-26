@@ -1,5 +1,6 @@
 export * from './agent.ts'
 export * from './file-system.ts'
+export * from './history.ts'
 export * from './memory-injection.ts'
 export * from './memory-store.ts'
 export * from './pty.ts'
