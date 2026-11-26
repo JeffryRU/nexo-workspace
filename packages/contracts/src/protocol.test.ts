@@ -105,6 +105,7 @@ describe('parseRequest', () => {
       'fs.read': { path: '/work/app/README.md', offset: 0, length: 1024, encoding: 'utf8' },
       'history.list': { provider: 'claude', cwd: '/work/app', limit: 20 },
       'history.read': { provider: 'claude', sessionId: 'abc-123', limit: 50 },
+      'limits.status': { provider: 'codex', refresh: true },
     }
     expect(Object.keys(samples).sort()).toEqual([...METHOD_NAMES].sort())
     for (const [method, params] of Object.entries(samples)) {
@@ -122,6 +123,7 @@ describe('parseRequest', () => {
         'agent.status',
         'client.resync',
         'layout.changed',
+        'limits.updated',
         'memory.updated',
         'pane.attention',
         'pane.title',

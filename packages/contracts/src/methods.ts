@@ -29,6 +29,7 @@ import { historyMethods } from './history.ts'
 import { LIMITS } from './limits.ts'
 import { memoryMethods } from './memory.ts'
 import { bodyText, boundedBytes, DisplayText, FORBIDDEN_KEYS } from './text.ts'
+import { limitsMethods } from './usage-limits.ts'
 
 const Empty = z.strictObject({})
 const Ok = z.strictObject({})
@@ -268,6 +269,7 @@ export const methods = {
   ...memoryMethods,
   ...fsMethods,
   ...historyMethods,
+  ...limitsMethods,
 } as const
 
 export type MethodName = keyof typeof methods
