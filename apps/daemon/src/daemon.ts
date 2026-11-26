@@ -36,6 +36,8 @@ import {
   type SummarizerPort,
   TerminalService,
   type TerminalServiceConfig,
+  type UsageLimitsConfig,
+  UsageLimitsService,
   WorkspaceService,
 } from '@nexo/core'
 import { MemoryEventBus } from './adapters/event-bus.ts'
@@ -125,6 +127,8 @@ export type DaemonOptions = {
   agents?: AgentServiceConfig
   /** Plazos y caché del historial de los proveedores (F4.3); por omisión los de `DEFAULT_HISTORY_CONFIG`. */
   history?: HistoryServiceConfig
+  /** Plazos, caché y contención de los límites de uso (F4.4); por omisión los de `DEFAULT_USAGE_LIMITS_CONFIG`. */
+  limits?: UsageLimitsConfig
   /** Puerto de archivos para `fs.*` (pruebas); por omisión, `FsSandbox` sobre las carpetas de los espacios abiertos. */
   files?: FileSystemPort
   /**
@@ -266,6 +270,16 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
           clock,
           logger,
           ...(options.history === undefined ? {} : { config: options.history }),
+        })
+  const limits =
+    providers.length === 0
+      ? undefined
+      : new UsageLimitsService({
+          providers,
+          bus,
+          clock,
+          logger,
+          ...(options.limits === undefined ? {} : { config: options.limits }),
         })
   const memory = await createMemory()
   const stopWarmup = watchAgentPanes({ bus, panes: layout, provider: providers[0], logger })
@@ -420,6 +434,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
         memory: memory.handlers,
         files: files.handlers,
         ...(history === undefined ? {} : { history: history.handlers }),
+        ...(limits === undefined ? {} : { limits: limits.handlers }),
         snapshot: new SnapshotService({ layout, identity, currentSeq: hooks.currentSeq }),
         subscribe: hooks.subscribe,
         shutdown: () => {
@@ -439,6 +454,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     stopped ??= (async () => {
       stopWarmup()
       history?.close()
+      limits?.close()
       terminals.shutdown()
       await memory
         .stop()
@@ -488,6 +504,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   } catch (error) {
     stopWarmup()
     history?.close()
+    limits?.close()
     terminals.shutdown()
     await memory.stop().catch(() => {})
     await agentService?.closeAll().catch(() => {})
