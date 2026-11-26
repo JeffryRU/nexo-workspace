@@ -1291,7 +1291,8 @@ las instrucciones con que se abrió el hilo), se renueva a mano y los ajustes so
 ## Archivos y visor (F4.1)
 
 `fs.stat` y `fs.read` dan acceso **de solo lectura** a archivos del disco, pensado para el visor lateral (F4.2: Markdown,
-imágenes, PDF y texto) y, si algún proveedor obliga a leer sus archivos de sesión, para el historial (F4.3, ADR 0008). Todo pasa
+imágenes, PDF y texto). El historial de los proveedores (F4.3) no lo usa: cada proveedor lista y lee sus sesiones con su propia API
+(ver «Historial de los proveedores (F4.3)»; no hizo falta el ADR 0008). Todo pasa
 por `FileSystemPort` (core) y su adaptador `packages/adapters/fs-sandbox` (`FsSandbox`); nada más en el daemon lee archivos a
 petición de un cliente.
 
@@ -1433,6 +1434,87 @@ inyectar otro puerto (pruebas). El adaptador se prueba con la suite de conformid
 un enlace mientras se lee, FIFO y dispositivos (Linux), archivos dispersos de 200 MiB, rutas hostiles de Windows y, solo en Windows,
 dispositivos, flujos y nombres cortos 8.3.
 
+## Historial de los proveedores (F4.3)
+
+`history.list` y `history.read` muestran las sesiones **pasadas** de cada proveedor (las que se hicieron antes, en Nexo o
+fuera de él) agrupadas por proyecto, y `agent.create { resume }` las reanuda. Todo es de solo lectura y usa **la API del propio
+proveedor**: Nexo no abre archivos de sesión (`~/.claude`, `~/.codex`...) ni toca credenciales, así que **no hizo falta el ADR 0008**
+(que solo habría sido necesario si algún proveedor obligara a leer sus archivos; ninguno lo hizo). El `fs-sandbox` sigue bloqueando
+esas carpetas.
+
+### Puerto: capacidad opcional del proveedor
+
+`HistoryPort` (`core/ports/history.ts`) es un puerto propio, pero cuelga de `AgentProviderPort` como capacidad opcional
+(`readonly history?: HistoryPort`, igual que `memoryInjection`). Se decidió así porque quien sabe listar y leer sesiones de un
+proveedor es su adaptador (ya conoce su proceso, su ejecutable, su redactor de secretos y su traductor de bloques) y porque no todos
+tienen historial: sin la propiedad, el proveedor «no tiene historial» y nadie más tiene que saberlo. Aun así es un puerto aparte
+(con su falso y su suite de conformidad) y no métodos sueltos del proveedor: así se prueba y se sustituye sin tocar `open`.
+
+- `list({ cwd?, limit, signal? })` → `HistorySessionInfo[]` (`sessionId`, `title?`, `cwd?`, `createdAt?`, `updatedAt`, `messageCount?`,
+  `resumable`): como mucho `limit` sesiones y, con `cwd`, solo las de esa carpeta.
+- `read({ sessionId, cwd?, maxBlocks, signal? })` → `{ blocks: { turn, block: BlockDraft }[], truncated }`: bloques **ya normalizados**,
+  producidos por el mismo traductor que las sesiones en vivo (Claude: `ClaudeTranslator`; Codex: `CodexTranslator`), de modo que una sesión
+  leída y la misma sesión en vivo se ven igual. `HistoryAssembler` (core) arma los bloques a partir de los `ProviderEvent`.
+- `canRead`: `false` si solo se puede listar (ACP); `read` rechaza con `UNSUPPORTED`.
+- Errores `HistoryError`: `UNSUPPORTED`, `UNAVAILABLE`, `NOT_FOUND`, `INVALID` (ficha hostil: ni llega al proveedor), `ABORTED`.
+- La transcripción es **texto observado, no instrucciones**: ninguna orden dentro de un mensaje cambia lo que hace el adaptador ni el
+  daemon, y la CLI y la web la muestran saneada (sin secuencias de escape ni HTML).
+
+### Métodos
+
+- `history.list { provider?, cwd?, cursor?, limit? }` → `{ projects: { cwd | null, name, sessions[] }[], nextCursor | null, providers[] }`.
+  El orden es total: carpetas de la de actividad más reciente a la más antigua y, dentro, sesiones de la más reciente a la más antigua
+  (`cwd` se normaliza como en la memoria: `C:\Work\App` y `c:/work/app/` son la misma carpeta de Windows). La paginación es **por sesiones**
+  (`limit` 1–100, 50 por omisión) con un cursor opaco tipo keyset (`h1-<actividad>-<hash de carpeta>-<fecha>-<proveedor>-<ficha>`): no repite
+  ni pierde sesiones mientras los datos no cambien, y si cambian sigue siendo válido. Una carpeta puede partirse entre dos páginas (el cliente
+  junta por `cwd`; `historyApi.listAll` lo hace). `providers[]` dice, por proveedor, `ok`, `unsupported` (sin historial: Ollama,
+  Antigravity, ACP sin `session/list`), `unavailable`, `timeout` o `error` (con motivo); **un proveedor caído no rompe la respuesta**.
+- `history.read { provider, sessionId, cwd?, cursor?, limit? }` → `{ provider, sessionId, blocks: { index, turn, block }[], nextCursor, total,
+  truncated }`. Páginas de hasta 100 bloques y 128 KiB de JSON (se corta antes; un bloque solo siempre cabe); un bloque cuyo JSON pasa de
+  600 KiB se sustituye por un aviso. La transcripción se acota a 10 000 bloques (`truncated`). Los bloques que no cumplen `BlockDraft` se
+  descartan. Cursor `o<posición>`.
+- Códigos: `NOT_FOUND` (sesión inexistente), `INVALID_PARAMS` (cursor o ficha hostiles), `PROVIDER_UNAVAILABLE` (proveedor desconocido, sin
+  historial, solo-lista, fuera de plazo, caído). Los mensajes de error nunca llevan rutas ni texto del proveedor.
+
+### Servicio, caché, plazos y cancelación (`HistoryService`)
+
+Valida lo que devuelven los puertos (es salida ajena: una sesión con id, fecha o título inválidos se descarta o pierde el título, nunca
+rompe la lista), ordena y pagina. Para **no lanzar un proceso caro en cada llamada**: la lista de cada proveedor (y filtro de carpeta) se
+guarda 15 s (3 s si falló; 15 s si «no tiene historial»), las llamadas simultáneas comparten una sola consulta y una transcripción leída se
+guarda 30 s (4 a la vez) para paginarla sin releerla. Cada consulta tiene plazo (10 s la lista, 30 s la lectura; `DaemonOptions.history`),
+recibe una `AbortSignal`-like y se cancela al vencer el plazo o al apagar el daemon (`close()`), lo que mata el proceso del proveedor.
+
+### Por proveedor
+
+| Proveedor   | Listar                                                                                                        | Leer                                                   | Reanudar (`agent.create { resume }`)                          |
+| ----------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------- |
+| Claude Code | SDK `listSessions({ dir, limit, includeWorktrees: false })`; el SDK lee su propio disco                       | `getSessionInfo` + `getSessionMessages`, traducidos    | `options.resume` con la ficha (UUID); el adaptador ya lo hace |
+| Codex       | `thread/list` de `codex app-server` (paginado, filtro `cwd`, orígenes `cli`, `vscode`, `appServer`)           | `thread/read { includeTurns: true }`, items traducidos | `thread/resume` con el id del hilo (ya lo hacía)              |
+| ACP         | `session/list` **solo si** `agentCapabilities.sessionCapabilities.list` se anuncia en `initialize`            | no (leer exige `session/load`, que carga la sesión)    | `session/load` si el agente anuncia `loadSession`             |
+| Antigravity | no: `agy` no tiene orden para listar conversaciones (`agy --help`: solo `--conversation <id>` y `--continue`) | no                                                     | por ficha conocida (`--conversation`), sin lista              |
+| Ollama      | no                                                                                                            | no                                                     | no                                                            |
+
+Cada consulta a Codex o a un agente ACP lanza un proceso efímero (`initialize` y la consulta) y lo cierra al terminar o cancelarse; no se
+abre ninguna sesión de agente ni se envía ningún mensaje. Las fichas se validan antes de usarse: Claude y Codex exigen un UUID y ACP el
+patrón de `ProviderSessionToken`; una ficha con `..`, separadores, espacios u opciones (`--flag`) responde `INVALID` sin llegar al proveedor.
+
+### CLI y cliente
+
+`nexo history ls [--provider] [--cwd] [--limit N] [--cursor] [--all]` y `nexo history show <proveedor> <sesión> [--cwd] [--limit N] [--cursor]
+[--all]` (con `--json` emiten el resultado de `history.list` / `history.read`; `show` reutiliza el impresor de `nexo agent attach`). Para
+reanudar: `nexo agent new --provider <id> --resume <sesión>`. `@nexo/client` ofrece `historyApi(client)` con `list`, `read`, `listAll` y
+`readAll`.
+
+### Pruebas
+
+`FakeHistory` (testkit) y la suite `runHistoryConformance` (listar, límite, filtro de carpeta, cancelación, lectura ordenada, `maxBlocks`,
+`NOT_FOUND`, fichas hostiles, transcripción con órdenes hostiles) corren contra el falso y contra cada adaptador con su servidor falso
+(`fake-codex.mjs` y `fake-acp.mjs` ampliados con `thread/list`/`thread/read` y `session/list`; un transporte falso del SDK en Claude).
+Hay pruebas adversariales de salidas malformadas, enormes y con ids hostiles, de cursores, de un proveedor que no responde (se corta con
+la cancelación), y de propiedades (fast-check) para el ensamblado de bloques, el orden y la paginación (las páginas juntas son exactamente
+el orden total) y el cursor. Las pruebas reales (`*.live.test.ts`, `NEXO_LIVE_CLAUDE`, `NEXO_LIVE_CODEX`, `NEXO_LIVE_ACP`) son de solo
+lectura y no se ejecutan en el CI.
+
 ## Protocolo (v1)
 
 Todo mensaje que cruza un límite de proceso se valida con zod **al recibirlo** (el daemon valida lo que
@@ -1461,7 +1543,7 @@ Transporte: WebSocket con mensajes JSON de texto. Tamaño máximo de mensaje: 1 
 
 Métodos de la fase 1 (terminal; los `agent.*` de la F2 se describen en «Agentes»): `auth` (solo como primer mensaje; el daemon lo resuelve antes de despachar), `daemon.info`, `daemon.shutdown` (apagado limpio; solo clientes autenticados), `snapshot`, `events.subscribe`,
 `workspace.{list,create,rename,close}`, `tab.{create,close,focus,move,rename}`,
-`pane.{split,close,focus,resize,swap}` y `viewer.open` (`pane.split` admite `kind: 'viewer'` y `path`; los `fs.{stat,read}` están en «Archivos y visor (F4.1)»; `pane.resize` admite dos formas: `{ paneId, delta }`, la frontera de un panel con su hermano directo, y `{ tabId, path, index, delta }`, la frontera entre los hijos `index` e `index+1` del split al que lleva `path`; camino ≤ 64 niveles, delta en [-1, 1], mínimo 5 % por panel; camino inexistente o que no apunta a un split → `NOT_FOUND`), `terminal.{spawn,write,resize,read,kill}`.
+`history.{list,read}` (ver «Historial de los proveedores (F4.3)»), `pane.{split,close,focus,resize,swap}` y `viewer.open` (`pane.split` admite `kind: 'viewer'` y `path`; los `fs.{stat,read}` están en «Archivos y visor (F4.1)»; `pane.resize` admite dos formas: `{ paneId, delta }`, la frontera de un panel con su hermano directo, y `{ tabId, path, index, delta }`, la frontera entre los hijos `index` e `index+1` del split al que lleva `path`; camino ≤ 64 niveles, delta en [-1, 1], mínimo 5 % por panel; camino inexistente o que no apunta a un split → `NOT_FOUND`), `terminal.{spawn,write,resize,read,kill}`.
 Eventos: `layout.changed`, `workspace.changed`, `terminal.output`, `terminal.exit`, `pane.title`, `pane.attention`,
 `client.resync` (contrapresión, ver "Servidor del daemon"); de la F2: `agent.block`, `agent.delta`, `agent.status`, `agent.session`.
 
