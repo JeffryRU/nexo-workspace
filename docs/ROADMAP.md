@@ -46,6 +46,8 @@ notificación del sistema si la ventana no tiene el foco, y las mediciones de re
   (ver «Proveedor Ollama (F3.1)» en `docs/ARCHITECTURE.md`).
 - **F3.2 Codex** (hecho): `packages/jsonrpc` (JSON-RPC 2.0 por líneas, reutilizable por ACP) y
   `packages/adapters/provider-codex` sobre `codex app-server` (ver «Proveedor Codex (F3.2)»).
+- **F3.3 ACP** (hecho): `packages/adapters/provider-acp` sobre Agent Client Protocol 1 (Gemini CLI con `--acp` por omisión y
+  cualquier otro agente ACP declarado en `NEXO_ACP_AGENTS`; ver «Proveedor ACP (F3.3)»).
 
 ## F3.5 — Memoria observacional (ADR 0007)
 

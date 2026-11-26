@@ -397,3 +397,104 @@ describe('proveedor Codex en el daemon real (proceso app-server falso)', () => {
     })
   })
 })
+
+describe('proveedores ACP en el daemon real (agente ACP falso)', () => {
+  const fakeAcp = fileURLToPath(
+    new URL('../../../packages/adapters/provider-acp/test/fake-acp.mjs', import.meta.url),
+  )
+
+  it('cada agente declarado es un proveedor propio; plan, acciones y permisos llegan al documento', async () => {
+    const daemon = await startTestDaemon({
+      agentProviders: ['gemini', 'otro'],
+      acpAgents: [
+        { id: 'gemini', name: 'Gemini de prueba', command: fakeAcp, args: ['--acp'] },
+        { id: 'otro', name: 'Otro agente', command: fakeAcp, args: ['--acp'] },
+      ],
+    })
+    daemons.push(daemon)
+    const { client } = await connect(daemon)
+    const { providers } = await client.call('agent.providers', {})
+    expect(providers.map((p) => [p.id, p.name, p.available])).toEqual([
+      ['gemini', 'Gemini de prueba', true],
+      ['otro', 'Otro agente', true],
+    ])
+    expect(providers[0]?.capabilities).toMatchObject({
+      defaultModel: 'fake-pro',
+      efforts: [],
+      permissionModes: ['ask', 'accept-edits', 'plan', 'bypass'],
+      resume: true,
+    })
+    const { session } = await newSession(client, 'otro')
+    expect(session.provider).toBe('otro')
+    const doc = await AgentDocument.open(client, session.id)
+    docs.push(doc)
+    await agentApi(client).send({ sessionId: session.id, text: 'rich' })
+    await until(() => doc.blocks().some((b) => b.type === 'usage'), 'fin del turno')
+    expect(doc.blocks().map((b) => b.type)).toEqual([
+      'user',
+      'reasoning',
+      'plan',
+      'action',
+      'action',
+      'action',
+      'text',
+      'usage',
+    ])
+    expect(doc.blocks()[2]).toMatchObject({
+      entries: expect.arrayContaining([{ text: 'Probar', status: 'in-progress' }]),
+    })
+    expect(doc.blocks()[4]).toMatchObject({ kind: 'edit', status: 'ok' })
+
+    await agentApi(client).send({ sessionId: session.id, text: 'permiso' })
+    await until(
+      () => doc.blocks().some((b) => b.type === 'permission' && b.state === 'pending'),
+      'permiso',
+    )
+    const permission = doc.blocks().find((b) => b.type === 'permission')
+    if (permission?.type !== 'permission') throw new Error('sin permiso')
+    expect(permission.options.map((o) => o.kind)).toEqual([
+      'allow-once',
+      'allow-always',
+      'reject-once',
+    ])
+    await agentApi(client).respond({
+      type: 'permission',
+      sessionId: session.id,
+      blockId: permission.id,
+      optionId: permission.options[0]?.id ?? '',
+    })
+    await until(() => doc.blocks().filter((b) => b.type === 'usage').length === 2, 'segundo turno')
+  })
+
+  it('el Gemini por omisión sale no disponible si «gemini» no está instalado, con el motivo', async () => {
+    const daemon = await startTestDaemon({ agentProviders: ['gemini'] })
+    daemons.push(daemon)
+    const { client } = await connect(daemon)
+    const { providers } = await client.call('agent.providers', {})
+    expect(providers[0]).toMatchObject({ id: 'gemini', name: 'Gemini', available: false })
+    expect(providers[0]?.reason).toMatch(/No se encontró Gemini.*gemini-cli/)
+    await expect(newSession(client, 'gemini')).rejects.toMatchObject({
+      code: 'PROVIDER_UNAVAILABLE',
+    })
+  })
+
+  it('un agente que pide autenticación sale no disponible con el motivo', async () => {
+    const daemon = await startTestDaemon({
+      agentProviders: ['gemini'],
+      acpAgents: [
+        {
+          id: 'gemini',
+          name: 'Gemini',
+          command: fakeAcp,
+          args: ['--acp'],
+          env: { FAKE_ACP_AUTH: '1' },
+        },
+      ],
+    })
+    daemons.push(daemon)
+    const { client } = await connect(daemon)
+    const { providers } = await client.call('agent.providers', {})
+    expect(providers[0]).toMatchObject({ id: 'gemini', available: false })
+    expect(providers[0]?.reason).toMatch(/pide autenticación/)
+  })
+})

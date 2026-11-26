@@ -130,8 +130,8 @@ Todo en `packages/core`, sin I/O; el daemon (F1.3) solo los conecta con adaptado
 
 - **Entorno** (validado con zod al arrancar): `NEXO_PORT` (4317; 0 = efímero), `NEXO_DEV`, `NEXO_STATE_DIR`,
   `NEXO_LOG_LEVEL`, `NEXO_MAX_CONNECTIONS` (128), `NEXO_AUTH_TIMEOUT_MS` (5000), `NEXO_PTY_MODE` (`host` | `direct`; por omisión
-  `host` en Windows y `direct` en Linux/macOS), `NEXO_AGENT_PROVIDERS`, `NEXO_CLAUDE_EXECUTABLE`, `NEXO_CODEX_EXECUTABLE` y `NEXO_OLLAMA_URL` (ver «Agentes en el daemon (F2.4)» y
-  «Proveedor Ollama (F3.1)»).
+  `host` en Windows y `direct` en Linux/macOS), `NEXO_AGENT_PROVIDERS`, `NEXO_ACP_AGENTS`, `NEXO_CLAUDE_EXECUTABLE`, `NEXO_CODEX_EXECUTABLE` y `NEXO_OLLAMA_URL` (ver «Agentes en el daemon (F2.4)»,
+  «Proveedor Ollama (F3.1)» y «Proveedor ACP (F3.3)»).
 - **PTY aislados (issue #15, ADR 0004).** En modo `host`, node-pty corre en un proceso hijo (`@nexo/adapter-pty-host`, `child_process.fork` + IPC con
   mensajes zod validados en ambos extremos). Si el código nativo de ConPTY se cae, muere solo el host: cada terminal afectada recibe
   `terminal.exit` con `signal: "HOST_CRASH"` (y `exitCode` null), el daemon sigue vivo y el host se relanza para las terminales nuevas con
@@ -354,11 +354,11 @@ Ollama (solo texto, sin permisos).
 espacio cierra su sesión); al apagar (`stop()`) se llama `service.closeAll()` antes de cerrar las conexiones. Sin
 proveedores (`agentProviders: []`) no hay servicio y todo `agent.*` responde `PROVIDER_UNAVAILABLE`.
 
-**Proveedores.** `NEXO_AGENT_PROVIDERS` (zod; lista separada por comas de `claude`, `codex`, `ollama` y `fake`; por omisión `claude`; el
+**Proveedores.** `NEXO_AGENT_PROVIDERS` (zod; lista separada por comas de `claude`, `codex`, `ollama`, `fake`, `gemini` y los ids declarados en `NEXO_ACP_AGENTS`; por omisión `claude`; el
 primero es el que se precalienta) o, en código, `startDaemon({ agentProviders })`, que además acepta puertos ya
 construidos (así las pruebas inyectan el suyo). `claude` es `createClaudeProvider({ env, log })` con el entorno del
 daemon **sin las variables `NEXO_*`** y el log del daemon (redactado); `NEXO_CLAUDE_EXECUTABLE` fija el ejecutable de Claude
-Code. `codex` es `createCodexProvider({ env, log, executable: NEXO_CODEX_EXECUTABLE })` con el mismo entorno (ver «Proveedor Codex (F3.2)»). `ollama` es `createOllamaProvider({ baseUrl: NEXO_OLLAMA_URL, log })` (ver «Proveedor Ollama (F3.1)»). `fake` es `ScriptedAgentProvider` (`apps/daemon/src/adapters/scripted-agent-provider.ts`): determinista, sin red;
+Code. `codex` es `createCodexProvider({ env, log, executable: NEXO_CODEX_EXECUTABLE })` con el mismo entorno (ver «Proveedor Codex (F3.2)»). `ollama` es `createOllamaProvider({ baseUrl: NEXO_OLLAMA_URL, log })` (ver «Proveedor Ollama (F3.1)»). `gemini` y cada agente declarado en `NEXO_ACP_AGENTS` son `createAcpProvider({ agent, env, log })` (ver «Proveedor ACP (F3.3)»). `fake` es `ScriptedAgentProvider` (`apps/daemon/src/adapters/scripted-agent-provider.ts`): determinista, sin red;
 responde `Eco: <texto>`, y según la primera palabra: `lento [n]` (n trozos con retardo), `largo` (no termina hasta
 interrumpir), `permiso` y `pregunta`. Vive en la app y no en `testkit` porque el daemon real lanzado como proceso (CLI,
 E2E) tiene que poder usarlo y producción no importa `testkit`. **No se activa por accidente**: solo existe si se pide
@@ -681,6 +681,123 @@ cuando se cierra, y la conexión escribe líneas con `write(línea)`.
 
 Pruebas: unitarias, propiedades con fast-check (el resultado no depende de cómo se parta el flujo; cada solicitud recibe
 su respuesta en cualquier orden; basura arbitraria nunca lanza) y adversariales (`connection.adversarial.test.ts`).
+
+### Proveedor ACP (F3.3)
+
+`packages/adapters/provider-acp` (`createAcpProvider({ agent: { id, name, command, args, env? }, env, log })`) implementa
+`AgentProviderPort` sobre el **Agent Client Protocol** (JSON-RPC 2.0 por líneas, por stdio) para cualquier agente que lo
+hable. **Cada agente declarado es un proveedor distinto** (`id` = id del proveedor, `name` = el nombre de los chips). Por omisión
+existe uno, `gemini` (Gemini CLI). Importa `core`, `contracts` y `jsonrpc` (con `version: '2.0'`).
+
+**Versión fijada: ACP 1** (`ACP_PROTOCOL_VERSION`, la estable). El protocolo no sale de memoria: sale del esquema JSON
+publicado en `@agentclientprotocol/sdk@2.12.0` (`schema/v1/schema.json` y `schema.unstable.json`; `ACP_SCHEMA_SOURCE`) y de
+https://agentclientprotocol.com. `src/protocol.ts` guarda solo los esquemas zod propios del subconjunto que se usa, en modo laxo
+(`looseObject`: un campo nuevo no rompe; lo que no encaja se ignora y se cuenta). **No se depende del SDK** (5 MB con
+transportes HTTP, WebSocket y MCP que aquí no se usan): se escriben esquemas propios a partir del publicado. Al subir la
+versión del esquema hay que revisar ese archivo. Existe un borrador de ACP 2 (con `-32022` si la versión pedida no se soporta);
+Nexo pide `protocolVersion: 1` y, si el agente responde otra versión (o rechaza esa), el proveedor sale **no disponible** con
+las dos versiones en el motivo. Gemini CLI se lanza con **`gemini --acp`** (`--experimental-acp` sigue existiendo pero está
+marcado como obsoleto en su `config.ts`; la documentación actual de Gemini CLI solo menciona `--acp`).
+
+**Capas.** (1) `translator.ts` + `permissions.ts` + `diff.ts`: traducción pura de `session/update` y de
+`session/request_permission` a `ProviderEvent`. (2) `@nexo/jsonrpc`. (3) `process.ts`: `spawn(cmd, args[])` sin shell, con una
+interfaz pequeña (`AgentLauncher`) para probar con un proceso falso. (4) `client.ts`: proceso + conexión (guarda el final de
+stderr, redactado) y el `initialize`. (5) `session.ts`: sesión, turnos, permisos, interrupción, muerte del proceso. (6)
+`provider.ts`: validación, disponibilidad, capacidades y modos. (7) `resolve.ts`: resuelve el ejecutable. (8) `config.ts`:
+`NEXO_ACP_AGENTS`.
+
+**Sesión.** Una sesión = un proceso del agente + una sesión ACP. `open` hace `initialize` (versión 1; capacidades del cliente
+**en falso**: `fs.readTextFile`, `fs.writeTextFile` y `terminal`, porque Nexo aún no los ofrece; sin `auth`) y luego `session/new`
+(`{ cwd, mcpServers: [] }`) o, con `resume`, `session/load` (solo si el agente anuncia `loadSession`, que es lo que da
+`capabilities.resume`; una sesión desconocida → `INVALID_OPTIONS`). El `sessionId` es el `providerSessionId`. Cada `send` es un
+`session/prompt` (con un bloque de texto) cuya **respuesta es el fin del turno**: produce **exactamente un `turn-end`**, por esa
+respuesta o sintético si el agente no responde a `session/cancel` en 3 s o no da señales en 10 min (`TIMEOUT`). Si el proceso
+muere llegan un bloque `error` fatal (`ACP_EXITED`, con el final de stderr redactado) y `exit`, sin `turn-end`. `session-info`
+se emite en el primer `send`. `session/load` reproduce el historial con `session/update` **antes** de responder: Nexo lo
+**descarta** (no hay atendedor aún) porque el documento de Nexo es el que manda (igual que Codex con `excludeTurns`); lo mismo
+vale para los `user_message_chunk` durante un turno, que se ignoran porque el bloque `user` ya existe (lo creó `agent.send`).
+Las solicitudes del agente que Nexo no atiende (`fs/*`, `terminal/*`, `elicitation/*`) reciben «método no encontrado» (-32601).
+
+| ACP (`session/update` y solicitudes)                                                                                                                  | `ProviderEvent`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `agent_message_chunk`                                                                                                                                 | bloque `text` (`block-start` con el primer fragmento, deltas ≤ 32 KiB, `block-end`); un `messageId` distinto o otro tipo de bloque lo cierra. `resource_link` → enlace Markdown; imagen y audio → marca `*[imagen]*` / `*[audio]*`                                                                                                                                                                                                                                                               |
+| `agent_thought_chunk`                                                                                                                                 | bloque `reasoning` (igual que `text`)                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `tool_call` (+ `tool_call_update`)                                                                                                                    | `action`: `kind` `read`→`read`, `edit`/`delete`/`move`→`edit`, `search`/`fetch`→`search`, `execute`→`exec`, `think`/`switch_mode`/`other`→`other`; `status` `pending`→`pending`, `in_progress`→`running`, `completed`→`ok`, `failed`→`error`; `rawInput` → entrada; `content` de texto (o `rawOutput`) → salida; `locations[0]` → ruta; `exitCode` de `rawOutput` solo en `exec` (≠ 0 → `error`). Las actualizaciones fusionan campos y emiten `block-update`; un estado final emite `block-end` |
+| `content` de tipo `diff` (`path`, `oldText`, `newText`)                                                                                               | la acción pasa a `edit` y lleva `diff` (parche unificado calculado por Nexo con `diff.ts`; archivo nuevo → `--- /dev/null`); varios diffs se combinan                                                                                                                                                                                                                                                                                                                                            |
+| `tool_call_update` sin su `tool_call`                                                                                                                 | se trata como el alta de la llamada (`block-start`)                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `plan` / `plan_update` (items o markdown)                                                                                                             | un bloque `plan` por `planId` (alta y luego `block-update` con las entradas completas; `in_progress`→`in-progress`); se cierra al acabar el turno. `plan_removed` se ignora                                                                                                                                                                                                                                                                                                                      |
+| `session/request_permission`                                                                                                                          | `permission-request` (herramienta, título y detalle con la entrada/diff), con las opciones del agente y su `PermissionOptionKind` (`allow_once`→`allow-once`…); ids locales `opt-N` (los del agente son opacos)                                                                                                                                                                                                                                                                                  |
+| `current_mode_update`, `session_info_update`                                                                                                          | `session-info` (`permissionMode` si el modo se reconoce; `title`)                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| respuesta de `session/prompt`: `stopReason`                                                                                                           | `turn-end`: `end_turn`→`end-turn`, `max_tokens`→`max-tokens`, `max_turn_requests`→`max-turns`, `refusal`→`refusal`, `cancelled`→`interrupted`, otro→`other`                                                                                                                                                                                                                                                                                                                                      |
+| respuesta de `session/prompt`: `usage` (esquema inestable)                                                                                            | `usage` del `turn-end`: entrada, salida, caché (lectura y escritura), razonamiento (`thoughtTokens`) y la duración medida por Nexo                                                                                                                                                                                                                                                                                                                                                               |
+| error JSON-RPC de `session/prompt`                                                                                                                    | bloque `error` no fatal `ACP_ERROR` y `turn-end` `error`; `-32000` → `AUTH_REQUIRED` fatal; `-32800` → `interrupted`                                                                                                                                                                                                                                                                                                                                                                             |
+| `user_message_chunk`, `available_commands_update`, `usage_update`, `config_option_update`, `notice`, `compaction_*`, `subagent_*`, `session_message*` | se ignoran (se cuentan para diagnóstico)                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+
+Lo que no cumple el esquema (campos de más o de menos, ids ajenos, sesiones de otro id, JSON roto, líneas enormes) se ignora y se
+cuenta, nunca rompe el turno. Una actualización de una llamada ya cerrada no la reabre. Al cerrar el turno, toda acción que el
+agente dejó abierta queda en `error` y los textos y planes abiertos se cierran. Se siguen como mucho 1 024 llamadas por turno.
+
+**Permisos.** `respond` responde con `{ outcome: { outcome: 'selected', optionId } }` (el `optionId` original del agente). Al
+interrumpir, las pendientes salen como `request-cancelled` y se responden `{ outcome: { outcome: 'cancelled' } }`, y se envía la
+notificación `session/cancel`. Una solicitud que llega **después** de interrumpir (o fuera de turno, o sin opciones
+reconocibles) se responde `cancelled` sin mostrarse. `$/cancel_request` del agente retira una pendiente. Mientras haya una
+pendiente no corre el plazo de inactividad.
+
+**Modos de permiso normalizados → modos de sesión del agente.** Si el agente anuncia `modes` en `session/new`, cada modo
+normalizado se asocia al primer modo del agente cuyo id (o, si no, nombre), en minúsculas y solo con letras y dígitos, esté en la
+tabla (`MODE_ALIASES`); al abrir se cambia con `session/set_mode` si el modo actual es otro. Los modos que el agente no tenga no
+se ofrecen (`capabilities.permissionModes`); `ask` se ofrece siempre. Un agente que no anuncia modos solo tiene `ask`.
+
+| Modo normalizado | Ids de modo del agente reconocidos                                                 | Ejemplos                                                       |
+| ---------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `ask`            | `default`, `ask`, `normal`, `manual`, `askbeforeedits`                             | Gemini `default`, Claude `default`                             |
+| `accept-edits`   | `acceptedits`, `autoedit`, `autoapproveedits`, `edit`, `auto`                      | Gemini `autoEdit`, Claude `acceptEdits`, Codex `auto`          |
+| `plan`           | `plan`, `planning`, `readonly`                                                     | Gemini y Claude `plan`, Codex `read-only`                      |
+| `bypass`         | `bypasspermissions`, `yolo`, `fullaccess`, `dangerfullaccess`, `bypass`, `dontask` | Gemini `yolo`, Claude `bypassPermissions`, Codex `full-access` |
+
+Un `current_mode_update` del agente (p. ej. al salir del modo plan) llega como `session-info` con el modo normalizado.
+
+**Modelos.** Se usan si el agente los expone: la opción de configuración de categoría `model` (estable; se cambia con
+`session/set_config_option`, admite grupos) o, si no hay, `models` de `session/new` (inestable; se cambia con
+`session/set_model`). Sin ninguna de las dos no hay selector (`models: []`) y un modelo pedido se rechaza. No hay niveles de
+esfuerzo (`efforts: []`; la categoría `thought_level` no se usa todavía).
+
+**Disponibilidad y autenticación.** Nexo **no autentica, no llama a `authenticate` y no lee credenciales**: solo lanza el agente,
+que usa la sesión que el usuario ya tenga. `isAvailable()` lanza el agente (≤ 30 s) y hace `initialize` y una `session/new`
+de prueba (de ella salen los modos y modelos; no se envía ningún mensaje); el resultado se reutiliza 30 s (3 s si falló). No
+disponible, con el motivo en `agent.providers[].reason`: el comando no existe («No se encontró Gemini… Instala Gemini CLI con
+`npm i -g @google/gemini-cli`»; para otros agentes remite a `NEXO_ACP_AGENTS`), el `initialize` falla o expira, la versión del
+protocolo no es la 1, o el agente pide autenticación (`session/new` responde -32000: «pide autenticación (métodos del
+agente): inicia sesión con su CLI desde una terminal»). Que el agente anuncie `authMethods` no basta para declararlo no disponible
+(Gemini los anuncia siempre): lo decide la `session/new` de prueba.
+
+**Ejecutable (Windows y Linux, sin shell).** `resolveAgentCommand` busca `command` en el `PATH` (o lo usa tal cual si es una
+ruta): un binario se lanza tal cual y un `.js`/`.mjs`, con el Node del daemon. En Windows se prueban primero `.exe`/`.com`; con
+un `.cmd` de npm (`gemini.cmd`) **se lee el shim** y se lanza con Node el `.js` que invoca (`%dp0%\node_modules\…`), siempre dentro
+de la carpeta del shim; si no se encuentra, el motivo pide poner en `command` la ruta del `.exe` o del `.js`. El entorno es el del
+daemon sin las variables `NEXO_*` más el `env` del agente.
+
+**Configuración.** `NEXO_ACP_AGENTS` es un JSON validado con zod: una lista de `{ id, name, command, args?, env? }` (máx. 16;
+`id` con forma `^[a-z][a-z0-9-]{0,31}$`, único y distinto de `claude`, `codex`, `ollama` y `fake`; `name` de ≤ 64 caracteres sin
+control; `command` y `args` sin NUL; `env` de ≤ 64 variables, sin `NEXO_*`). Por omisión existe `{ "id": "gemini", "name": "Gemini",
+"command": "gemini", "args": ["--acp"] }`; declarar un agente con id `gemini` lo sustituye. `NEXO_AGENT_PROVIDERS` acepta `gemini` y
+los ids declarados (p. ej. `claude,gemini,mi-agente`), y la CLI usa `nexo agent new --provider gemini [--model <m>] [--permissions <modo>]`.
+La interfaz no cambia: el selector lista `agent.providers`. Un valor inválido hace que el daemon no arranque, con un error legible.
+
+**Limitaciones.** Un proceso por sesión (`warmup: false`). Sin `fs` ni `terminal` para el agente (capacidades en falso), sin
+elicitation, sin imágenes ni audio, sin `session/resume`, `session/list` ni `session/close`, sin `plan_removed`, sin niveles de
+esfuerzo. Una línea JSON-RPC de más de 32 MiB se descarta (se informa en el log y el turno sigue). La duplicación de `text.ts`,
+`redact.ts` y `process.ts` con `provider-codex` es deliberada (así ya lo hacen Claude, Codex y Ollama: un adaptador no importa a
+otro); si crece, se moverá a un paquete puro común (`packages/adapter-kit`), lo que exige reglas nuevas en dependency-cruiser.
+
+**Probar de verdad.** `NEXO_LIVE_ACP=1 pnpm --filter @nexo/adapter-provider-acp test:live` (usa la sesión del usuario en el agente,
+por omisión Gemini CLI, y consume cuota; `NEXO_LIVE_ACP_COMMAND` y `NEXO_LIVE_ACP_ARGS` cambian el agente). No corre en el CI. Las
+pruebas normales usan `test/fake-acp.mjs`, un agente ACP falso (script de Node que habla JSON-RPC por stdio y se lanza con `--acp`):
+conformidad (`runAgentProviderConformance`), traductor con propiedades (el texto no depende de cómo se partan los fragmentos;
+actualizaciones arbitrarias nunca rompen ni dejan bloques abiertos; el parche de `diff.ts` reconstruye el texto nuevo) y
+adversariales (actualizaciones fuera de esquema, `tool_call_update` sin `tool_call`, permiso tras cancelar, agente que muere,
+versión de protocolo incompatible, autenticación requerida, líneas enormes, stderr ruidoso, sin respuesta a `session/cancel`,
+plazo de inactividad). Capturas: `docs/capturas/f3-3-*.png` (`NEXO_CAPTURAS=1 pnpm e2e -g capturas`, con el agente falso).
 
 ## Protocolo (v1)
 

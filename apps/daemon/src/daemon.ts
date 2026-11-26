@@ -1,5 +1,10 @@
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  type AcpAgentConfig,
+  createAcpProvider,
+  effectiveAcpAgents,
+} from '@nexo/adapter-provider-acp'
 import { createClaudeProvider } from '@nexo/adapter-provider-claude'
 import { createCodexProvider } from '@nexo/adapter-provider-codex'
 import { createOllamaProvider } from '@nexo/adapter-provider-ollama'
@@ -84,7 +89,7 @@ export type DaemonOptions = {
   ptyMode?: 'host' | 'direct'
   /**
    * Proveedores de agente. Por omisión se registra solo `claude`. Una lista de nombres (`NEXO_AGENT_PROVIDERS`)
-   * elige entre los incluidos (`claude`, `fake`); también se pueden inyectar puertos ya construidos.
+   * elige entre los incluidos (`claude`, `codex`, `ollama`, `fake`) y los agentes ACP (`acpAgents`); también se pueden inyectar puertos ya construidos.
    * El primero es el que se precalienta. Una lista vacía deja el daemon sin agentes.
    */
   agentProviders?: readonly (AgentProviderName | AgentProviderPort)[]
@@ -92,6 +97,11 @@ export type DaemonOptions = {
   claudeExecutable?: string
   /** Ejecutable de Codex (por omisión, `codex` en el PATH). */
   codexExecutable?: string
+  /**
+   * Agentes ACP que se pueden registrar por nombre (cada uno es un proveedor): los declarados en `NEXO_ACP_AGENTS`.
+   * Por omisión solo existe `gemini`.
+   */
+  acpAgents?: readonly AcpAgentConfig[]
   /** URL base de Ollama (por omisión `http://127.0.0.1:11434`). */
   ollamaUrl?: string
   agents?: AgentServiceConfig
@@ -181,6 +191,10 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     panes: layout,
     config: { defaultCommand: { cmd: shell.cmd }, ...options.terminal },
   })
+  const acpAgents = new Map(
+    effectiveAcpAgents(options.acpAgents ?? []).map((a) => [a.id, a] as const),
+  )
+
   const providers = (options.agentProviders ?? ['claude']).map((p) =>
     typeof p === 'string' ? createProvider(p) : p,
   )
@@ -215,6 +229,14 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
 
   function createProvider(name: AgentProviderName): AgentProviderPort {
     if (name === 'fake') return new ScriptedAgentProvider()
+    const acp = acpAgents.get(name)
+    if (acp !== undefined) {
+      return createAcpProvider({
+        agent: acp,
+        env: childBaseEnv(),
+        log: (entry) => logger[entry.level](`${acp.id}: ${entry.message}`),
+      })
+    }
     if (name === 'codex') {
       return createCodexProvider({
         env: childBaseEnv(),
@@ -228,6 +250,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
         log: (entry) => logger[entry.level](`ollama: ${entry.message}`),
       })
     }
+    if (name !== 'claude') throw new Error(`proveedor de agente desconocido: ${name}`)
     return createClaudeProvider({
       env: childBaseEnv(),
       log: (entry) => logger[entry.level](`claude: ${entry.message}`),

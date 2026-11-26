@@ -494,6 +494,90 @@ test.describe('proveedor Codex (app-server falso)', () => {
   })
 })
 
+/** Agente ACP falso (el mismo de las pruebas del adaptador): habla ACP por stdio, como Gemini CLI con `--acp`. */
+const FAKE_ACP = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'packages',
+  'adapters',
+  'provider-acp',
+  'test',
+  'fake-acp.mjs',
+)
+const acpEnv = (extra: Record<string, string> = {}) => ({
+  NEXO_AGENT_PROVIDERS: 'fake,gemini',
+  NEXO_ACP_AGENTS: JSON.stringify([
+    { id: 'gemini', name: 'Gemini', command: FAKE_ACP, args: ['--acp'], env: extra },
+  ]),
+})
+
+/** Un agente declarado cuyo comando no está instalado (lo que ve quien aún no instaló Gemini CLI). */
+const NOT_INSTALLED = {
+  NEXO_AGENT_PROVIDERS: 'fake,gemini',
+  NEXO_ACP_AGENTS: JSON.stringify([
+    { id: 'gemini', name: 'Gemini', command: 'gemini-no-instalado-nexo', args: ['--acp'] },
+  ]),
+}
+
+test.describe('proveedor ACP (agente ACP falso)', () => {
+  test('se elige Gemini, el plan, el diff y el permiso salen como bloques y el permiso se responde en línea', async ({
+    app,
+  }) => {
+    const stack = await Stack.start(acpEnv())
+    try {
+      await openAgentTab(stack, app)
+      await app.getByLabel('Proveedor').selectOption('gemini')
+      await expect(app.getByLabel('Modelo').locator('option')).toHaveText([
+        'Fake Pro',
+        'Fake Flash',
+      ])
+      // Sin niveles de esfuerzo no hay selector.
+      await expect(app.getByLabel('Esfuerzo')).toHaveCount(0)
+      await say(app, 'rich')
+      await expect(app.locator('.blk-reasoning')).toBeVisible()
+      await expect(app.locator('section.plan')).toContainText('Editar el archivo')
+      await expect(app.locator('.blk-action')).toHaveCount(3)
+      await expect(app.locator('.blk-text').last()).toContainText('Listo:')
+      await expect(app.locator('.chip.fixed').first()).toHaveText('Gemini')
+      await app.locator('.blk-action').nth(1).locator('.fold-head').click()
+      await expect(app.locator('.blk-action .diff')).toContainText('const a = 10')
+
+      await say(app, 'permiso')
+      await expect(app.locator('section.perm.pending')).toContainText('Ejecutar: rm -rf build')
+      await app.getByRole('button', { name: '1 Permitir', exact: true }).click()
+      await expect(app.locator('.blk-text').last()).toContainText('Hecho.')
+    } finally {
+      await stack.dispose()
+    }
+  })
+
+  test('si el comando del agente no existe sale deshabilitado con el motivo, sin repetir el nombre', async ({
+    app,
+  }) => {
+    const stack = await Stack.start(NOT_INSTALLED)
+    try {
+      await openAgentTab(stack, app)
+      const option = app.getByLabel('Proveedor').locator('option[value="gemini"]')
+      await expect(option).toBeDisabled()
+      await expect(app.getByRole('note')).toContainText('No se encontró Gemini')
+      await expect(app.getByRole('note')).not.toContainText('Gemini: Gemini')
+    } finally {
+      await stack.dispose()
+    }
+  })
+
+  test('un agente que pide autenticación sale deshabilitado con el motivo', async ({ app }) => {
+    const stack = await Stack.start(acpEnv({ FAKE_ACP_AUTH: '1' }))
+    try {
+      await openAgentTab(stack, app)
+      await expect(app.getByLabel('Proveedor').locator('option[value="gemini"]')).toBeDisabled()
+      await expect(app.getByRole('note')).toContainText('pide autenticación')
+    } finally {
+      await stack.dispose()
+    }
+  })
+})
+
 // Capturas de la documentación: `NEXO_CAPTURAS=1 pnpm e2e -g capturas` las regenera en docs/capturas.
 const OUT = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'capturas')
 
@@ -617,6 +701,35 @@ test.describe('capturas', () => {
       await openAgentTab(out, app)
       await expect(app.getByRole('note')).toBeVisible()
       await shot(app, 'sin-sesion', 'f3-2')
+    } finally {
+      await out.dispose()
+    }
+  })
+
+  test('capturas del proveedor ACP (F3.3)', async ({ app }) => {
+    await app.setViewportSize({ width: 1280, height: 800 })
+    const stack = await Stack.start(acpEnv())
+    try {
+      await openAgentTab(stack, app)
+      await app.getByLabel('Proveedor').selectOption('gemini')
+      await say(app, 'rich')
+      await expect(app.locator('.blk-text').last()).toContainText('Listo:')
+      await shot(app, 'plan', 'f3-3')
+      await app.locator('.blk-action').nth(1).locator('.fold-head').click()
+      await expect(app.locator('.blk-action .diff')).toBeVisible()
+      await shot(app, 'diff', 'f3-3')
+      await say(app, 'permiso')
+      await expect(app.locator('section.perm.pending')).toBeVisible()
+      await shot(app, 'permiso', 'f3-3')
+    } finally {
+      await stack.dispose()
+    }
+    const out = await Stack.start(NOT_INSTALLED)
+    try {
+      await app.goto('about:blank')
+      await openAgentTab(out, app)
+      await expect(app.getByRole('note')).toBeVisible()
+      await shot(app, 'no-disponible', 'f3-3')
     } finally {
       await out.dispose()
     }
