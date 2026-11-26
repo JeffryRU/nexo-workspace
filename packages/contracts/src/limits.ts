@@ -63,4 +63,16 @@ export const LIMITS = {
   maxMemoryQueryChars: 256,
   /** Bloques que cubre un rango de `memory.recall` (y que devuelve como máximo). */
   maxRecallBlocks: 200,
+  // Archivos (F4.1, `fs.*`). Los trozos acotan el mensaje: el texto va en UTF-8 y un JSON con escapes (un
+  // byte de control sale como seis caracteres) llega a 6x, por eso su trozo es menor que el binario (base64: 4/3).
+  /** Bytes que devuelve como máximo un `fs.read` en base64 (binario). */
+  maxFsChunkBytes: 512 * 1024,
+  /** Bytes que devuelve como máximo un `fs.read` en UTF-8 (texto). */
+  maxFsTextChunkBytes: 128 * 1024,
+  /** Tope de tamaño de archivo legible por tipo: más grande y `fs.read` responde `PAYLOAD_TOO_LARGE`. */
+  maxFsTextBytes: 8 * 1024 * 1024,
+  maxFsSvgBytes: 2 * 1024 * 1024,
+  maxFsImageBytes: 32 * 1024 * 1024,
+  maxFsPdfBytes: 64 * 1024 * 1024,
+  maxFsBinaryBytes: 16 * 1024 * 1024,
 } as const

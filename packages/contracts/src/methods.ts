@@ -24,6 +24,7 @@ import {
   WorkspaceId,
 } from './domain.ts'
 import { EventNameSchema } from './events.ts'
+import { fsMethods } from './files.ts'
 import { LIMITS } from './limits.ts'
 import { memoryMethods } from './memory.ts'
 import { bodyText, boundedBytes, DisplayText, FORBIDDEN_KEYS } from './text.ts'
@@ -140,6 +141,8 @@ export const methods = {
       paneId: PaneId,
       direction: SplitDirection,
       kind: PaneKind.optional(),
+      /** Archivo del visor; solo con `kind: 'viewer'`. */
+      path: Path.optional(),
       ratio: z.number().gt(0).lt(1).optional(),
     }),
     result: z.strictObject({ pane: Pane, layout: LayoutSchema }),
@@ -153,6 +156,11 @@ export const methods = {
   'pane.swap': {
     params: z.strictObject({ paneId: PaneId, otherPaneId: PaneId }),
     result: z.strictObject({ layout: LayoutSchema }),
+  },
+  /** Apunta un panel `viewer` a otro archivo (no lo lee: eso lo hace `fs.read`, dentro del sandbox). */
+  'viewer.open': {
+    params: z.strictObject({ paneId: PaneId, path: Path }),
+    result: z.strictObject({ pane: Pane }),
   },
   'terminal.spawn': {
     params: z.strictObject({
@@ -257,6 +265,7 @@ export const methods = {
     result: z.strictObject({ session: AgentSession }),
   },
   ...memoryMethods,
+  ...fsMethods,
 } as const
 
 export type MethodName = keyof typeof methods

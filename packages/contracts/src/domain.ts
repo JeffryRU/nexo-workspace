@@ -27,7 +27,7 @@ export type SplitDirection = z.infer<typeof SplitDirection>
 export const Attention = z.enum(['idle', 'working', 'needs-input', 'done', 'error'])
 export type Attention = z.infer<typeof Attention>
 
-export const PaneKind = z.enum(['terminal', 'agent'])
+export const PaneKind = z.enum(['terminal', 'agent', 'viewer'])
 export type PaneKind = z.infer<typeof PaneKind>
 
 export type LeafNode = { type: 'leaf'; paneId: PaneId }
@@ -117,6 +117,8 @@ export const Pane = z.strictObject({
   terminalId: TerminalId.optional(),
   /** Sesión de agente del panel (`kind: 'agent'`), si ya se abrió una. */
   agentSessionId: AgentSessionId.optional(),
+  /** Archivo que muestra el panel (`kind: 'viewer'`); se lee por `fs.read` y puede faltar (visor vacío). */
+  viewerPath: z.string().min(1).max(LIMITS.maxPathLength).optional(),
   attention: Attention,
 })
 export type Pane = z.infer<typeof Pane>

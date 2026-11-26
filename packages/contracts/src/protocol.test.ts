@@ -27,6 +27,7 @@ describe('códigos de error', () => {
       'INVALID_PARAMS',
       'NOT_FOUND',
       'UNAUTHORIZED',
+      'FORBIDDEN',
       'CONFLICT',
       'INTERNAL',
       'PAYLOAD_TOO_LARGE',
@@ -99,6 +100,9 @@ describe('parseRequest', () => {
       'memory.list': { cwd: '/work/app' },
       'memory.search': { cwd: '/work/app', query: 'pnpm' },
       'memory.recall': { sessionId: 's1', range: { from: 0, to: 3 } },
+      'viewer.open': { paneId: 'p1', path: '/work/app/README.md' },
+      'fs.stat': { path: '/work/app/README.md' },
+      'fs.read': { path: '/work/app/README.md', offset: 0, length: 1024, encoding: 'utf8' },
     }
     expect(Object.keys(samples).sort()).toEqual([...METHOD_NAMES].sort())
     for (const [method, params] of Object.entries(samples)) {
