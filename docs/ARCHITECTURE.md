@@ -1515,6 +1515,98 @@ la cancelación), y de propiedades (fast-check) para el ensamblado de bloques, e
 el orden total) y el cursor. Las pruebas reales (`*.live.test.ts`, `NEXO_LIVE_CLAUDE`, `NEXO_LIVE_CODEX`, `NEXO_LIVE_ACP`) son de solo
 lectura y no se ejecutan en el CI.
 
+## Límites de uso de los proveedores (F4.4)
+
+`limits.status` y el evento `limits.updated` dicen cuánto queda de los límites de uso de **Claude** y **Codex**: por ventana, el
+porcentaje usado, cuándo se reinicia, de dónde salió el dato y si sigue siendo fresco. Solo ventanas de uso: **nunca** datos de la
+cuenta (correo, nombre, id, plan, créditos). La interfaz que los dibuja es la #64; aquí están el puerto, el servicio, el
+protocolo, la CLI y el cliente.
+
+### Puerto: capacidad opcional del proveedor
+
+`UsageLimitsPort` (`core/ports/usage-limits.ts`) cuelga de `AgentProviderPort` como `history`: `readonly usageLimits?: UsageLimitsPort`.
+Quien sabe de los límites de un proveedor es su adaptador, y no todos los tienen (Ollama, Antigravity y ACP no: sin la propiedad el
+proveedor «no ofrece límites»). Tiene su falso (`FakeUsageLimits`) y su suite (`runUsageLimitsConformance`) en `packages/testkit`.
+
+- `query?({ signal? })` → `{ windows, reached?, observedAt? }`: **solo si el proveedor se puede consultar** (Codex). Sin `query`, los
+  límites solo llegan cuando el proveedor los informa (Claude).
+- `onUpdate(listener)`: avisos que el proveedor emite por su cuenta (notificación de Codex, evento del SDK en una sesión de Claude). Cada
+  aviso es una lectura **completa**: el adaptador junta las actualizaciones parciales con lo último que sabe.
+- Una ventana (`UsageWindowInfo`): `id` (`primary`, `secondary`, `five_hour`...), `bucket?`, `label?`, `usedPercent` (0-100), `windowMinutes?`,
+  `resetsAt?` (ms Unix) y `state?` (`ok`, `warning`, `limit`, solo si el proveedor lo dice).
+- `UsageLimitsError`: `UNAVAILABLE`, `ABORTED`. El mensaje nunca lleva datos de la cuenta.
+
+### Contrato `limits.*`
+
+- `limits.status { provider?, refresh? }` → `{ providers: ProviderLimits[] }`. Cada entrada: `provider`, `status` (`ok`, `unknown`,
+  `unsupported`, `unavailable`, `timeout`, `error`), `windows[]` (hasta 16), `reached?`, `source?` (`query`: consulta directa; `notification`:
+  aviso del proveedor; `session`: evento de una sesión), `observedAt?`, `fresh?` y `reason?`. **Un proveedor que falla no rompe la
+  respuesta**: su estado sale en su entrada y, si ya había un dato, se devuelve ese con el motivo del fallo de refresco. `fresh` es
+  `false` si el dato tiene más de 15 minutos o si alguna de sus ventanas ya pasó su hora de reinicio (el porcentaje ya no vale).
+- `limits.updated` (evento): un `ProviderLimits`; el cliente sustituye lo que tenía de ese proveedor.
+- Códigos: `PROVIDER_UNAVAILABLE` (proveedor desconocido o servicio apagado) e `INVALID_PARAMS`.
+
+### Servicio, caché, plazos y contención (`UsageLimitsService`)
+
+Valida todo lo que devuelven los puertos (es salida ajena): una ventana mal formada o con porcentaje fuera de 0-100 se descarta, un campo
+opcional hostil (fecha negativa, etiqueta enorme) se quita sin esconder la ventana, se acotan a 16 y se deduplican por cubo e id, y el
+resultado solo contiene los campos del contrato (cualquier otro, p. ej. de la cuenta, no pasa). Una consulta a un proveedor consultable se
+guarda 30 s (5 s si falló), las simultáneas comparten una sola, tiene plazo (10 s) y se cancela con `close()`. `refresh: true` salta la
+caché. Los avisos espontáneos se **contienen**: como mucho un `limits.updated` por proveedor cada 500 ms (el último dato manda) y solo si el
+contenido cambió, de modo que una avalancha de notificaciones no inunda a los clientes ni al bus. `DaemonOptions.limits` ajusta los plazos.
+
+### Por proveedor
+
+| Proveedor   | Fuente                                                                                                                                                     | Consultable | Qué se lee                                                                                                                     |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Codex       | `account/rateLimits/read` de `codex app-server` (proceso efímero, sin abrir hilos) y la notificación `account/rateLimits/updated` de las sesiones abiertas | sí          | por cubo (`rateLimitsByLimitId`, o `rateLimits`): `primary` y `secondary` con `usedPercent`, `windowDurationMins` y `resetsAt` |
+| Claude Code | mensaje `rate_limit_event` del Agent SDK dentro de una sesión (sin llamadas propias a APIs ni lectura de archivos de Claude)                               | no          | `status`, `rateLimitType` (`five_hour`, `seven_day`...), `utilization` y `resetsAt`                                            |
+| ACP         | no                                                                                                                                                         | -           | -                                                                                                                              |
+| Antigravity | no                                                                                                                                                         | -           | -                                                                                                                              |
+| Ollama      | no                                                                                                                                                         | -           | -                                                                                                                              |
+
+**Codex.** La respuesta de `account/rateLimits/read` mezcla las ventanas con datos de la cuenta (`accountId`, `planType`, `credits` con
+saldo, créditos de reinicio, `ordinaryUsageAllowed`). El adaptador la lee con esquemas `z.object` que **descartan** todo campo no declarado y
+solo declara las ventanas; no llama a `account/read` (la comprobación de disponibilidad del proveedor sí lo hace, pero por separado y sin
+guardar nada) y nunca usa el tipo de plan. `usedPercent` por encima de 100 se acota; negativo o no numérico descarta esa ventana. `resetsAt` llega
+en segundos y se pasa a ms. La notificación es **parcial** («junta lo disponible con la última lectura»): la sesión la desvía antes de la lógica
+de turnos y el adaptador la mezcla con las ventanas que ya conoce (una ventana ausente o nula no borra la anterior). Si hay varios cubos
+(`rateLimitsByLimitId`) salen todos (hasta 8); `rateLimitReachedType` no nulo marca `reached`. Los errores `USAGE_LIMIT` y `RATE_LIMIT` de los
+turnos siguen traduciéndose a bloques `error` (F3.2); esto es aparte.
+
+**Claude.** El SDK (0.3.331) emite `rate_limit_event` con `rate_limit_info`: `status` (`allowed`, `allowed_warning`, `rejected`), `resetsAt`,
+`rateLimitType` (`five_hour`, `seven_day`, `seven_day_opus`, `seven_day_sonnet`, `seven_day_overage_included`, `overage`) y `utilization`.
+El adaptador lo intercepta en la sesión (no es un evento de turno), lo valida con un `z.object` que descarta el resto (créditos, métodos de
+pago, `uuid`, `session_id`) y lo junta por tipo de ventana. Un `rejected` sin `utilization` cuenta como 100 % y marca `reached`. **Mientras
+ninguna sesión haya recibido el evento (o nunca lo emita, p. ej. con clave de API), los límites de Claude son «desconocidos»**
+(`status: 'unknown'`); no hay consulta propia. Dos puntos sin verificar en vivo: `utilization` está documentado como «porcentaje» pero la
+CLI parece emitirlo como fracción (0-1), así que se aceptan las dos lecturas (hasta 1 es fracción, de 1 a 100 porcentaje, fuera de rango se
+descarta); y `resetsAt` se acepta en segundos o en milisegundos.
+
+### Cómo se evita filtrar datos de la cuenta
+
+1. Los esquemas de borde de los adaptadores descartan lo no declarado (`z.object`, no `looseObject`) y solo declaran campos de ventana.
+2. El servicio vuelve a filtrar: solo copia los campos del contrato de cada ventana y valida el resultado con los esquemas de `contracts`
+   (estrictos).
+3. Los errores no reenvían el mensaje del servidor (podría llevar el correo): el adaptador de Codex usa mensajes fijos y el servicio, mensajes
+   genéricos para errores que no son `UsageLimitsError`. Los logs solo llevan el id del proveedor.
+4. Las pruebas usan datos de cuenta de relleno (`SECRETO-*`, correos de ejemplo) y comprueban que no aparecen en ninguna salida (adaptadores,
+   servicio, daemon y CLI). Las pruebas reales (`NEXO_LIVE_*`) no imprimen cuentas ni porcentajes.
+
+### CLI y cliente
+
+`nexo limits [--provider <id>] [--refresh] [--json]`: por proveedor, cada ventana con su porcentaje, duración y reinicio, el origen y la
+frescura (o «desconocido» / el motivo). Con `--json` emite el resultado de `limits.status`. `@nexo/client` ofrece `limitsApi(client)` con
+`status`, `refresh` y `onUpdated`.
+
+### Pruebas
+
+`FakeUsageLimits` y `runUsageLimitsConformance` (declaración, `query` con ventanas válidas y sin campos de cuenta, cancelación,
+`onUpdate` y baja, oyente que lanza) corren contra el falso y contra cada adaptador (`fake-codex.mjs` ampliado con
+`account/rateLimits/read` y notificaciones, y el transporte falso de Claude). Hay pruebas adversariales de respuestas malformadas,
+porcentajes fuera de rango, fechas raras, datos de cuenta que no deben salir, una avalancha de notificaciones y un proveedor que no
+responde; propiedades (fast-check) de la normalización en el contrato, el servicio y los dos adaptadores; e integración en el daemon.
+
 ## Protocolo (v1)
 
 Todo mensaje que cruza un límite de proceso se valida con zod **al recibirlo** (el daemon valida lo que
@@ -1543,7 +1635,7 @@ Transporte: WebSocket con mensajes JSON de texto. Tamaño máximo de mensaje: 1 
 
 Métodos de la fase 1 (terminal; los `agent.*` de la F2 se describen en «Agentes»): `auth` (solo como primer mensaje; el daemon lo resuelve antes de despachar), `daemon.info`, `daemon.shutdown` (apagado limpio; solo clientes autenticados), `snapshot`, `events.subscribe`,
 `workspace.{list,create,rename,close}`, `tab.{create,close,focus,move,rename}`,
-`history.{list,read}` (ver «Historial de los proveedores (F4.3)»), `pane.{split,close,focus,resize,swap}` y `viewer.open` (`pane.split` admite `kind: 'viewer'` y `path`; los `fs.{stat,read}` están en «Archivos y visor (F4.1)»; `pane.resize` admite dos formas: `{ paneId, delta }`, la frontera de un panel con su hermano directo, y `{ tabId, path, index, delta }`, la frontera entre los hijos `index` e `index+1` del split al que lleva `path`; camino ≤ 64 niveles, delta en [-1, 1], mínimo 5 % por panel; camino inexistente o que no apunta a un split → `NOT_FOUND`), `terminal.{spawn,write,resize,read,kill}`.
+`history.{list,read}` (ver «Historial de los proveedores (F4.3)»), `limits.status` y el evento `limits.updated` (ver «Límites de uso de los proveedores (F4.4)»), `pane.{split,close,focus,resize,swap}` y `viewer.open` (`pane.split` admite `kind: 'viewer'` y `path`; los `fs.{stat,read}` están en «Archivos y visor (F4.1)»; `pane.resize` admite dos formas: `{ paneId, delta }`, la frontera de un panel con su hermano directo, y `{ tabId, path, index, delta }`, la frontera entre los hijos `index` e `index+1` del split al que lleva `path`; camino ≤ 64 niveles, delta en [-1, 1], mínimo 5 % por panel; camino inexistente o que no apunta a un split → `NOT_FOUND`), `terminal.{spawn,write,resize,read,kill}`.
 Eventos: `layout.changed`, `workspace.changed`, `terminal.output`, `terminal.exit`, `pane.title`, `pane.attention`,
 `client.resync` (contrapresión, ver "Servidor del daemon"); de la F2: `agent.block`, `agent.delta`, `agent.status`, `agent.session`.
 
@@ -1823,6 +1915,8 @@ Nexo funciona al 100 % sin mascota. Una mascota es un **paquete intercambiable**
   bloquea carpetas ocultas sensibles, rutas UNC, `\\?\`, nombres de dispositivo de Windows).
 - Límites: tamaño de mensaje, frecuencia de escritura a PTY, número de terminales y agentes por daemon.
 - Los logs pasan por un redactor de secretos (tokens, claves de API).
+- Límites de uso (F4.4): solo ventanas (porcentaje y reinicio); los datos de la cuenta que acompañan a las respuestas de los proveedores se descartan en el
+  borde con esquemas zod que no los declaran; ver «Límites de uso de los proveedores (F4.4)».
 - Visor (F4.2): sin HTML crudo ni red remota en el Markdown, SVG solo como `<img>`, PDF sin scripts ni anotaciones, CSP con `blob:` solo para imágenes;
   ver «Visor lateral (F4.2)».
 

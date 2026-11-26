@@ -103,7 +103,10 @@ notificación del sistema si la ventana no tiene el foco, y las mediciones de re
   Ollama no tienen), métodos `history.list` (agrupado por carpeta, paginado con cursor) y `history.read` (bloques normalizados con topes), caché,
   plazos y cancelación, `historyApi`, `nexo history ls|show`, `nexo agent new --resume` y suites de conformidad. Sin ADR 0008: ningún proveedor
   obligó a leer sus archivos. Ver «Historial de los proveedores (F4.3)».
-- Límites de uso (Claude, Codex).
+- **F4.4 Límites de uso (Claude, Codex)** (hecho): `UsageLimitsPort` (capacidad opcional de `AgentProviderPort`) con `account/rateLimits/read` y la notificación
+  `account/rateLimits/updated` de Codex y los `rate_limit_event` del Agent SDK de Claude (solo informan durante una sesión; sin ellos, «desconocido»), métodos
+  `limits.status` y evento `limits.updated` (ventanas con porcentaje usado, reinicio, origen y frescura; caché, plazos y contención de avisos), `limitsApi`,
+  `nexo limits` y suites de conformidad. Sin datos de la cuenta en ningún borde. La interfaz de límites es la #64. Ver «Límites de uso de los proveedores (F4.4)».
 
 ## F5 — MCP y mascota
 
