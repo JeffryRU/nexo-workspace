@@ -209,6 +209,9 @@ export NEXO_MEMORY_SUMMARIZER=provider:claude:haiku  # o provider:gemini:gemini-
 # Opcionales: umbrales (tokens nuevos de una sesión para observar; tokens de observaciones para condensar)
 export NEXO_MEMORY_OBSERVER_TOKENS=6000
 export NEXO_MEMORY_REFLECTOR_TOKENS=40000
+
+# Opcional, apagada: renovar la sesión (misma pestaña, sembrada con la memoria y los últimos turnos) al pasar de ~80000 tokens de contexto
+export NEXO_MEMORY_RENEW_TOKENS=80000
 ```
 
 Si el resumidor no está disponible (Ollama apagado, el modelo no instalado, el proveedor sin sesión), la memoria queda **en pausa** con el
@@ -220,8 +223,11 @@ motivo a la vista y se retoma sola; no es un error. Para verla desde la terminal
 - `nexo memory search <consulta>`: búsqueda por términos.
 - `nexo memory recall <sesión> <rango>`: el texto original detrás de una observación (`5-9`), mientras la sesión siga abierta.
 
-Las observaciones se guardan en el directorio de estado (`memory/`). La inyección en los agentes y la interfaz llegan en F3.5.3 y
-F3.5.4 ([hoja de ruta](docs/ROADMAP.md)). Una prueba opcional con Ollama real (usa tu máquina):
+Las observaciones se guardan en el directorio de estado (`memory/`). **Al abrir una sesión nueva** en una carpeta con memoria, el agente
+recibe las reflexiones y observaciones del proyecto dentro de un bloque `<nexo-memory>` (como prompt de sistema en Claude y Ollama, como
+instrucciones del hilo en Codex, y como primer contexto o prefijo del primer mensaje en Gemini y Antigravity), escapado y marcado como
+datos, no como instrucciones; con la memoria apagada no cambia nada. Con `NEXO_MEMORY_RENEW_TOKENS` la sesión se renueva sola al
+crecer el contexto (pierdes la caché de prompts del CLI). La interfaz llega en F3.5.4 ([hoja de ruta](docs/ROADMAP.md)). Una prueba opcional con Ollama real (usa tu máquina):
 `NEXO_LIVE_MEMORY_OLLAMA=1 pnpm --filter @nexo/adapter-summarizer-ollama test:live`; con un proveedor real consume tu cuota:
 `NEXO_LIVE_MEMORY_PROVIDER=claude pnpm --filter @nexo/daemon test:live`.
 

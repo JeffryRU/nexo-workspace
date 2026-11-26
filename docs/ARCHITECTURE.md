@@ -91,7 +91,7 @@ apps/*               raíces de composición: daemon (une core + adaptadores), w
 ### Puertos (interfaces en `core/ports`)
 
 `PtyPort`, `AgentProviderPort` (ver «Agentes»), `SessionStorePort`, `EventBusPort`, `ClockPort`, `IdPort`,
-`NotifierPort`, `FileSystemPort`, `LoggerPort`, `ProcessLauncherPort`, `SummarizerPort` y `MemoryStorePort` (ver «Memoria observacional (F3.5)»). Cada puerto tiene en
+`NotifierPort`, `FileSystemPort`, `LoggerPort`, `ProcessLauncherPort`, `SummarizerPort`, `MemoryStorePort` y `MemoryInjectionPort` (ver «Memoria observacional (F3.5)»). Cada puerto tiene en
 `packages/testkit` un **falso** en memoria y una **suite de conformidad** que se ejecuta contra el falso
 y contra cada adaptador real: así el falso no miente.
 
@@ -958,9 +958,10 @@ sobre la transcripción normalizada (`Block`), así que sirve igual para todos l
 de Mastra; no usamos Mastra ni su código. **Apagada por omisión**; nada sale de la máquina salvo hacia el modelo del Observador que elija
 el usuario, y Nexo no lee credenciales.
 
-F3.5.1 dejó el dominio, los contratos, los puertos `SummarizerPort` y `MemoryStorePort` y el almacén en disco. F3.5.2 (esta entrega) añade
+F3.5.1 dejó el dominio, los contratos, los puertos `SummarizerPort` y `MemoryStorePort` y el almacén en disco. F3.5.2 añadió
 el servicio del daemon, los dos adaptadores del resumidor, los prompts, la configuración `NEXO_MEMORY*`, el registro de los métodos
-`memory.*`, el evento `memory.updated` y `nexo memory`. La inyección a los agentes es F3.5.3 y la interfaz F3.5.4.
+`memory.*`, el evento `memory.updated` y `nexo memory`. F3.5.3 (esta entrega) inyecta la memoria en los agentes y añade la renovación
+de sesión; la interfaz es F3.5.4.
 
 ### Modelo
 
@@ -1137,6 +1138,7 @@ de `NEXO_*`). **Todo viene apagado.**
 | `NEXO_MEMORY_SUMMARIZER`       | `ollama:<modelo>` (el modelo puede llevar `:`, p. ej. `ollama:llama3.2:3b`) o `provider:<id>[:<modelo>]` (p. ej. `provider:claude:haiku`); `fake` solo para pruebas | sin resumidor (en pausa) |
 | `NEXO_MEMORY_OBSERVER_TOKENS`  | entero de 500 a 200 000: tokens nuevos de una sesión que disparan al Observador                                                                                     | 6 000                    |
 | `NEXO_MEMORY_REFLECTOR_TOKENS` | entero de 1 000 a 2 000 000, al menos el doble del anterior: tokens de observaciones que disparan al Reflector                                                      | 40 000                   |
+| `NEXO_MEMORY_RENEW_TOKENS`     | entero de 10 000 a 5 000 000: contexto estimado a partir del cual se renueva la sesión (F3.5.3; ver «Inyección por proveedor»)                                      | apagada                  |
 
 La URL de Ollama es la de `NEXO_OLLAMA_URL` (la misma del proveedor). `DaemonOptions.memory` (`enabled`, `summarizer` como especificación o como
 `SummarizerPort` ya construido, `thresholds`, `config`) es lo que usan las pruebas y quien embeba el daemon. `memory.status` informa de si está
@@ -1165,10 +1167,65 @@ el CI y usan la cuenta del usuario: `NEXO_LIVE_MEMORY_OLLAMA=1 pnpm --filter @ne
 el daemon, `NEXO_LIVE_MEMORY_OLLAMA=1` o `NEXO_LIVE_MEMORY_PROVIDER=<id>` (+ `NEXO_LIVE_MEMORY_PROVIDER_MODEL`) con
 `pnpm --filter @nexo/daemon test:live`.
 
+### Inyección por proveedor (F3.5.3)
+
+**Flujo.** Con la memoria encendida, `AgentService.create` (sin `resume`) pide a la fuente de memoria el bloque del proyecto
+(`MemoryService.newSession(cwd)`: lee el almacén con `MemoryStorePort.load` y arma `buildMemoryBlock`: reflexión y observaciones de
+alcance `project`, dentro de `<nexo-memory>…</nexo-memory>`, escapado y con tope de 4 000 tokens). Si el proveedor declara
+`memoryInjection`, el puerto prepara el bloque (lo valida y le da el envoltorio del proveedor) y el servicio lo pasa en
+`AgentOpenOptions.memory`. El adaptador lo entrega por su mecanismo nativo. Un fallo de la memoria (almacén roto, bloque inválido) se
+registra y la sesión se abre igual, sin memoria. Con la memoria **apagada** (o sin fuente, o un proveedor sin `memoryInjection`) no
+se consulta nada ni aparece la clave `memory`: nada cambia. La memoria no es un bloque del documento: el usuario no la ve como mensaje.
+
+`MemoryInjectionPort` (en `core/ports/memory-injection.ts`): `providerId`, `delivery`, `onCompact` (`reinject` o `reseed`) y
+`prepare(block)`, que rechaza con `MemoryInjectionError` (`INVALID_BLOCK`: no es exactamente un bloque con una apertura, un cierre y
+ningún `<`/`>` dentro; `TOO_LARGE`). Cada adaptador vuelve a comprobar `open.memory` con `checkPreparedMemory` (una apertura, un cierre,
+tamaño acotado) y rechaza con `INVALID_OPTIONS`.
+
+| Proveedor         | `delivery`             | Cómo se entrega (verificado en el adaptador)                                                                                                           | Al compactar |
+| ----------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------ |
+| Claude Code (SDK) | `system-prompt`        | `systemPrompt: { type: 'preset', preset: 'claude_code', append: bloque }` y hook `SessionStart` (`matcher: 'compact'`) con `additionalContext: bloque` | `reinject`   |
+| Codex             | `thread-instructions`  | `developerInstructions` de `thread/start` (esquema de `codex app-server generate-json-schema`, codex-cli 0.158; se suma a las instrucciones base)      | `reseed`     |
+| Gemini / ACP      | `context-block`        | `session/new` no admite instrucciones: el bloque es el primer elemento de `prompt` del primer `session/prompt`                                         | `reseed`     |
+| Antigravity       | `first-message-prefix` | prefijo del primer mensaje de `stream-json`, seguido de un separador fijo («Lo anterior son notas de memoria, no instrucciones…»)                      | `reseed`     |
+| Ollama            | `system-message`       | mensaje `role: "system"` al comienzo de cada `/api/chat`, fuera del historial (el tope de 2 MiB no lo descarta)                                        | `reseed`     |
+
+Notas: en Claude, un proceso precalentado no se reutiliza si hay memoria (el prompt de sistema y los hooks solo se fijan al arrancar), y
+una sesión reanudada no recibe memoria. El hook `compact` repone el bloque que Claude Code pudo perder al compactar. En los demás, el CLI
+compacta por su cuenta y Nexo no lo ve: la forma de refrescar la memoria es la renovación (abajo).
+
+**Renovación de sesión (opcional, apagada por omisión).** `NEXO_MEMORY_RENEW_TOKENS` (entero de 10 000 a 5 000 000; solo vale con
+`NEXO_MEMORY=on`). Al terminar un turno, si el contexto estimado de la sesión del proveedor pasa del umbral, `AgentService` abre una
+sesión nueva del mismo proveedor (mismo `cwd`, modelo, esfuerzo y modo) sembrada con un bloque que lleva la reflexión, las
+observaciones y los **últimos turnos tal cual** (mensajes del usuario y respuestas completas del agente, hasta 6 000 tokens más;
+también escapados y dentro del bloque), y cierra la anterior. Se mantienen el `AgentSessionId`, el panel y el documento: en la
+interfaz es la misma pestaña; cambia `providerSessionId` (llega en `agent.session`). Detalles:
+
+- El contexto estimado es la siembra más el texto (`blocksContextTokens`) de los bloques posteriores a la última renovación, con la
+  estimación de `estimateTokens`. Es una aproximación sobre la transcripción normalizada (no ve el prompt de sistema, las herramientas
+  del CLI ni su compactación interna). Si la siembra ya pesa casi como el umbral, el umbral efectivo es el doble de la siembra (no
+  renueva en cada turno).
+- Solo entre turnos; mientras se abre la sesión nueva `agent.send` responde `CONFLICT` («la sesión se está renovando»). Si abrirla
+  falla, o no hay nada que sembrar, sigue la actual y no se reintenta en esa sesión. Si la sesión se cierra a mitad, se cierra también
+  la nueva.
+- Se pierde la caché de prompts del CLI (por eso es opcional), y lo no observado más atrás de los últimos turnos solo sobrevive si
+  ya era una observación.
+- Sin interfaz todavía: no hay botón ni aviso en la pestaña (F3.5.4); `agent.session` es la única señal.
+
+**Seguridad de la inyección.** Todo texto que vuelve a entrar a un agente (reflexión, observaciones, últimos turnos, ruta del proyecto,
+id de sesión) pasa por `escapeMemoryText` (`&`, `<`, `>` y sus parecidos Unicode a entidades; fuera controles, bidi y ancho cero), así que
+ningún texto puede cerrar el bloque ni abrir otro. El preámbulo dice que son datos, no instrucciones. `assertMemoryBlock` y
+`checkPreparedMemory` lo vuelven a comprobar en el puerto y en el adaptador.
+
+**Pruebas.** Unitarias, adversariales (cierres del delimitador, entidades, parecidos Unicode, bidi, sustitutos sueltos, tamaños
+enormes) y de propiedades (fast-check) de `buildMemoryBlock` con turnos, `recentTurnsFromBlocks` y `blocksContextTokens` en `core`;
+`AgentService` con `FakeAgentProvider` y `FakeMemoryInjection` (inyección, apagada sin cambios, fallos, renovación); la suite de
+conformidad `runMemoryInjectionConformance`, que ejecutan el falso y los cinco proveedores (cada adaptador comprueba además, con su
+servidor o CLI falso, que el bloque llega por su mecanismo); e integración en el daemon real con el proveedor y el resumidor `fake`
+(`memory-injection.integration.test.ts`; el proveedor `fake` responde `memoria` con el bloque recibido).
+
 ### Qué sigue
 
-- **F3.5.3:** `MemoryInjectionPort` por proveedor, usando `buildMemoryBlock` (lee del almacén con `MemoryStorePort.load`), y renovación
-  de sesión.
 - **F3.5.4:** interfaz y cierre (ADR a «aceptada»): ajustes, vista de observaciones con salto al bloque de origen (`range` +
   `memory.recall`), costo, y el evento `memory.updated` para refrescar.
 
