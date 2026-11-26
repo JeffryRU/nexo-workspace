@@ -42,7 +42,7 @@ test.describe('panel de agente', () => {
     await expect(app.getByRole('button', { name: 'Interrumpir' })).toHaveCount(0)
     // Los chips pasan a ser de solo lectura al existir la sesión.
     await expect(app.locator('select.chip')).toHaveCount(0)
-    await expect(app.locator('.chip.fixed').first()).toHaveText('fake')
+    await expect(app.locator('.chip.fixed').first()).toHaveText('Proveedor de prueba')
 
     // Segundo turno, y el documento sobrevive a recargar la página (se vuelve a abrir la sesión).
     await say(app, 'otra vez')
