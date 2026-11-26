@@ -200,10 +200,11 @@ export const memoryMethods = {
   },
   /** Texto original (bloques) detrás de un rango citado por una observación. */
   'memory.recall': {
-    params: z.strictObject({ sessionId: AgentSessionId, range: BlockRange }).refine(
-      (p) => p.range.to - p.range.from < LIMITS.maxRecallBlocks,
-      { message: `el rango pasa de ${LIMITS.maxRecallBlocks} bloques` },
-    ),
+    params: z
+      .strictObject({ sessionId: AgentSessionId, range: BlockRange })
+      .refine((p) => p.range.to - p.range.from < LIMITS.maxRecallBlocks, {
+        message: `el rango pasa de ${LIMITS.maxRecallBlocks} bloques`,
+      }),
     result: z.strictObject({
       blocks: z.array(Block).max(LIMITS.maxRecallBlocks),
       /** `true` si el daemon devolvió menos bloques del rango (por tamaño). */
