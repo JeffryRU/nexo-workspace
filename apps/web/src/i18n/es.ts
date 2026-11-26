@@ -103,6 +103,11 @@ export const es = {
     'attention.next': 'Ir al siguiente panel que necesita atención',
     'help.toggle': 'Mostrar esta ayuda',
   },
+  viewer: {
+    paneTitle: 'Visor',
+    placeholder: 'El visor de archivos llega pronto.',
+    noFile: 'Sin archivo',
+  },
   agent: {
     paneTitle: 'Agente',
     newTab: 'Nueva pestaña de agente',
