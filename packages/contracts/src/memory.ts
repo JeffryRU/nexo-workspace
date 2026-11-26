@@ -6,8 +6,8 @@ import { bodyText, lineText } from './text.ts'
 
 /**
  * Memoria observacional (F3.5.1, ADR 0007). Modelo, formato en disco y métodos `memory.*`.
- * Los métodos viven en `memoryMethods` y aún no están en el registro `methods` del daemon: los registra
- * F3.5.2 junto con sus manejadores (ver `docs/ARCHITECTURE.md`, «Memoria observacional (F3.5)»).
+ * Los métodos viven en `memoryMethods`; `methods.ts` los suma al registro del protocolo (F3.5.2) y el
+ * daemon los atiende con `MemoryService` (ver `docs/ARCHITECTURE.md`, «Memoria observacional (F3.5)»).
  */
 
 const Millis = z.int().nonnegative()
@@ -165,8 +165,17 @@ export const memoryMethods = {
         observerBatchTokens: z.int().positive(),
         reflectorTokens: z.int().positive(),
       }),
+      /** Por qué la memoria está en pausa estando activada (resumidor ausente o caído); ausente si trabaja. */
+      pausedReason: lineText(256).optional(),
       project: ProjectStats.optional(),
+      /** Uso acumulado (Observador + Reflector) desde que arrancó el daemon. */
       usage: MemoryUsageTotals,
+      /** El mismo uso desglosado por papel. */
+      roles: z
+        .strictObject({ observer: MemoryUsageTotals, reflector: MemoryUsageTotals })
+        .optional(),
+      /** Uso acumulado guardado en el proyecto (todas las ejecuciones del daemon). */
+      projectUsage: MemoryUsageTotals.optional(),
     }),
   },
   /** Reflexión (solo en la primera página) y observaciones del proyecto con `seq >= fromSeq`. */

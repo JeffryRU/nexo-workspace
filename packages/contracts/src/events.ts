@@ -86,6 +86,18 @@ export const events = {
     z.strictObject({ session: AgentSession }),
     z.strictObject({ sessionId: AgentSessionId, removed: z.literal(true) }),
   ]),
+  /**
+   * La memoria de un proyecto cambió (F3.5.2): el Observador añadió observaciones o el Reflector reescribió el
+   * registro. Solo avisa; el cliente pide `memory.list` para ver el contenido.
+   */
+  'memory.updated': z.strictObject({
+    /** Carpeta normalizada del proyecto (la clave de `memory.list`). */
+    cwd: z.string().min(1).max(LIMITS.maxPathLength),
+    kind: z.enum(['observe', 'reflect']),
+    observations: z.int().nonnegative(),
+    generation: z.int().nonnegative(),
+    updatedAt: z.int().nonnegative(),
+  }),
 } as const
 
 export type EventName = keyof typeof events

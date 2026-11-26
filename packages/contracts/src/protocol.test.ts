@@ -93,6 +93,10 @@ describe('parseRequest', () => {
       'agent.list': {},
       'agent.snapshot': { sessionId: 's1' },
       'agent.close': { sessionId: 's1' },
+      'memory.status': {},
+      'memory.list': { cwd: '/work/app' },
+      'memory.search': { cwd: '/work/app', query: 'pnpm' },
+      'memory.recall': { sessionId: 's1', range: { from: 0, to: 3 } },
     }
     expect(Object.keys(samples).sort()).toEqual([...METHOD_NAMES].sort())
     for (const [method, params] of Object.entries(samples)) {
@@ -110,6 +114,7 @@ describe('parseRequest', () => {
         'agent.status',
         'client.resync',
         'layout.changed',
+        'memory.updated',
         'pane.attention',
         'pane.title',
         'terminal.exit',
