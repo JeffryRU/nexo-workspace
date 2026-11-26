@@ -49,6 +49,7 @@ Si el daemon no corre, la CLI lo arranca desacoplado (registro en `daemon.log` d
 - `nexo agent new | send | ls | attach | interrupt | close | respond`: sesiones de agente (ver abajo).
 - `nexo memory status | ls | search | recall`: memoria observacional (ver «Memoria observacional»).
 - `nexo fs stat <ruta>` y `nexo fs cat <ruta> [--max-bytes N] [--base64]`: leen archivos de las carpetas de los espacios abiertos (nunca `.ssh`, `.env`, credenciales ni lo que salga de la carpeta por un enlace).
+- `nexo open <ruta> [--pane <panel>]`: muestra un archivo en el visor lateral (Markdown, imágenes, PDF, texto); reutiliza el visor de la pestaña o abre uno nuevo.
 - `nexo daemon status | stop | log`: estado, apagado limpio y registro.
 
 Globales: `--json` (salida estable), `--no-start`, `--help`, `--version`. Salida: 0 ok, 1 uso, 2 no
