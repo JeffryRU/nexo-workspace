@@ -30,8 +30,8 @@ export function AgentPanel(props: {
     untrack(() => agent.bind(id, client))
   })
 
-  // Los proveedores solo se piden mientras hace falta elegir (panel sin sesión) y sin bloquear nada:
-  // Claude real puede tardar más de 10 s en responder.
+  // Los proveedores se piden sin bloquear nada (Claude real puede tardar más de 10 s en responder): sirven para
+  // elegir (panel sin sesión) y para dar nombre a los chips de una sesión. El resultado se comparte por `queryKey`.
   const providers = useQuery(() => ({
     queryKey: ['agent.providers'],
     queryFn: async () => {
@@ -39,8 +39,7 @@ export function AgentPanel(props: {
       if (client === undefined) throw new Error(es.status.offline)
       return (await agentApi(client).providers({ timeoutMs: PROVIDERS_TIMEOUT_MS })).providers
     },
-    enabled:
-      app.status() === 'open' && props.sessionId === undefined && agent.sessionId === undefined,
+    enabled: app.status() === 'open',
     // Con un proveedor caído (p. ej. Ollama sin arrancar) se vuelve a preguntar pronto, al enfocar la ventana.
     staleTime: (query) =>
       query.state.data?.some((p) => !p.available) === true

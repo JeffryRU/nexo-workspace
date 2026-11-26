@@ -14,6 +14,12 @@ export type ProvidersState = {
 const effortName = (value: string): string =>
   (es.agent.effortNames as Readonly<Record<string, string>>)[value] ?? value
 
+/** Aviso de un proveedor no disponible: el motivo ya suele nombrarlo, así que no se repite el nombre. */
+export function unavailableNote(p: Pick<ProviderInfo, 'name' | 'reason'>): string {
+  if (p.reason === undefined) return `${p.name}: ${es.agent.providerUnavailableNoReason}`
+  return p.reason.toLowerCase().includes(p.name.toLowerCase()) ? p.reason : `${p.name}: ${p.reason}`
+}
+
 /** Alto del redactor en líneas: crece con el texto hasta un tope. */
 export function composerRows(text: string, max = 8): number {
   let lines = 1
@@ -56,6 +62,10 @@ export function Composer(props: {
 
   const hasSession = () => m.sessionId !== undefined
   const session = m.session
+  // Los chips de una sesión muestran los nombres que da el proveedor, no los ids crudos.
+  const sessionProvider = () => all().find((p) => p.id === session()?.provider)
+  const sessionModelLabel = (id: string) =>
+    sessionProvider()?.capabilities.models.find((x) => x.id === id)?.label ?? id
   const dead = () => m.removed() || m.status() === 'error' || m.docState() === 'failed'
   const working = () => m.status() === 'working'
   const waiting = () => m.status() === 'needs-input'
@@ -135,19 +145,19 @@ export function Composer(props: {
           fallback={
             <>
               <span class="chip fixed" title={es.agent.chipProvider}>
-                {session()?.provider ?? ''}
+                {sessionProvider()?.name ?? session()?.provider ?? ''}
               </span>
               <Show when={session()?.model}>
                 {(x) => (
                   <span class="chip fixed" title={es.agent.chipModel}>
-                    {x()}
+                    {sessionModelLabel(x())}
                   </span>
                 )}
               </Show>
               <Show when={session()?.effort}>
                 {(x) => (
                   <span class="chip fixed" title={es.agent.chipEffort}>
-                    {x()}
+                    {effortName(x())}
                   </span>
                 )}
               </Show>
@@ -207,7 +217,7 @@ export function Composer(props: {
               <For each={unavailable()}>
                 {(p) => (
                   <span class="chip error" role="note" title={p.reason}>
-                    {p.name}: {p.reason ?? es.agent.providerUnavailableNoReason}
+                    {unavailableNote(p)}
                   </span>
                 )}
               </For>
