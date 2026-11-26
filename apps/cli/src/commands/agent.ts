@@ -118,7 +118,7 @@ const sessionView = (s: AgentSession) => ({
 // ---- new ----
 
 const NEW_USAGE =
-  'nexo agent new [--provider <id>] [--model <m>] [--effort <e>] [--permissions ask|accept-edits|plan|bypass] [--cwd <ruta>] [--name <título>]'
+  'nexo agent new [--provider <id>] [--model <m>] [--effort <e>] [--permissions ask|accept-edits|plan|bypass] [--cwd <ruta>] [--name <título>] [--resume <sesión>]'
 
 function samePath(a: string, b: string, platform: NodeJS.Platform): boolean {
   return platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b
@@ -132,6 +132,7 @@ async function agentNew(ctx: Ctx, args: string[]): Promise<void> {
     permissions: { type: 'string' },
     cwd: { type: 'string' },
     name: { type: 'string' },
+    resume: { type: 'string' },
   })
   if (parsed.positionals.length > 0) throw usageError(`uso: ${NEW_USAGE}`)
   const cwdOption = str(parsed, 'cwd')
@@ -148,6 +149,8 @@ async function agentNew(ctx: Ctx, args: string[]): Promise<void> {
     permissionMode = p.data
   }
   const name = str(parsed, 'name')
+  const resume = str(parsed, 'resume')
+  if (resume === '') throw usageError('--resume no puede estar vacío')
 
   const client = await ctx.client()
   const { workspaces } = await client.call('workspace.list', {})
@@ -185,6 +188,7 @@ async function agentNew(ctx: Ctx, args: string[]): Promise<void> {
       ...(model === undefined ? {} : { model }),
       ...(effort === undefined ? {} : { effort }),
       ...(permissionMode === undefined ? {} : { permissionMode }),
+      ...(resume === undefined ? {} : { resume }),
     })
     ctx.emit(
       AgentNewOutput,
