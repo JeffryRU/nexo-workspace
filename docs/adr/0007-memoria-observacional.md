@@ -37,9 +37,12 @@ igual para todos los proveedores. Los adaptadores solo saben **inyectar** el res
    | Proveedor               | Al empezar la sesión                                                   | Cuando el CLI compacta su contexto                                                |
    | ----------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
    | Claude Code (Agent SDK) | `systemPrompt.append` o el hook `SessionStart` con `additionalContext` | hook `SessionStart` con origen `compact`: se vuelven a inyectar las observaciones |
-   | Codex (`app-server`)    | instrucciones del hilo al crearlo (por verificar en F3)                | hilo nuevo sembrado con las observaciones                                         |
+   | Codex (`app-server`)    | `developerInstructions` de `thread/start` (verificado en F3.5.3)       | hilo nuevo sembrado con las observaciones                                         |
    | Gemini / ACP            | primer bloque de contexto de `session/new` o el primer prompt          | sesión nueva sembrada                                                             |
    | Antigravity (`agy`)     | prefijo del primer mensaje en `stream-json`                            | sesión nueva sembrada                                                             |
+
+Implementado en F3.5.3 (ver ARCHITECTURE, «Inyección por proveedor»): en Antigravity, Codex, ACP y Ollama el CLI compacta por su cuenta sin
+que Nexo lo vea, así que su columna «al compactar» se cubre con la renovación (punto 5) y no con un gancho propio.
 
 5. **Renovación (el «encogimiento»):** como no podemos quitar mensajes de un CLI que ya está corriendo,
    se ofrece **renovar la sesión** cuando su contexto pasa el umbral. Se abre una sesión nueva sembrada
