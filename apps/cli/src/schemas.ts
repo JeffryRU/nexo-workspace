@@ -52,6 +52,14 @@ export const NewOutput = z.strictObject({
   createdWorkspace: z.boolean(),
 })
 
+export const OpenOutput = z.strictObject({
+  paneId: Id,
+  tabId: Id,
+  path: z.string(),
+  /** `true` si hubo que crear un panel de visor; `false` si se reutilizó uno. */
+  created: z.boolean(),
+})
+
 export const SplitOutput = z.strictObject({ paneId: Id, terminalId: Id, sourcePaneId: Id })
 
 export const SendOutput = z.strictObject({

@@ -11,6 +11,7 @@ export const COMMANDS = [
   'agent',
   'memory',
   'fs',
+  'open',
   'daemon',
 ] as const
 export type CommandName = (typeof COMMANDS)[number]
@@ -38,6 +39,7 @@ Comandos:
   agent <sub>                sesiones de agente (new, send, ls, attach, interrupt, close, respond)
   memory <sub>               memoria observacional (status, config, ls, search, recall)
   fs <sub>                   archivos de los espacios de trabajo (stat, cat)
+  open <ruta>                muestra un archivo en el visor (Markdown, imagen, PDF, texto)
   daemon status|stop|log     controla el daemon
 
 Los paneles, pestañas y espacios se indican con su id completo, un prefijo único del id
@@ -149,6 +151,13 @@ nexo memory config --on (o NEXO_MEMORY=on) y hace falta NEXO_MEMORY_SUMMARIZER (
 Solo se leen archivos dentro de las carpetas de los espacios de trabajo abiertos; las carpetas ocultas
 sensibles (.ssh, .gnupg, .aws, .claude, .env...), los enlaces que salen de ellas y las rutas de
 dispositivo se rechazan. Las rutas relativas se resuelven contra la carpeta actual.
+`,
+  open: `Uso: nexo open <ruta> [--pane <panel>]
+
+Muestra el archivo en un panel visor (F4.2): reutiliza el visor de la pestaña activa del espacio que contiene
+la ruta o, si no hay, divide el panel enfocado con uno nuevo. Con --pane se usa la pestaña de ese panel. Las
+rutas relativas se resuelven contra la carpeta actual; el daemon rechaza lo que quede fuera de las carpetas de
+los espacios abiertos (mira \`nexo fs --help\`). Con --json imprime { paneId, tabId, path, created }.
 `,
   daemon: `Uso: nexo daemon status|stop|log
 
