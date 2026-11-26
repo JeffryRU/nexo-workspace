@@ -1,5 +1,6 @@
 export { AUTH_MESSAGE } from './errors.ts'
 export { CLAUDE_SESSION_ID, ClaudeHistory } from './history.ts'
+export { ClaudeUsageLimits } from './limits.ts'
 export { ClaudeMemoryInjection, claudeMemoryOptions } from './memory-injection.ts'
 export {
   CLAUDE_EFFORTS,

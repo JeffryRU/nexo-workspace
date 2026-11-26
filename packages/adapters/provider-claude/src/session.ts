@@ -26,6 +26,8 @@ export type SessionDeps = {
   translator: ClaudeTranslator
   /** Redactor de secretos: todo texto que sale hacia logs o errores pasa por él. */
   redact: (text: string) => string
+  /** Mensajes de límites de uso (`rate_limit_event`): no son de ningún turno; devuelve `true` si lo era. */
+  onRateLimit?: (message: unknown) => boolean
   log?: (entry: LogEntry) => void
   /** Tiempo que se espera el `result` del SDK tras pedirle interrumpir antes de dar el turno por terminado. */
   interruptTimeoutMs: number
@@ -368,6 +370,7 @@ export class ClaudeSession implements AgentProviderSession {
   }
 
   #handle(message: unknown): void {
+    if (this.#deps.onRateLimit?.(message) === true) return
     let events: ProviderEvent[]
     try {
       events = this.#deps.translator.translate(message)
