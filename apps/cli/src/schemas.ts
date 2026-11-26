@@ -1,4 +1,11 @@
-import { Attention, Block, PaneKind } from '@nexo/contracts'
+import {
+  AgentSessionId,
+  Attention,
+  Block,
+  BlockRange,
+  memoryMethods,
+  PaneKind,
+} from '@nexo/contracts'
 import { z } from 'zod'
 
 /**
@@ -148,3 +155,14 @@ export const AgentAttachLine = z.discriminatedUnion('event', [
   z.strictObject({ sessionId: Id, event: z.literal('status'), status: Attention }),
   z.strictObject({ sessionId: Id, event: z.literal('removed') }),
 ])
+
+// ---- memoria (F3.5.2): la salida es la de los métodos `memory.*` ----
+
+export const MemoryStatusOutput = memoryMethods['memory.status'].result
+export const MemoryListOutput = memoryMethods['memory.list'].result
+export const MemorySearchOutput = memoryMethods['memory.search'].result
+export const MemoryRecallOutput = z.strictObject({
+  sessionId: AgentSessionId,
+  range: BlockRange,
+  ...memoryMethods['memory.recall'].result.shape,
+})

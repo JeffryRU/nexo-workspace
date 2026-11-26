@@ -1,6 +1,7 @@
 import { agentCommand } from './commands/agent.ts'
 import { daemonCommand } from './commands/daemon.ts'
 import { lsCommand } from './commands/ls.ts'
+import { memoryCommand } from './commands/memory.ts'
 import { newCommand } from './commands/new.ts'
 import { closeCommand, focusCommand, killCommand, renameCommand } from './commands/pane-ops.ts'
 import { readCommand } from './commands/read.ts'
@@ -26,6 +27,7 @@ const HANDLERS: Record<CommandName, Handler> = {
   close: closeCommand,
   rename: renameCommand,
   agent: agentCommand,
+  memory: memoryCommand,
   daemon: daemonCommand,
 }
 
