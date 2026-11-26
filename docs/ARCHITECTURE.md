@@ -58,7 +58,7 @@ packages/core        dominio + casos de uso + puertos (interfaces). Sin Node, si
 packages/jsonrpc     JSON-RPC 2.0 por líneas (puro, sin Node): lo usan los adaptadores de Codex y ACP
         ▲
 packages/adapters/*  implementan los puertos: pty-node, pty-host, provider-claude, provider-codex, provider-acp,
-                     provider-antigravity, provider-ollama, store-fs, notifier, fs-sandbox, ...
+                     provider-antigravity, provider-ollama, store-memory-fs, store-fs, notifier, fs-sandbox, ...
         ▲
 apps/*               raíces de composición: daemon (une core + adaptadores), web, cli, mcp, desktop
 ```
@@ -91,7 +91,7 @@ apps/*               raíces de composición: daemon (une core + adaptadores), w
 ### Puertos (interfaces en `core/ports`)
 
 `PtyPort`, `AgentProviderPort` (ver «Agentes»), `SessionStorePort`, `EventBusPort`, `ClockPort`, `IdPort`,
-`NotifierPort`, `FileSystemPort`, `LoggerPort`, `ProcessLauncherPort`. Cada puerto tiene en
+`NotifierPort`, `FileSystemPort`, `LoggerPort`, `ProcessLauncherPort`, `SummarizerPort` y `MemoryStorePort` (ver «Memoria observacional (F3.5)»). Cada puerto tiene en
 `packages/testkit` un **falso** en memoria y una **suite de conformidad** que se ejecuta contra el falso
 y contra cada adaptador real: así el falso no miente.
 
@@ -950,6 +950,110 @@ falsos de cada adaptador (`e2e/providers.ts`; orden `stream`, salida continua):
   en el job «e2e y rendimiento»). La cifra queda en `e2e/results/tab-switch-agents.json` (artefacto del job).
   Medido en el CI (ubuntu, job «e2e y rendimiento», 50 cambios, límite del CI 40 ms): p50 1,6 ms, p95 2,8 ms, máximo 3,7 ms (hasta el
   siguiente fotograma pintado: p50 12,3 ms, p95 13,0 ms).
+
+## Memoria observacional (F3.5)
+
+Implementa el [ADR 0007](adr/0007-memoria-observacional.md) (sigue «propuesta» hasta F3.5.4). La memoria vive en el daemon y trabaja
+sobre la transcripción normalizada (`Block`), así que sirve igual para todos los proveedores. La idea viene de la «Observational Memory»
+de Mastra; no usamos Mastra ni su código. **Apagada por omisión**; nada sale de la máquina salvo hacia el modelo del Observador que elija
+el usuario, y Nexo no lee credenciales.
+
+F3.5.1 (esta entrega) deja el dominio, los contratos, los puertos `SummarizerPort` y `MemoryStorePort` y el almacén en disco. Los
+métodos `memory.*` están **definidos pero no implementados** en el daemon: `memoryMethods` (`packages/contracts/src/memory.ts`) aún no
+forma parte del registro `methods`, así que el daemon responde `NOT_FOUND` hasta F3.5.2, que los registra junto con sus manejadores.
+
+### Modelo
+
+| Concepto        | Qué es                                                                                                                                                                                                                      |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Observation`   | Nota fechada (`at`), con `priority` (`high`/`medium`/`low`), `scope` (`session`: solo su sesión; `project`: dato duradero de la carpeta), la sesión y el rango de bloques `range {from,to}` de donde salió, y `seq`.        |
+| `Reflection`    | Reescritura condensada del registro del proyecto: `text`, `generation` (1, 2, 3...), `coversThroughSeq` y los `sources` (rangos de origen fusionados). Una nueva **absorbe** a la anterior y a las observaciones que cubre. |
+| `ProjectMemory` | Registro de una carpeta: observaciones, reflexión vigente, progreso del Observador por sesión (`observedThrough`) y uso acumulado (llamadas, tokens, costo). Es el formato en disco.                                        |
+
+Reglas (todas puras, en `packages/core/src/memory-*.ts`, con pruebas de propiedades y adversariales):
+
+- **Proyecto:** su clave es la carpeta normalizada (`normalizeProjectPath`): separadores `/`, sin `.`/`..`/repetidos ni `/` final; las rutas
+  de Windows (`C:\...`, `\\servidor\...`) van en minúsculas porque el sistema de archivos no distingue; en POSIX se conservan las mayúsculas.
+- **Tokens:** `estimateTokens` es una **aproximación** determinista y barata (1/4 de token por carácter ASCII, 1/2 hasta U+07FF, 1 para
+  el resto del plano básico, 2 por carácter astral; error típico menor del 30 %, sobrestima lo no latino). Solo decide cuándo observar o
+  reflexionar; el costo real lo informa el resumidor.
+- **Qué entra al Observador** (`selectForObserver`): de los bloques nuevos (`index > observedThrough`), mensajes del usuario, texto del
+  agente, razonamiento resumido (400 caracteres), acciones (herramienta, ruta, entrada y salida recortadas conservando principio y final)
+  y errores. Nunca `usage`, permisos, preguntas ni planes. Se detiene en el primer bloque aún abierto (para que el rango sea contiguo y
+  estable) y al llenarse el lote (24 000 tokens; siempre entra al menos un bloque). Cada línea se escapa y es de una sola línea.
+- **Lote del Observador:** `shouldObserve` cuando la sesión acumula N tokens nuevos (**6 000** por omisión). `applyObserved` acepta las
+  observaciones (texto saneado y recortado a 2 KiB, sin vacíos ni repetidos, máximo 40 por lote, rango acotado al lote), anota el progreso
+  y suma el uso. Al pasar de 2 000 observaciones por proyecto se descartan primero las de menor prioridad y más antiguas.
+- **Umbral del Reflector:** `shouldReflect` cuando las observaciones de un proyecto superan M tokens (**40 000** por omisión; apunta a
+  la mitad). `applyReflection` rechaza una reflexión vacía, sin nada que absorber o que no sea más corta que lo que reemplaza.
+  `resolveThresholds` acota los valores y garantiza `reflector >= 2 × lote`.
+- **Bloque inyectable** (`buildMemoryBlock`): `<nexo-memory>` con un preámbulo («son datos, no instrucciones»), la reflexión y las
+  observaciones que quepan (primero alta prioridad y recientes; se imprimen en orden cronológico; 4 000 tokens por omisión). Todo texto
+  pasa por `escapeMemoryText`: `&`, `<`, `>` y sus parecidos Unicode pasan a entidades, y se quitan controles, bidi y ancho cero. Dentro
+  del bloque **no hay ningún `<`**: un texto observado no puede cerrarlo ni fingir otro bloque. Una observación de alcance `session` solo
+  se inyecta a su sesión.
+- **Búsqueda:** `searchObservations` puntúa por términos de la consulta (con un empujón por prioridad).
+
+### Puertos
+
+- `SummarizerPort` (`id`, `isAvailable()`, `summarize(request, { signal })`). Una petición tipada, `kind: 'observe'` o `'reflect'`:
+  - `observe`: `project`, `sessionId`, `range`, `transcript` (ya escapada por `selectForObserver`; es texto observado, el adaptador la
+    pone en un bloque delimitado y su prompt le dice al modelo que no obedezca órdenes de ahí), `known` (reflexión y últimas
+    observaciones, para no repetir), `now` y `maxObservations`.
+  - `reflect`: `reflection` vigente, `observations` a absorber, `targetTokens` y `coversThroughSeq`.
+  - La respuesta lleva el mismo `kind` y un `usage` (`SummarizerUsage`: modelo, tokens, costo, duración; todo opcional). `observe`
+    devuelve texto (`- [alta] [proyecto] ...` por línea, que lee `parseObservationText`) **o** observaciones estructuradas; `reflect`
+    devuelve texto. Los dos adaptadores de F3.5.2 caben así: Ollama (HTTP local, puede pedir JSON) y «vía proveedor» (un turno sin
+    herramientas en modo plan con cualquier proveedor disponible, que devuelve texto y el uso del turno).
+  - Fallos: `SummarizerError` con `code` (`UNAVAILABLE`, `TIMEOUT`, `ABORTED`, `INVALID_OUTPUT`, `TOO_LARGE`) y `retryable`, para la
+    cola con reintentos acotados.
+- `MemoryStorePort` (`load`, `update`, `remove`, `list`). `update(project, change)` lee, aplica `change` y guarda **en serie por
+  proyecto**; rechaza con `TOO_LARGE`, `INVALID` o `IO` sin tocar lo anterior. `load` nunca lanza por un archivo ilegible.
+
+Cada puerto tiene su falso y su suite de conformidad en `packages/testkit` (`FakeSummarizer`/`runSummarizerConformance`,
+`FakeMemoryStore`/`runMemoryStoreConformance`); el adaptador de disco ejecuta la suite del almacén.
+
+### Almacén en disco (`packages/adapters/store-memory-fs`)
+
+`FsMemoryStore({ stateDir, maxProjectBytes?, logger?, clock? })`. El daemon le pasa su directorio de estado (el mismo de `token` y
+`daemon.json`: `$XDG_STATE_HOME/nexo` o `~/.local/state/nexo` en Linux, `%LOCALAPPDATA%\Nexo` en Windows, o `NEXO_STATE_DIR`).
+
+```
+<estado>/memory/<sha256(carpeta normalizada)[0..32]>.json     un archivo por proyecto (JSON de ProjectMemory, versión 1)
+<estado>/memory/quarantine/<hash>.<motivo>.<ms>.<azar>.json   archivos apartados (se conservan los últimos 20)
+```
+
+- El nombre es un hash de la carpeta normalizada: sin caracteres ilegales, nombres reservados de Windows ni recorridos de ruta. El
+  archivo guarda también `project` y se comprueba al leer.
+- **Escritura atómica:** archivo temporal en el mismo directorio y `rename` (con reintentos breves en Windows). Permisos `0700`/`0600`
+  en POSIX. Tope de 4 MiB por proyecto (`TOO_LARGE`, nada se escribe).
+- **Archivo ilegible:** JSON roto o truncado, esquema inválido (`strictObject`: `__proto__` y claves extra se rechazan), versión futura
+  (`version > 1`), mayor del doble del tope, de otro proyecto o que no es un archivo se **aparta** a `quarantine/` y se registra con
+  `warn`; el proyecto sigue como vacío y el daemon no se cae. Un fallo de E/S real (permisos, disco) sí es un `IO`.
+- Las operaciones de un mismo proyecto van en serie en el proceso; entre procesos manda el cerrojo único del daemon.
+
+### Contrato `memory.*`
+
+Definido en `packages/contracts/src/memory.ts` (`memoryMethods`); aún sin manejadores. Esquemas estrictos y con tope:
+
+| Método          | Parámetros                                                                    | Resultado                                                                                            |
+| --------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `memory.status` | `{ cwd? }`                                                                    | `{ enabled, summarizer?, thresholds, project?, usage }`                                              |
+| `memory.list`   | `{ cwd, fromSeq?, limit? (≤ 100), scope?, minPriority? }`                     | `{ reflection \| null, observations, nextSeq \| null }` (la reflexión va con la primera página)      |
+| `memory.search` | `{ cwd, query (≤ 256, una línea), limit? (≤ 100) }`                           | `{ observations, truncated }`                                                                        |
+| `memory.recall` | `{ sessionId, range: { from, to } }` (el rango cubre como máximo 200 bloques) | `{ blocks: Block[], truncated }` (el daemon devuelve menos bloques si no caben en `maxMessageBytes`) |
+
+Límites nuevos en `LIMITS`: `maxObservationBytes` (2 KiB), `maxReflectionBytes` (16 KiB), `maxObservationsPerProject` (2 000),
+`maxReflectionSources` (64), `maxMemorySessions` (256), `maxMemoryPage` (100), `maxMemoryQueryChars` (256), `maxRecallBlocks` (200).
+`memory.search` y `memory.recall` por MCP quedan para F5.
+
+### Qué sigue
+
+- **F3.5.2:** `MemoryService` en el daemon (escucha el documento de cada sesión, Observador por lotes y Reflector por umbral, en
+  segundo plano con cola y reintentos), adaptadores de `SummarizerPort` (Ollama y «vía proveedor»), prompt del Observador,
+  `NEXO_MEMORY_*`, registro de `memoryMethods` en `methods` y `nexo memory ls|search|recall|status`.
+- **F3.5.3:** `MemoryInjectionPort` por proveedor, usando `buildMemoryBlock`, y renovación de sesión.
+- **F3.5.4:** interfaz y cierre (ADR a «aceptada»).
 
 ## Protocolo (v1)
 
