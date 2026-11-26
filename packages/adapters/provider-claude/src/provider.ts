@@ -10,7 +10,9 @@ import {
   AgentProviderError,
   type AgentProviderPort,
   type AgentProviderSession,
+  checkPreparedMemory,
 } from '@nexo/core'
+import { ClaudeMemoryInjection } from './memory-injection.ts'
 import { createSecretRedactor, type SecretRedactor } from './redact.ts'
 import { createSdkTransport } from './sdk-transport.ts'
 import { ClaudeSession, type LogEntry } from './session.ts'
@@ -73,6 +75,7 @@ export function createClaudeProvider(options: ClaudeProviderOptions = {}): Agent
 class ClaudeProvider implements AgentProviderPort {
   readonly id = 'claude'
   readonly displayName = 'Claude Code'
+  readonly memoryInjection = new ClaudeMemoryInjection()
   readonly warmUp?: (options: { cwd: string }) => Promise<void>
   readonly #transport: ClaudeTransport
   readonly #options: ClaudeProviderOptions
@@ -132,6 +135,7 @@ class ClaudeProvider implements AgentProviderPort {
     if (open.resume !== undefined && !SESSION_ID.test(open.resume)) {
       throw invalid('ficha de reanudar desconocida')
     }
+    const memory = checkPreparedMemory(open.memory)
     await this.#checkCwd(open.cwd)
     if (!(await this.isAvailable()))
       throw new AgentProviderError('UNAVAILABLE', UNAVAILABLE_MESSAGE)
@@ -151,6 +155,7 @@ class ClaudeProvider implements AgentProviderPort {
         ...(open.effort === undefined ? {} : { effort: open.effort }),
         permissionMode: MODES[mode],
         ...(open.resume === undefined ? {} : { resume: open.resume }),
+        ...(memory === undefined ? {} : { memory }),
         canUseTool: (ask) =>
           session === undefined
             ? Promise.resolve({ behavior: 'deny', message: 'La sesión aún no está lista.' })

@@ -61,6 +61,7 @@ export function useFakeCodex() {
       effort?: string
       permissionMode?: 'ask' | 'accept-edits' | 'plan' | 'bypass'
       resume?: string
+      memory?: string
     } = {},
   ) {
     const p = provider(env, options)

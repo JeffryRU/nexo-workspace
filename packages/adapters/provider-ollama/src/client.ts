@@ -27,7 +27,7 @@ export class OllamaRequestError extends Error {
 
 export type ChatRequest = {
   model: string
-  messages: readonly { role: 'user' | 'assistant'; content: string }[]
+  messages: readonly { role: 'system' | 'user' | 'assistant'; content: string }[]
   think?: boolean
 }
 

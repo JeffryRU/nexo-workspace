@@ -35,6 +35,8 @@ export type TransportStartOptions = {
   permissionMode: ClaudePermissionMode
   /** Reanuda esa sesión del SDK. */
   resume?: string
+  /** Bloque de memoria ya preparado: va en el prompt de sistema y se reinyecta al compactar. */
+  memory?: string
   canUseTool: (ask: PermissionAsk) => Promise<PermissionDecision>
   /** Salida de error del proceso; quien la reciba debe redactarla. */
   onStderr?: (data: string) => void

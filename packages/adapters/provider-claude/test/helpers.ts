@@ -245,6 +245,8 @@ export const defaultScript: FakeScript = (prompt, session) => {
 
 export class FakeTransport implements ClaudeTransport {
   readonly sessions: FakeSdkSession[] = []
+  /** Opciones de cada `start`. */
+  readonly starts: TransportStartOptions[] = []
   readonly known = new Set<string>()
   available = true
   script: FakeScript = defaultScript
@@ -258,6 +260,7 @@ export class FakeTransport implements ClaudeTransport {
   }
 
   start(options: TransportStartOptions): Promise<ClaudeTransportSession> {
+    this.starts.push(options)
     if (this.startError !== undefined) return Promise.reject(this.startError)
     if (options.resume !== undefined && !this.known.has(options.resume)) {
       return Promise.reject(new TransportError('UNKNOWN_SESSION', 'no existe'))

@@ -78,6 +78,7 @@ export function useFakeAcp() {
       model?: string
       permissionMode?: 'ask' | 'accept-edits' | 'plan' | 'bypass'
       resume?: string
+      memory?: string
     } = {},
   ) {
     const p = provider(env, options)

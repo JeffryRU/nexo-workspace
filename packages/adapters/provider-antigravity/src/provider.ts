@@ -11,7 +11,9 @@ import {
   AgentProviderError,
   type AgentProviderPort,
   type AgentProviderSession,
+  checkPreparedMemory,
 } from '@nexo/core'
+import { AntigravityMemoryInjection } from './memory-injection.ts'
 import { parseModels } from './models.ts'
 import { type AgyLauncher, runAgy, spawnAgyProcess } from './process.ts'
 import { AGY_VERIFIED_VERSION } from './protocol.ts'
@@ -84,6 +86,7 @@ export function createAntigravityProvider(options: AntigravityProviderOptions): 
 class AntigravityProvider implements AgentProviderPort {
   readonly id = 'antigravity'
   readonly displayName = 'Antigravity'
+  readonly memoryInjection = new AntigravityMemoryInjection()
   readonly #o: AntigravityProviderOptions
   readonly #log: (entry: LogEntry) => void
   readonly #redactor: ReturnType<typeof createSecretRedactor>
@@ -143,6 +146,7 @@ class AntigravityProvider implements AgentProviderPort {
     ) {
       throw invalid('ficha de conversación inválida')
     }
+    const memory = checkPreparedMemory(open.memory)
     const probe = await this.#probeNow()
     if (!probe.available || probe.command === undefined) {
       throw new AgentProviderError('UNAVAILABLE', probe.reason ?? 'Antigravity no está disponible')
@@ -161,6 +165,7 @@ class AntigravityProvider implements AgentProviderPort {
       log: this.#log,
       redactor: this.#redactor,
       maxLineLength: this.#o.maxLineLength ?? 8 * 1024 * 1024,
+      ...(memory === undefined ? {} : { memory }),
     })
   }
 
