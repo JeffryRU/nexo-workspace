@@ -1,3 +1,4 @@
+import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -11,6 +12,8 @@ import { createCodexProvider } from '@nexo/adapter-provider-codex'
 import { createOllamaProvider } from '@nexo/adapter-provider-ollama'
 import { PtyHostPort } from '@nexo/adapter-pty-host'
 import { NodePtyPort } from '@nexo/adapter-pty-node'
+import { FsMemoryStore } from '@nexo/adapter-store-memory-fs'
+import { OllamaSummarizer } from '@nexo/adapter-summarizer-ollama'
 import {
   type AgentProviderPort,
   AgentService,
@@ -19,8 +22,13 @@ import {
   type EventBusPort,
   LayoutService,
   type LoggerPort,
+  MemoryService,
+  type MemoryServiceConfig,
+  type MemoryThresholds,
+  ProviderSummarizer,
   type PtyPort,
   SnapshotService,
+  type SummarizerPort,
   TerminalService,
   type TerminalServiceConfig,
   WorkspaceService,
@@ -28,11 +36,12 @@ import {
 import { MemoryEventBus } from './adapters/event-bus.ts'
 import { JsonLogger, type LogLevel } from './adapters/logger.ts'
 import { ScriptedAgentProvider } from './adapters/scripted-agent-provider.ts'
+import { ScriptedSummarizer } from './adapters/scripted-summarizer.ts'
 import { SystemClock } from './adapters/system-clock.ts'
 import { UuidIds } from './adapters/uuid-ids.ts'
 import { watchAgentPanes } from './agent-warmup.ts'
 import { generateToken } from './auth.ts'
-import type { AgentProviderName } from './config.ts'
+import type { AgentProviderName, MemorySummarizerSpec } from './config.ts'
 import { probeDaemon } from './probe.ts'
 import { createRedactor } from './redact.ts'
 import { DaemonServer, type ServerOptions, type ServerStats } from './server.ts'
@@ -108,6 +117,17 @@ export type DaemonOptions = {
   /** URL base de Ollama (por omisión `http://127.0.0.1:11434`). */
   ollamaUrl?: string
   agents?: AgentServiceConfig
+  /**
+   * Memoria observacional (F3.5.2). Apagada por omisión. `summarizer` es una elección de `NEXO_MEMORY_SUMMARIZER`
+   * o un puerto ya construido (pruebas). Sin resumidor, o si no está disponible, la memoria queda en pausa con un
+   * motivo visible en `memory.status`; nunca impide arrancar.
+   */
+  memory?: {
+    enabled?: boolean
+    summarizer?: MemorySummarizerSpec | SummarizerPort
+    thresholds?: Partial<MemoryThresholds>
+    config?: MemoryServiceConfig
+  }
   /** Se llama (tras responder) cuando un cliente pide `daemon.shutdown`; por omisión detiene el daemon. */
   onShutdownRequested?: (stop: () => Promise<void>) => void
   terminal?: TerminalServiceConfig
@@ -216,6 +236,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
           logger,
           ...(options.agents === undefined ? {} : { config: options.agents }),
         })
+  const memory = await createMemory()
   const stopWarmup = watchAgentPanes({ bus, panes: layout, provider: providers[0], logger })
   const workspaces = new WorkspaceService({
     layout,
@@ -229,6 +250,73 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       ? undefined
       : (options.webRoot ??
         fileURLToPath(new URL(join('..', '..', 'web', 'dist'), import.meta.url)))
+
+  async function createMemory(): Promise<MemoryService> {
+    const m = options.memory ?? {}
+    const enabled = m.enabled ?? false
+    const spec = m.summarizer
+    let summarizer: SummarizerPort | undefined
+    let summarizerLabel: string | undefined
+    let pausedReason: string | undefined
+    if (spec === undefined) {
+      pausedReason = 'falta NEXO_MEMORY_SUMMARIZER (ollama:<modelo> o provider:<id>[:<modelo>])'
+    } else if ('summarize' in spec) {
+      summarizer = spec
+    } else if (spec.kind === 'fake') {
+      summarizer = new ScriptedSummarizer()
+      if (enabled)
+        logger.warn('resumidor de memoria de prueba activo (fake): no es para uso normal')
+    } else if (spec.kind === 'ollama') {
+      summarizer = new OllamaSummarizer({
+        model: spec.model,
+        ...(options.ollamaUrl === undefined ? {} : { baseUrl: options.ollamaUrl }),
+      })
+    } else {
+      const provider = providers.find((p) => p.id === spec.id)
+      if (provider === undefined) {
+        summarizerLabel = `provider:${spec.id}${spec.model === undefined ? '' : `:${spec.model}`}`
+        pausedReason = `el proveedor ${spec.id} no está registrado (mira NEXO_AGENT_PROVIDERS)`
+      } else {
+        // Carpeta neutra y vacía: el resumidor no necesita ver ningún proyecto.
+        const cwd = join(paths.dir, 'memory-summarizer')
+        try {
+          await mkdir(cwd, { recursive: true })
+          summarizer = new ProviderSummarizer({
+            provider,
+            cwd,
+            clock,
+            logger,
+            ...(spec.model === undefined ? {} : { model: spec.model }),
+          })
+        } catch (error) {
+          pausedReason =
+            `no se pudo crear la carpeta del resumidor: ${(error as Error).message}`.slice(0, 200)
+        }
+      }
+    }
+    const store = new FsMemoryStore({ stateDir: paths.dir, logger, clock })
+    const service = new MemoryService({
+      store,
+      bus,
+      clock,
+      logger,
+      enabled,
+      ...(summarizer === undefined ? {} : { summarizer }),
+      ...(summarizerLabel === undefined ? {} : { summarizerLabel }),
+      ...(pausedReason === undefined ? {} : { pausedReason }),
+      ...(agentService === undefined ? {} : { sessions: agentService }),
+      ...(m.thresholds === undefined ? {} : { thresholds: m.thresholds }),
+      ...(m.config === undefined ? {} : { config: m.config }),
+    })
+    if (enabled) {
+      logger.info('memoria observacional activada', {
+        summarizer: summarizerLabel ?? summarizer?.id ?? null,
+        ...(pausedReason === undefined ? {} : { pausedReason }),
+      })
+    }
+    service.start()
+    return service
+  }
 
   function createProvider(name: AgentProviderName): AgentProviderPort {
     if (name === 'fake') return new ScriptedAgentProvider()
@@ -283,6 +371,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
         workspaces,
         terminals,
         ...(agentService === undefined ? {} : { agents: agentService.handlers }),
+        memory: memory.handlers,
         snapshot: new SnapshotService({ layout, identity, currentSeq: hooks.currentSeq }),
         subscribe: hooks.subscribe,
         shutdown: () => {
@@ -302,6 +391,9 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     stopped ??= (async () => {
       stopWarmup()
       terminals.shutdown()
+      await memory
+        .stop()
+        .catch((error: unknown) => logger.error('fallo al detener la memoria', { error }))
       await agentService
         ?.closeAll()
         .catch((error: unknown) =>
@@ -347,6 +439,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   } catch (error) {
     stopWarmup()
     terminals.shutdown()
+    await memory.stop().catch(() => {})
     await agentService?.closeAll().catch(() => {})
     hostPort?.dispose()
     await server.close().catch(() => {})

@@ -110,3 +110,83 @@ describe('parseEnv: proveedores de agente', () => {
     ])
   })
 })
+
+describe('parseEnv: memoria observacional (F3.5.2)', () => {
+  it('apagada por omisión, sin resumidor ni umbrales propios', () => {
+    expect(parseEnv({}).memory).toEqual({
+      enabled: false,
+      summarizer: undefined,
+      observerTokens: undefined,
+      reflectorTokens: undefined,
+    })
+    expect(parseEnv({ NEXO_MEMORY: '', NEXO_MEMORY_SUMMARIZER: '' }).memory.enabled).toBe(false)
+  })
+
+  it('NEXO_MEMORY acepta on/off, 1/0 y true/false', () => {
+    for (const on of ['on', '1', 'true'])
+      expect(parseEnv({ NEXO_MEMORY: on }).memory.enabled).toBe(true)
+    for (const off of ['off', '0', 'false']) {
+      expect(parseEnv({ NEXO_MEMORY: off }).memory.enabled).toBe(false)
+    }
+    for (const bad of ['yes', 'ON', '2', 'si']) {
+      expect(() => parseEnv({ NEXO_MEMORY: bad }), bad).toThrow(/NEXO_MEMORY/)
+    }
+  })
+
+  it('NEXO_MEMORY_SUMMARIZER: ollama:<modelo> (con ":" en el modelo) y provider:<id>[:<modelo>]', () => {
+    const spec = (v: string) => parseEnv({ NEXO_MEMORY_SUMMARIZER: v }).memory.summarizer
+    expect(spec('ollama:llama3.2:3b')).toEqual({ kind: 'ollama', model: 'llama3.2:3b' })
+    expect(spec('provider:claude')).toEqual({ kind: 'provider', id: 'claude' })
+    expect(spec('provider:claude:haiku')).toEqual({
+      kind: 'provider',
+      id: 'claude',
+      model: 'haiku',
+    })
+    expect(spec('provider:gemini:gemini-2.5-flash')).toEqual({
+      kind: 'provider',
+      id: 'gemini',
+      model: 'gemini-2.5-flash',
+    })
+    expect(spec('fake')).toEqual({ kind: 'fake' })
+  })
+
+  it('NEXO_MEMORY_SUMMARIZER rechaza lo mal formado', () => {
+    for (const bad of [
+      'ollama:',
+      'ollama',
+      'provider:',
+      'provider::x',
+      'provider:cl aude',
+      'provider:claude:',
+      'openai:gpt',
+      'ollama:mod el',
+      `ollama:${'a'.repeat(300)}`,
+      'ollama:x\nollama:y',
+    ]) {
+      expect(() => parseEnv({ NEXO_MEMORY_SUMMARIZER: bad }), bad).toThrow(/NEXO_MEMORY_SUMMARIZER/)
+    }
+  })
+
+  it('umbrales: enteros dentro de rango y el del Reflector al menos el doble del del Observador', () => {
+    const m = parseEnv({
+      NEXO_MEMORY_OBSERVER_TOKENS: '2000',
+      NEXO_MEMORY_REFLECTOR_TOKENS: '20000',
+    }).memory
+    expect(m.observerTokens).toBe(2000)
+    expect(m.reflectorTokens).toBe(20000)
+    for (const bad of ['499', '200001', 'abc', '1.5', '-1']) {
+      expect(() => parseEnv({ NEXO_MEMORY_OBSERVER_TOKENS: bad }), bad).toThrow(
+        /NEXO_MEMORY_OBSERVER_TOKENS/,
+      )
+    }
+    expect(() => parseEnv({ NEXO_MEMORY_REFLECTOR_TOKENS: '999' })).toThrow(
+      /NEXO_MEMORY_REFLECTOR_TOKENS/,
+    )
+    expect(() =>
+      parseEnv({ NEXO_MEMORY_OBSERVER_TOKENS: '9000', NEXO_MEMORY_REFLECTOR_TOKENS: '10000' }),
+    ).toThrow(/al menos el doble/)
+    // con el Observador por omisión (6000), el Reflector pide al menos 12000
+    expect(() => parseEnv({ NEXO_MEMORY_REFLECTOR_TOKENS: '11000' })).toThrow(/al menos el doble/)
+    expect(() => parseEnv({ NEXO_MEMORY_REFLECTOR_TOKENS: '12000' })).not.toThrow()
+  })
+})

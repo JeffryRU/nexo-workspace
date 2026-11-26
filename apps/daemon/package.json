@@ -8,16 +8,19 @@
   },
   "scripts": {
     "start": "node src/main.ts",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "test:live": "vitest run --config live.vitest.config.ts"
   },
   "dependencies": {
-    "@nexo/adapter-provider-claude": "workspace:*",
     "@nexo/adapter-provider-acp": "workspace:*",
     "@nexo/adapter-provider-antigravity": "workspace:*",
+    "@nexo/adapter-provider-claude": "workspace:*",
     "@nexo/adapter-provider-codex": "workspace:*",
     "@nexo/adapter-provider-ollama": "workspace:*",
     "@nexo/adapter-pty-host": "workspace:*",
     "@nexo/adapter-pty-node": "workspace:*",
+    "@nexo/adapter-store-memory-fs": "workspace:*",
+    "@nexo/adapter-summarizer-ollama": "workspace:*",
     "@nexo/contracts": "workspace:*",
     "@nexo/core": "workspace:*",
     "ws": "8.23.0",

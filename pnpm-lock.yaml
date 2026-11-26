@@ -226,6 +226,12 @@ importers:
       '@nexo/adapter-pty-node':
         specifier: workspace:*
         version: link:../../packages/adapters/pty-node
+      '@nexo/adapter-store-memory-fs':
+        specifier: workspace:*
+        version: link:../../packages/adapters/store-memory-fs
+      '@nexo/adapter-summarizer-ollama':
+        specifier: workspace:*
+        version: link:../../packages/adapters/summarizer-ollama
       '@nexo/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -451,6 +457,22 @@ importers:
       '@nexo/core':
         specifier: workspace:*
         version: link:../../core
+    devDependencies:
+      '@nexo/testkit':
+        specifier: workspace:*
+        version: link:../../testkit
+
+  packages/adapters/summarizer-ollama:
+    dependencies:
+      '@nexo/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@nexo/core':
+        specifier: workspace:*
+        version: link:../../core
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
     devDependencies:
       '@nexo/testkit':
         specifier: workspace:*
