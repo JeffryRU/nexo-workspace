@@ -18,7 +18,28 @@ import type { EventBusPort, IdPort } from './ports/misc.ts'
 
 export type LayoutServiceDeps = { ids: IdPort; bus: EventBusPort }
 
-const DEFAULT_TITLES: Record<PaneKind, string> = { terminal: 'Terminal', agent: 'Agente' }
+const DEFAULT_TITLES: Record<PaneKind, string> = {
+  terminal: 'Terminal',
+  agent: 'Agente',
+  viewer: 'Visor',
+}
+
+/** Título de un visor: el nombre del archivo (último tramo de la ruta) sin caracteres de control. */
+export function viewerTitle(path: string): string {
+  const name =
+    path
+      .split(/[\\/]/)
+      .filter((s) => s !== '')
+      .at(-1) ?? ''
+  let out = ''
+  for (const ch of name) {
+    const c = ch.codePointAt(0) ?? 0
+    const control = c < 0x20 || (c >= 0x7f && c <= 0x9f) || c === 0x2028 || c === 0x2029
+    out += control ? ' ' : ch
+  }
+  out = out.trim().slice(0, 120)
+  return out === '' ? DEFAULT_TITLES.viewer : out
+}
 const MAX_WORKSPACES = 1024
 const MAX_TABS_PER_WORKSPACE = 1024
 
@@ -169,7 +190,11 @@ export class LayoutService implements PaneDirectory, AgentPaneDirectory {
     direction: SplitDirection,
     kind: PaneKind = 'terminal',
     ratio?: number,
+    path?: string,
   ): Pane {
+    if (path !== undefined && kind !== 'viewer') {
+      throw new DomainError('INVALID_PARAMS', 'path solo vale con kind viewer')
+    }
     const { workspace, tab } = this.#locate(paneId)
     const newId = this.#deps.ids.pane()
     if (this.#findPane(newId) !== undefined) {
@@ -178,7 +203,8 @@ export class LayoutService implements PaneDirectory, AgentPaneDirectory {
     const pane: Pane = {
       id: newId,
       kind,
-      title: DEFAULT_TITLES[kind],
+      title: path === undefined ? DEFAULT_TITLES[kind] : viewerTitle(path),
+      ...(path === undefined ? {} : { viewerPath: path }),
       attention: 'idle',
     }
     const layout = split(tab.layout, paneId, direction, pane.id, ratio)
@@ -277,6 +303,20 @@ export class LayoutService implements PaneDirectory, AgentPaneDirectory {
     )
   }
 
+  /** Apunta un panel `viewer` a otro archivo y le pone su nombre de título. */
+  openViewer(paneId: PaneId, path: string): Pane {
+    const { workspace, tab, pane } = this.#locate(paneId)
+    if (pane.kind !== 'viewer') throw new DomainError('CONFLICT', 'el panel no es un visor')
+    this.#updatePane(
+      workspace.id,
+      tab,
+      paneId,
+      (p) => ({ ...p, viewerPath: path, title: viewerTitle(path) }),
+      true,
+    )
+    return this.#locate(paneId).pane
+  }
+
   attachAgentSession(paneId: PaneId, sessionId: AgentSessionId): void {
     const { workspace, tab } = this.#locate(paneId)
     this.#updatePane(
@@ -358,7 +398,7 @@ export class LayoutService implements PaneDirectory, AgentPaneDirectory {
     return undefined
   }
 
-  #locate(paneId: PaneId): { workspace: Workspace; tab: Tab } {
+  #locate(paneId: PaneId): { workspace: Workspace; tab: Tab; pane: Pane } {
     const found = this.#findPane(paneId)
     if (found === undefined) throw new LayoutError('NOT_FOUND', `panel inexistente: ${paneId}`)
     return found

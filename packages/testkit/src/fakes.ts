@@ -12,8 +12,6 @@ import {
   type BusEvent,
   type ClockPort,
   type EventBusPort,
-  type FileStat,
-  type FileSystemPort,
   type IdPort,
   type LogFields,
   type LoggerPort,
@@ -273,48 +271,6 @@ export class FakeNotifier implements NotifierPort {
   readonly sent: Notification[] = []
   async notify(notification: Notification): Promise<void> {
     this.sent.push(notification)
-  }
-}
-
-export class FakeFileSystem implements FileSystemPort {
-  readonly files = new Map<string, string>()
-  readonly dirs = new Set<string>(['/'])
-
-  async readText(path: string): Promise<string> {
-    const content = this.files.get(path)
-    if (content === undefined) throw new Error(`ENOENT: ${path}`)
-    return content
-  }
-  async writeText(path: string, content: string): Promise<void> {
-    this.files.set(path, content)
-  }
-  async exists(path: string): Promise<boolean> {
-    return this.files.has(path) || this.dirs.has(path)
-  }
-  async stat(path: string): Promise<FileStat> {
-    const content = this.files.get(path)
-    if (content !== undefined) {
-      return { isFile: true, isDirectory: false, size: content.length, mtimeMs: 0 }
-    }
-    if (this.dirs.has(path)) return { isFile: false, isDirectory: true, size: 0, mtimeMs: 0 }
-    throw new Error(`ENOENT: ${path}`)
-  }
-  async readDir(path: string): Promise<string[]> {
-    if (!this.dirs.has(path)) throw new Error(`ENOENT: ${path}`)
-    const prefix = path.endsWith('/') ? path : `${path}/`
-    const names = new Set<string>()
-    for (const p of [...this.files.keys(), ...this.dirs]) {
-      if (p.startsWith(prefix) && p !== prefix)
-        names.add(p.slice(prefix.length).split('/')[0] ?? '')
-    }
-    return [...names].sort()
-  }
-  async mkdir(path: string): Promise<void> {
-    this.dirs.add(path)
-  }
-  async remove(path: string): Promise<void> {
-    this.files.delete(path)
-    this.dirs.delete(path)
   }
 }
 

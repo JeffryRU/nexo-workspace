@@ -47,18 +47,6 @@ export interface NotifierPort {
   notify(notification: Notification): Promise<void>
 }
 
-export type FileStat = { isFile: boolean; isDirectory: boolean; size: number; mtimeMs: number }
-
-export interface FileSystemPort {
-  readText(path: string): Promise<string>
-  writeText(path: string, content: string): Promise<void>
-  exists(path: string): Promise<boolean>
-  stat(path: string): Promise<FileStat>
-  readDir(path: string): Promise<string[]>
-  mkdir(path: string): Promise<void>
-  remove(path: string): Promise<void>
-}
-
 export type LogFields = Readonly<Record<string, unknown>>
 
 export interface LoggerPort {

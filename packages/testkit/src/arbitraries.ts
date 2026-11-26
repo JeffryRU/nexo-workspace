@@ -154,7 +154,7 @@ export const arbLayoutPaneIds = (layout: Layout): PaneId[] => {
 export const arbPane: fc.Arbitrary<Pane> = fc.record(
   {
     id: arbPaneId,
-    kind: fc.constantFrom('terminal' as const, 'agent' as const),
+    kind: fc.constantFrom('terminal' as const, 'agent' as const, 'viewer' as const),
     title: arbTitle,
     terminalId: arbTerminalId,
     attention: arbAttention,
