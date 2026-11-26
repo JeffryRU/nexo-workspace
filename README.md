@@ -174,9 +174,9 @@ nexo agent new --provider antigravity --permissions accept-edits --cwd .
 
 `agy` en modo no interactivo **no pide permisos ni hace preguntas**: `ask` deniega lo que no esté preaprobado en los ajustes de `agy`,
 `accept-edits` y `plan` usan `--mode` y `bypass` usa `--dangerously-skip-permissions`; tampoco emite el texto del razonamiento. El
-formato `stream-json` sale de la documentación oficial y de las banderas de `agy` 1.2.0, pero no se ha comprobado con un turno real: la
-prueba en vivo (usa tu cuenta y consume cuota) es `NEXO_LIVE_AGY=1 pnpm --filter @nexo/adapter-provider-antigravity test:live`, y
-[la arquitectura](docs/ARCHITECTURE.md) dice qué está verificado y qué no.
+formato está comprobado con `agy` 1.5.17 en un turno real (prueba en vivo, usa tu cuenta y consume cuota:
+`NEXO_LIVE_AGY=1 pnpm --filter @nexo/adapter-provider-antigravity test:live`); [la arquitectura](docs/ARCHITECTURE.md) dice qué
+está verificado y qué sale de la documentación.
 
 ![Acciones de Antigravity con su diff](docs/capturas/f3-4-agy-acciones.png)
 

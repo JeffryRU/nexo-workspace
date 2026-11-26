@@ -48,12 +48,11 @@ notificación del sistema si la ventana no tiene el foco, y las mediciones de re
   `packages/adapters/provider-codex` sobre `codex app-server` (ver «Proveedor Codex (F3.2)»).
 - **F3.3 ACP** (hecho): `packages/adapters/provider-acp` sobre Agent Client Protocol 1 (Gemini CLI con `--acp` por omisión y
   cualquier otro agente ACP declarado en `NEXO_ACP_AGENTS`; ver «Proveedor ACP (F3.3)»).
-- **F3.4 Antigravity y cierre** (hecho, **a falta de la prueba en vivo**): `packages/adapters/provider-antigravity` sobre `agy
-  --output-format stream-json` (ver «Proveedor Antigravity (F3.4)»), matriz de capacidades por proveedor, E2E y medida con cinco
-  proveedores a la vez, y arreglos de F3.3 (modos `dontAsk`/`auto`, rutas relativas, prueba de Gemini determinista).
-  **F3 no se da por completa todavía:** el formato de `stream-json` sale de la documentación y de las banderas de `agy` 1.2.0,
-  no de un turno real (ejecutarlo consume la cuenta del usuario). Cuando `NEXO_LIVE_AGY=1 pnpm --filter
-  @nexo/adapter-provider-antigravity test:live` pase, F3 queda completa.
+- **F3.4 Antigravity y cierre** (hecho): `packages/adapters/provider-antigravity` sobre `agy --output-format stream-json`
+  (ver «Proveedor Antigravity (F3.4)»), comprobado en vivo con `agy` 1.5.17; matriz de capacidades por proveedor, E2E y medida
+  con cinco proveedores a la vez, y arreglos de F3.3 (modos `dontAsk`/`auto`, rutas relativas, prueba de Gemini determinista).
+
+**F3 completa.**
 
 ## F3.5 — Memoria observacional (ADR 0007)
 

@@ -817,20 +817,21 @@ plazo de inactividad). Capturas: `docs/capturas/f3-3-*.png` (`NEXO_CAPTURAS=1 pn
 **`antigravity`** (el nombre del producto y el que ya citaba el contrato de `ProviderId`; `agy` es solo el binario, y un id
 `agy` obligaría a explicar la abreviatura en cada chip). Importa solo `core` y `contracts`; sin dependencias nuevas.
 
-**Qué está verificado y qué no.** El formato **no sale de memoria**. En este PC está instalado `agy` **1.2.0** (versión fijada:
-`AGY_VERIFIED_VERSION`). No se ejecutó ninguna orden que arranque el modo de impresión (`-p`, ni siquiera una orden `/…` sin
-turno): consumiría o tocaría la cuenta del usuario. Por eso:
+**Qué está verificado y qué no.** El formato **no sale de memoria**. Versión fijada: `agy` **1.5.17** (`AGY_VERIFIED_VERSION`).
+El usuario ejecutó la prueba en vivo (`NEXO_LIVE_AGY=1`) con su cuenta y pasó: lista de modelos, un turno de texto con
+`stream-json` de entrada y salida, `result` con `end-turn`, `conversation_id` UUID y reanudación con `--conversation`. Lo que
+ese turno no ejercita (herramientas, errores) sigue saliendo de la documentación:
 
 | Dato                                                                                                                                                                                                                                                                                                                                      | Fuente                                                                                                          | Estado                                              |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| Banderas: `--output-format text\|json\|stream-json`, `--input-format text\|stream-json` (exige `stream-json` de salida), `--conversation <id>`, `-c`, `--model`, `--effort low\|medium\|high`, `--mode accept-edits\|plan`, `--dangerously-skip-permissions`, `--print-timeout` (5 min), `--json-schema`, subcomandos `models` y `agents` | `agy --help` y `agy <subcomando> --help` de 1.2.0 en este PC                                                    | **Verificado**                                      |
-| Sucesión `init` → `step_update`* → `result`; campos de cada evento; `step_type` (`user_input`, `agent_response`, `tool`, `checkpoint`); `tool_info`; `usage`; estados del resultado; mensaje de entrada `{"event":"user","message":{"content":…}}`; cerrar stdin termina la sesión; modos `request-review` / `always-proceed`             | documentación oficial (antigravity.google/docs/cli/headless) y `agy changelog` (notas de versión, hasta 1.5.17) | Documentado, **no comprobado con un turno real**    |
+| Banderas: `--output-format text\|json\|stream-json`, `--input-format text\|stream-json` (exige `stream-json` de salida), `--conversation <id>`, `-c`, `--model`, `--effort low\|medium\|high`, `--mode accept-edits\|plan`, `--dangerously-skip-permissions`, `--print-timeout` (5 min), `--json-schema`, subcomandos `models` y `agents` | `agy --help` de 1.5.17                                                    | **Verificado**                                      |
+| Sucesión `init` → `step_update`* → `result`; campos de cada evento; `step_type` (`user_input`, `agent_response`, `tool`, `checkpoint`); `tool_info`; `usage`; estados del resultado; mensaje de entrada `{"event":"user","message":{"content":…}}`; cerrar stdin termina la sesión; modos `request-review` / `always-proceed`             | documentación oficial; el turno de texto, en vivo con 1.5.17 | **Verificado** en texto; herramientas, por documentación |
 | En `-p` no hay avisos de permiso: lo que exige aprobación y no está preaprobado se **deniega** y el turno sigue (stderr avisa); sin preguntas al usuario                                                                                                                                                                                  | notas de versión 1.1.x y documentación                                                                          | Documentado, no comprobado                          |
 | Nombres y parámetros de herramientas distintos de `run_command` (`CommandLine`) y `write_to_file`; ruta de los archivos tocados                                                                                                                                                                                                           | herramientas de Antigravity que conocemos                                                                       | **Supuesto** (cae en `other` si no encaja)          |
 | Si el `text_delta` de un paso `DONE` es el último trozo o el texto completo                                                                                                                                                                                                                                                               | —                                                                                                               | **Ambiguo**: se resuelve con una heurística (abajo) |
-| Forma de `agy models --output-format json`                                                                                                                                                                                                                                                                                                | las notas dicen que existe la salida máquina; no su forma                                                       | **Supuesto** (parser tolerante)                     |
-| El `conversation_id` es un UUID; `--conversation` con un id desconocido                                                                                                                                                                                                                                                                   | UUID: formato de los archivos de conversación; desconocido: notas 1.5.x solo hablan de una advertencia          | **Supuesto**                                        |
-| `agy --version` dice 1.2.0 pero `agy changelog` llega a 1.5.17 (hay versiones más nuevas); nada posterior a 1.2.0 se usa (`--mode auto`, `--resume`, `--effort xhigh\|max`, el modo `auto` por omisión de `-p` desde 1.5.7)                                                                                                               | `agy --version`, `agy changelog`                                                                                | Verificado                                          |
+| Salida de `agy models`: texto, cabecera «Fetching available models...» y una línea `id<TAB>nombre` por modelo; no admite `--output-format` (sale con 1) | ejecutado con agy 1.5.17 | **Verificado** |
+| El `conversation_id` es un UUID y `--conversation <id>` reanuda la conversación | prueba en vivo con agy 1.5.17 | **Verificado** |
+| `agy` 1.5.17 trae además `--mode auto`, `--effort xhigh\|max` y `agy acp`; el adaptador no los usa todavía | `agy --help` | **Verificado** (sin usar) |
 
 La prueba en vivo está lista: `NEXO_LIVE_AGY=1 pnpm --filter @nexo/adapter-provider-antigravity test:live` (ver «Probar de
 verdad»); si algo del formato difiere, falla ahí y `protocol.ts`, `translator.ts` y `tools.ts` son los únicos sitios a tocar. Nexo
@@ -885,17 +886,17 @@ emite `permission-request` ni `question-request` y `respond` rechaza con `UNKNOW
 | `plan`           | `--mode plan`                    | investiga y propone, sin editar                                                                                    |
 | `bypass`         | `--dangerously-skip-permissions` | aprueba todo (la lista negra de comandos del sistema de `agy` sigue bloqueando)                                    |
 
-Quien necesite aprobar acciones desde Nexo puede declarar `agy acp` (existe en versiones posteriores a 1.2.0; no verificado aquí)
+Quien necesite aprobar acciones desde Nexo puede declarar `agy acp` (existe en 1.5.17; no verificado como agente ACP)
 como agente ACP en `NEXO_ACP_AGENTS`: ese camino sí tiene permisos, preguntas y plan.
 
 **Disponibilidad.** `isAvailable()` resuelve el ejecutable (`resolveAgyCommand`: `NEXO_AGY_EXECUTABLE` o `agy` en el `PATH`; en Windows
-`agy.exe`, y un `.js`/`.mjs` se lanza con Node; un `.cmd` pide apuntar a `agy.exe`) y ejecuta `agy models --output-format json`
+`agy.exe`, y un `.js`/`.mjs` se lanza con Node; un `.cmd` pide apuntar a `agy.exe`) y ejecuta `agy models`
 (≤ 20 s), que hace de comprobación de sesión y de lista de modelos; se reutiliza 30 s (3 s si falló). No disponible, con el motivo en
 `agent.providers[].reason`: no está instalado («Instala la CLI de Antigravity («agy») e inicia sesión con ella…»), «agy models» sale con
 error de sesión o no responde («Antigravity no tiene la sesión iniciada: ejecuta «agy» en una terminal e inicia sesión. Nexo no inicia
 sesión por ti.»), o falla por otra causa. Una lista de modelos ilegible no impide usarlo (`models: []`).
 
-**Capacidades.** `models` de `agy models` (`defaultModel` si lo marca), `efforts: low, medium, high` (los de `--effort` en 1.2.0),
+**Capacidades.** `models` de `agy models` (sin `defaultModel`: la salida no lo marca), `efforts: low, medium, high` (1.5.17 admite además `xhigh` y `max`),
 `permissionModes` los cuatro, `resume: true`, `warmup: false`, `streaming: true`.
 
 **Configuración.** `NEXO_AGENT_PROVIDERS` acepta `antigravity`; `NEXO_AGY_EXECUTABLE` (opcional) fija la ruta de `agy`. CLI:
