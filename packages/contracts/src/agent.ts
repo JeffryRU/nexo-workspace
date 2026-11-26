@@ -43,6 +43,18 @@ export type PermissionMode = z.infer<typeof PermissionMode>
 
 const Millis = z.int().nonnegative()
 
+/**
+ * Memoria que recibió la sesión (F3.5.4). Ausente si nunca se inyectó memoria ni se renovó. `seedTokens` es
+ * la estimación de la siembra actual; `renewals` cuenta las renovaciones (automáticas o manuales).
+ */
+export const AgentSessionMemory = z.strictObject({
+  seedTokens: z.int().nonnegative(),
+  renewals: z.int().nonnegative(),
+  /** `true` mientras se abre la sesión nueva del proveedor (`agent.send` responde `CONFLICT`). */
+  renewing: z.boolean(),
+})
+export type AgentSessionMemory = z.infer<typeof AgentSessionMemory>
+
 export const AgentSession = z.strictObject({
   id: AgentSessionId,
   provider: ProviderId,
@@ -58,6 +70,7 @@ export const AgentSession = z.strictObject({
   /** Turno en curso o el último (0 = ninguno aún). */
   turn: z.int().nonnegative(),
   blockCount: z.int().nonnegative().max(LIMITS.maxBlocksPerSession),
+  memory: AgentSessionMemory.optional(),
   createdAt: Millis,
   updatedAt: Millis,
 })
