@@ -18,6 +18,7 @@ import {
 import { RpcError } from '@nexo/jsonrpc'
 import { AcpClient, AcpVersionError, type LogEntry } from './client.ts'
 import type { AcpAgentConfig } from './config.ts'
+import { AcpHistory } from './history.ts'
 import { AcpMemoryInjection } from './memory-injection.ts'
 import { type AgentLauncher, spawnAgentProcess } from './process.ts'
 import {
@@ -146,6 +147,7 @@ class AcpProvider implements AgentProviderPort {
   readonly id: string
   readonly displayName: string
   readonly memoryInjection: AcpMemoryInjection
+  readonly history: AcpHistory
   readonly #o: AcpProviderOptions
   readonly #env: Readonly<Record<string, string | undefined>>
   readonly #log: (entry: LogEntry) => void
@@ -165,6 +167,21 @@ class AcpProvider implements AgentProviderPort {
     this.#redactor = createSecretRedactor(this.#env)
     this.#limits = { ...DEFAULT_LIMITS, ...options.limits }
     this.#launcher = options.launcher ?? spawnAgentProcess
+    this.history = new AcpHistory({
+      id: this.id,
+      displayName: this.displayName,
+      command: () =>
+        resolveAgentCommand({
+          command: options.agent.command,
+          args: options.agent.args,
+          env: this.#env,
+          ...(options.platform === undefined ? {} : { platform: options.platform }),
+          ...(options.resolveFs === undefined ? {} : { fs: options.resolveFs }),
+        }),
+      client: (command, cwd) => this.#client(command, cwd),
+      requestTimeoutMs: this.#limits.requestTimeoutMs,
+      redact: (text) => this.#redactor.redact(text),
+    })
   }
 
   async isAvailable(): Promise<boolean> {

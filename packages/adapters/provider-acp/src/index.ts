@@ -7,6 +7,7 @@ export {
   parseAcpAgents,
   RESERVED_PROVIDER_IDS,
 } from './config.ts'
+export { AcpHistory } from './history.ts'
 export { AcpMemoryInjection } from './memory-injection.ts'
 export type { AgentLauncher, AgentProcess, ExitInfo, LaunchOptions } from './process.ts'
 export { ACP_PROTOCOL_VERSION, ACP_SCHEMA_SOURCE } from './protocol.ts'
