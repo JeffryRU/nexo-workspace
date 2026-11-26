@@ -26,6 +26,18 @@ async function main(): Promise<number> {
       ...(env.codexExecutable === undefined ? {} : { codexExecutable: env.codexExecutable }),
       ...(env.agyExecutable === undefined ? {} : { agyExecutable: env.agyExecutable }),
       ollamaUrl: env.ollamaUrl,
+      memory: {
+        enabled: env.memory.enabled,
+        ...(env.memory.summarizer === undefined ? {} : { summarizer: env.memory.summarizer }),
+        thresholds: {
+          ...(env.memory.observerTokens === undefined
+            ? {}
+            : { observerBatchTokens: env.memory.observerTokens }),
+          ...(env.memory.reflectorTokens === undefined
+            ? {}
+            : { reflectorTokens: env.memory.reflectorTokens }),
+        },
+      },
       ...(env.ptyMode === undefined ? {} : { ptyMode: env.ptyMode }),
       onShutdownRequested: () => shutdown('daemon.shutdown'),
       server: { maxConnections: env.maxConnections, authTimeoutMs: env.authTimeoutMs },

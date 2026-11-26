@@ -25,6 +25,7 @@ import {
 } from './domain.ts'
 import { EventNameSchema } from './events.ts'
 import { LIMITS } from './limits.ts'
+import { memoryMethods } from './memory.ts'
 import { bodyText, boundedBytes, DisplayText, FORBIDDEN_KEYS } from './text.ts'
 
 const Empty = z.strictObject({})
@@ -246,6 +247,7 @@ export const methods = {
     }),
   },
   'agent.close': { params: z.strictObject({ sessionId: AgentSessionId }), result: Ok },
+  ...memoryMethods,
 } as const
 
 export type MethodName = keyof typeof methods

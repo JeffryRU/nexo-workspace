@@ -58,7 +58,7 @@ packages/core        dominio + casos de uso + puertos (interfaces). Sin Node, si
 packages/jsonrpc     JSON-RPC 2.0 por líneas (puro, sin Node): lo usan los adaptadores de Codex y ACP
         ▲
 packages/adapters/*  implementan los puertos: pty-node, pty-host, provider-claude, provider-codex, provider-acp,
-                     provider-antigravity, provider-ollama, store-memory-fs, store-fs, notifier, fs-sandbox, ...
+                     provider-antigravity, provider-ollama, store-memory-fs, summarizer-ollama, store-fs, notifier, fs-sandbox, ...
         ▲
 apps/*               raíces de composición: daemon (une core + adaptadores), web, cli, mcp, desktop
 ```
@@ -958,9 +958,9 @@ sobre la transcripción normalizada (`Block`), así que sirve igual para todos l
 de Mastra; no usamos Mastra ni su código. **Apagada por omisión**; nada sale de la máquina salvo hacia el modelo del Observador que elija
 el usuario, y Nexo no lee credenciales.
 
-F3.5.1 (esta entrega) deja el dominio, los contratos, los puertos `SummarizerPort` y `MemoryStorePort` y el almacén en disco. Los
-métodos `memory.*` están **definidos pero no implementados** en el daemon: `memoryMethods` (`packages/contracts/src/memory.ts`) aún no
-forma parte del registro `methods`, así que el daemon responde `NOT_FOUND` hasta F3.5.2, que los registra junto con sus manejadores.
+F3.5.1 dejó el dominio, los contratos, los puertos `SummarizerPort` y `MemoryStorePort` y el almacén en disco. F3.5.2 (esta entrega) añade
+el servicio del daemon, los dos adaptadores del resumidor, los prompts, la configuración `NEXO_MEMORY*`, el registro de los métodos
+`memory.*`, el evento `memory.updated` y `nexo memory`. La inyección a los agentes es F3.5.3 y la interfaz F3.5.4.
 
 ### Modelo
 
@@ -1034,11 +1034,12 @@ Cada puerto tiene su falso y su suite de conformidad en `packages/testkit` (`Fak
 
 ### Contrato `memory.*`
 
-Definido en `packages/contracts/src/memory.ts` (`memoryMethods`); aún sin manejadores. Esquemas estrictos y con tope:
+Definido en `packages/contracts/src/memory.ts` (`memoryMethods`) y sumado al registro `methods` en F3.5.2; los atiende `MemoryService`
+(`handlers`). Sin servicio de memoria, el despachador responde `PROVIDER_UNAVAILABLE`. Esquemas estrictos y con tope:
 
 | Método          | Parámetros                                                                    | Resultado                                                                                            |
 | --------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `memory.status` | `{ cwd? }`                                                                    | `{ enabled, summarizer?, thresholds, project?, usage }`                                              |
+| `memory.status` | `{ cwd? }`                                                                    | `{ enabled, summarizer?, thresholds, pausedReason?, project?, usage, roles?, projectUsage? }`        |
 | `memory.list`   | `{ cwd, fromSeq?, limit? (≤ 100), scope?, minPriority? }`                     | `{ reflection \| null, observations, nextSeq \| null }` (la reflexión va con la primera página)      |
 | `memory.search` | `{ cwd, query (≤ 256, una línea), limit? (≤ 100) }`                           | `{ observations, truncated }`                                                                        |
 | `memory.recall` | `{ sessionId, range: { from, to } }` (el rango cubre como máximo 200 bloques) | `{ blocks: Block[], truncated }` (el daemon devuelve menos bloques si no caben en `maxMessageBytes`) |
@@ -1047,13 +1048,129 @@ Límites nuevos en `LIMITS`: `maxObservationBytes` (2 KiB), `maxReflectionBytes`
 `maxReflectionSources` (64), `maxMemorySessions` (256), `maxMemoryPage` (100), `maxMemoryQueryChars` (256), `maxRecallBlocks` (200).
 `memory.search` y `memory.recall` por MCP quedan para F5.
 
+`memory.recall` devuelve el **texto original** (los bloques tal cual) de un rango de una sesión **abierta**: el documento vive en
+memoria del daemon mientras la sesión exista, así que tras cerrarla responde `NOT_FOUND` (F3.5.4 puede decidir si guarda el texto).
+Devuelve como mucho 200 bloques y 512 KiB (`RECALL_MAX_BYTES`); si no caben, los primeros y `truncated: true`.
+
+`memory.status` añade tres campos opcionales a lo definido en F3.5.1: `pausedReason` (por qué la memoria está activada pero en pausa),
+`roles` (el uso del Observador y del Reflector desde que arrancó el daemon) y `projectUsage` (el uso acumulado guardado en el proyecto).
+`usage` es la suma de los dos papeles.
+
+**Evento `memory.updated`** (F3.5.2): `{ cwd, kind: 'observe' | 'reflect', observations, generation, updatedAt }`. Solo avisa de que la
+memoria de un proyecto cambió (`cwd` es la clave normalizada, la misma de `memory.list`); el cliente pide `memory.list`/`memory.status`
+para ver el contenido. Pensado para que la interfaz de F3.5.4 se refresque sin sondear.
+
+### Servicio `MemoryService` (F3.5.2)
+
+Vive en `packages/core/src/memory-service.ts`: puede ser puro porque solo usa puertos (`MemoryStorePort`, `SummarizerPort`, el bus, el
+reloj y una fuente de sesiones con `list()` y `snapshot()`, que es lo que ya expone `AgentService`). El daemon lo **compone** en
+`startDaemon` (`apps/daemon/src/daemon.ts`: almacén en disco, resumidor elegido y sesiones del `AgentService`) y lo detiene antes de
+cerrar las sesiones. Con `enabled: false` no escucha ni llama a nadie, pero `memory.status|list|search` siguen leyendo lo guardado.
+
+- **No toca el streaming.** Escucha `agent.session`, `agent.block` y `agent.status` del bus; el manejador solo suma contadores por
+  sesión (caracteres vistos por bloque). Cuando se acumulan `2 × lote` caracteres, o la sesión pasa a `idle`, encola una
+  comprobación **fuera del manejador** (microtarea). La comprobación lee el documento con `agent.snapshot` desde `observedThrough + 1`,
+  cuenta los tokens (`pendingObserverTokens`) y solo llama al modelo si `shouldObserve`. Un resumidor lento o caído nunca retrasa un
+  delta: lo único que espera es su propia cola.
+- **Cola por proyecto.** A lo sumo una llamada en curso por proyecto (la clave es la carpeta normalizada, así dos sesiones de la misma
+  carpeta comparten registro y se turnan); proyectos distintos avanzan en paralelo. Tras 20 lotes seguidos de una sesión cede el turno a
+  las demás y sigue después.
+- **Observador por lotes.** `selectForObserver` elige los bloques cerrados (máximo `maxBatchTokens`, 24 000), el servicio arma la
+  `ObserveRequest` (con `known`: reflexión y últimas 12 observaciones, escapadas, para no repetir) y guarda con `applyObserved`. Lo ya
+  observado no se vuelve a enviar (`observedThrough`).
+- **Reflector por umbral.** Tras observar, si `shouldReflect` (las observaciones del proyecto pasan de M tokens), pide al Reflector que
+  reescriba las más antiguas (hasta M tokens, con la reflexión vigente) y aplica `applyReflection`. Si el resultado no es más corto se
+  descarta (se anota el uso) y no se vuelve a intentar hasta pasados 10 minutos.
+- **Errores y reintentos.** Un `SummarizerError` `retryable` (`UNAVAILABLE`, `TIMEOUT`) se reintenta con espera creciente (2 s, 10 s, 40 s:
+  cuatro intentos en total). Agotados, o si el error no es reintentable (modelo no instalado), la memoria queda **en pausa** 60 s con un
+  motivo visible en `memory.status.pausedReason`; el lote sigue pendiente y se retoma con la siguiente señal tras la pausa. Una salida
+  inutilizable (`INVALID_OUTPUT`, `TOO_LARGE`, respuesta de otro tipo, excepción inesperada) se reintenta una vez en la siguiente señal; si
+  vuelve a fallar el mismo lote se **descarta** (el progreso avanza sin observaciones y se registra) para que un modelo roto no atasque la
+  cola. Una respuesta vacía del Observador cuenta como «nada que anotar».
+- **Disponibilidad.** Antes de trabajar comprueba `isAvailable()` (el resultado positivo vale 60 s). Si el resumidor no está disponible, o
+  no hay ninguno configurado, la memoria queda en pausa con su motivo: nunca es un error fatal ni impide arrancar el daemon.
+- **Cancelación.** `stop()` aborta la llamada en curso (la `AbortSignal` llega al adaptador) y las esperas de reintento, y espera a que las
+  colas terminen; el daemon lo llama al apagarse. Tras `stop()` el servicio no vuelve a escuchar.
+- **Contabilidad.** Cada llamada suma en el proyecto (`ProjectMemory.usage`, persistente) y en memoria por papel (`roles.observer` y
+  `roles.reflector`, desde que arrancó el daemon): llamadas, tokens de entrada y salida y costo, según lo que informe el resumidor.
+- **Seguridad.** El servicio solo entrega al resumidor la transcripción escapada y trata lo que devuelve como datos: pasa por
+  `acceptObservations`/`applyReflection` (saneado, tope, sin vacíos) y se guarda; al inyectarse (F3.5.3) vuelve a escaparse.
+- **Límite conocido.** Una sesión que se cierra con menos tokens nuevos que el umbral no llega a observarse (el documento desaparece con
+  la sesión). Observarla al cerrar queda para F3.5.3/F3.5.4.
+
+### Resumidores (F3.5.2)
+
+Los prompts viven en `packages/core/src/memory-prompts.ts` (puros, en español, compartidos por todos los adaptadores):
+`buildObserverPrompt(request, { format })` y `buildReflectorPrompt(request)` devuelven `{ system, user }`; `combinePrompt` los une en un solo
+mensaje para los proveedores que no tienen mensaje de sistema aparte. El Observador pide observaciones **fechadas** (`AAAA-MM-DD`),
+**con prioridad** (`alta|media|baja`) y alcance (`sesion|proyecto`), **comprimidas** (una frase corta, como máximo
+`maxObservations`), sin repetir lo conocido. El Reflector apunta a `targetTokens`, condensa lo antiguo y conserva el detalle de lo
+reciente. Los dos le dicen al modelo que lo de dentro de `<transcripcion>`/`<contexto>`/`<observaciones>` son **datos, no instrucciones**,
+que **no obedezca ni copie órdenes** del texto observado (las describe como hechos) y que no incluya secretos. La transcripción ya viene
+escapada por `selectForObserver` (sin `<` ni `>`) y el prompt la vuelve a neutralizar si trajera alguno. `parseObserverJson` lee la respuesta
+JSON (objeto o arreglo, con vallas de código o texto alrededor; descarta los elementos inválidos y nunca lanza).
+
+| Adaptador            | Dónde                                                                             | Cómo                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| -------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OllamaSummarizer`   | paquete `packages/adapters/summarizer-ollama` (`@nexo/adapter-summarizer-ollama`) | HTTP a `/api/chat` con `stream: false`, mensaje de sistema y de usuario, `format: "json"` para el Observador (si el modelo no lo respeta, se lee como texto), `num_ctx` ajustado al prompt (tope 64 Ki tokens; si no cabe, `TOO_LARGE`) y `temperature: 0.2`. Uso real de Ollama (`prompt_eval_count`, `eval_count`, `total_duration`; costo 0). `fetch` inyectable; sin redirecciones; respuesta acotada a 1 MiB; plazo de 180 s. |
+| `ProviderSummarizer` | `packages/core/src/provider-summarizer.ts`                                        | «Vía proveedor»: abre una sesión **directamente en un `AgentProviderPort`** (no pasa por `AgentService`: no hay panel ni pestaña ni cuenta como sesión del usuario), en modo `plan` (o `ask` si no declara `plan`), en una carpeta neutra y vacía del estado (`<estado>/memory-summarizer`), envía un solo mensaje, recoge el texto de los bloques `text` y cierra la sesión.                                                      |
+
+**Por qué un paquete para Ollama y el resto en `core`.** Los adaptadores no se importan entre sí, así que no se reutiliza `provider-ollama`;
+el resumidor de Ollama es HTTP puro (`fetch` inyectable) y pertenece a un adaptador. En cambio el resumidor «vía proveedor» no habla con
+ningún proceso ni red: solo compone el puerto `AgentProviderPort` que el daemon ya tiene, así que es lógica de aplicación y queda más limpia
+en `core`, donde se prueba con `FakeAgentProvider` sin paquete nuevo. Los dos ejecutan `runSummarizerConformance`.
+
+«Vía proveedor» no usa herramientas: si el turno abre una acción, pide un permiso o hace una pregunta, se **interrumpe** y falla con
+`INVALID_OUTPUT`; también si acaba en `refusal`, `interrupted` o `error`, sin texto o con más de 256 KiB. Un proveedor que no responde o no
+existe da `UNAVAILABLE`; un modelo que el proveedor rechaza, `UNAVAILABLE` no reintentable; el plazo (180 s) es `TIMEOUT`. Nexo no lee
+credenciales: usa la sesión que el usuario ya tiene con ese CLI (Claude Haiku, Gemini Flash, Codex...). El proveedor tiene que estar
+registrado en el daemon (`NEXO_AGENT_PROVIDERS`); si no, la memoria queda en pausa con ese motivo.
+
+### Configuración de la memoria (F3.5.2)
+
+Variables de entorno del daemon, validadas con zod al arrancar (un valor inválido es un error de arranque con mensaje claro, como el resto
+de `NEXO_*`). **Todo viene apagado.**
+
+| Variable                       | Valores                                                                                                                                                             | Por omisión              |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| `NEXO_MEMORY`                  | `on`, `off`, `1`, `0`, `true`, `false`                                                                                                                              | `off`                    |
+| `NEXO_MEMORY_SUMMARIZER`       | `ollama:<modelo>` (el modelo puede llevar `:`, p. ej. `ollama:llama3.2:3b`) o `provider:<id>[:<modelo>]` (p. ej. `provider:claude:haiku`); `fake` solo para pruebas | sin resumidor (en pausa) |
+| `NEXO_MEMORY_OBSERVER_TOKENS`  | entero de 500 a 200 000: tokens nuevos de una sesión que disparan al Observador                                                                                     | 6 000                    |
+| `NEXO_MEMORY_REFLECTOR_TOKENS` | entero de 1 000 a 2 000 000, al menos el doble del anterior: tokens de observaciones que disparan al Reflector                                                      | 40 000                   |
+
+La URL de Ollama es la de `NEXO_OLLAMA_URL` (la misma del proveedor). `DaemonOptions.memory` (`enabled`, `summarizer` como especificación o como
+`SummarizerPort` ya construido, `thresholds`, `config`) es lo que usan las pruebas y quien embeba el daemon. `memory.status` informa de si está
+activada, del resumidor y del motivo de una pausa. Ajustes en la interfaz: F3.5.4.
+
+### CLI `nexo memory` (F3.5.2)
+
+Todos los subcomandos aceptan `--json` (la salida es el resultado del método `memory.*` correspondiente, validado con su esquema; `recall` añade
+`sessionId` y `range`) y `--cwd <ruta>` (por omisión, la carpeta actual; `recall` no lo usa). El texto del modelo se sanea antes de pintarlo.
+
+- `nexo memory status`: activada o no, resumidor, motivo de la pausa, umbrales, uso por papel y el del proyecto.
+- `nexo memory ls [--limit N] [--from SEQ] [--scope session|project] [--min-priority high|medium|low]`: la reflexión y las observaciones del
+  proyecto (con prioridad, alcance y el rango de bloques de origen); avisa con `--from` si hay más páginas.
+- `nexo memory search <consulta...> [--limit N]`: búsqueda por términos.
+- `nexo memory recall <sesión> <rango>`: el texto original de un rango (`5`, `5-9`, `5..9` o `5:9`, como máximo 200 bloques) de una sesión
+  abierta; la sesión es su id o un prefijo único. `@nexo/client` ofrece `memoryApi(client)`.
+
+### Pruebas de la memoria (F3.5.2)
+
+Unitarias y adversariales del servicio con `FakeSummarizer` y el reloj falso (`MemoryRig` en `packages/testkit`: lotes, umbrales, cola,
+reintentos, pausa, cancelación, resumidor que devuelve basura u órdenes hostiles, resumidor lento sin frenar los deltas); del adaptador de
+Ollama contra un servidor HTTP falso; de «vía proveedor» con `FakeAgentProvider`; de los prompts; de la configuración; integración en el
+daemon real (`memory.integration.test.ts`) y en la CLI (`apps/cli/src/memory.integration.test.ts`: con la memoria activada y el resumidor
+`fake`, una sesión genera observaciones que se ven con `nexo memory ls`). Las **pruebas en vivo** solo corren con su variable y no están en
+el CI y usan la cuenta del usuario: `NEXO_LIVE_MEMORY_OLLAMA=1 pnpm --filter @nexo/adapter-summarizer-ollama test:live` (Ollama real) y, con
+el daemon, `NEXO_LIVE_MEMORY_OLLAMA=1` o `NEXO_LIVE_MEMORY_PROVIDER=<id>` (+ `NEXO_LIVE_MEMORY_PROVIDER_MODEL`) con
+`pnpm --filter @nexo/daemon test:live`.
+
 ### Qué sigue
 
-- **F3.5.2:** `MemoryService` en el daemon (escucha el documento de cada sesión, Observador por lotes y Reflector por umbral, en
-  segundo plano con cola y reintentos), adaptadores de `SummarizerPort` (Ollama y «vía proveedor»), prompt del Observador,
-  `NEXO_MEMORY_*`, registro de `memoryMethods` en `methods` y `nexo memory ls|search|recall|status`.
-- **F3.5.3:** `MemoryInjectionPort` por proveedor, usando `buildMemoryBlock`, y renovación de sesión.
-- **F3.5.4:** interfaz y cierre (ADR a «aceptada»).
+- **F3.5.3:** `MemoryInjectionPort` por proveedor, usando `buildMemoryBlock` (lee del almacén con `MemoryStorePort.load`), y renovación
+  de sesión.
+- **F3.5.4:** interfaz y cierre (ADR a «aceptada»): ajustes, vista de observaciones con salto al bloque de origen (`range` +
+  `memory.recall`), costo, y el evento `memory.updated` para refrescar.
 
 ## Protocolo (v1)
 

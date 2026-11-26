@@ -6,7 +6,9 @@ export * from './layout-service.ts'
 export * from './memory-inject.ts'
 export * from './memory-model.ts'
 export * from './memory-policy.ts'
+export * from './memory-prompts.ts'
 export * from './memory-select.ts'
+export * from './memory-service.ts'
 export * from './memory-tokens.ts'
 export * from './output-batcher.ts'
 export type {
@@ -57,6 +59,7 @@ export type {
   Unsubscribe,
 } from './ports/pty.ts'
 export { PtySpawnError } from './ports/pty.ts'
+export * from './provider-summarizer.ts'
 export * from './ring-buffer.ts'
 export * from './snapshot-service.ts'
 export * from './stream-text.ts'

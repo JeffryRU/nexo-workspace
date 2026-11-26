@@ -2,6 +2,7 @@ import {
   type ErrorBody,
   LIMITS,
   METHOD_NAMES,
+  type MemoryMethodName,
   type MethodName,
   type MethodParams,
   type MethodResult,
@@ -17,6 +18,11 @@ export type AgentHandlers = {
   [M in AgentMethodName]: (params: MethodParams<M>) => MethodResult<M> | Promise<MethodResult<M>>
 }
 
+/** Los métodos `memory.*`; los implementa `MemoryService` (F3.5.2). */
+export type MemoryHandlers = {
+  [M in MemoryMethodName]: (params: MethodParams<M>) => MethodResult<M> | Promise<MethodResult<M>>
+}
+
 export type DispatcherServices = {
   workspaces: WorkspaceService
   terminals: TerminalService
@@ -28,6 +34,8 @@ export type DispatcherServices = {
   subscribe: (params: MethodParams<'events.subscribe'>) => MethodResult<'events.subscribe'>
   /** Sin él (daemon sin proveedores), todo `agent.*` responde `PROVIDER_UNAVAILABLE`. */
   agents?: AgentHandlers
+  /** Sin él, todo `memory.*` responde `PROVIDER_UNAVAILABLE`. */
+  memory?: MemoryHandlers
   /** Pide el apagado del daemon; debe volver enseguida (el apagado ocurre después de responder). */
   shutdown: () => void
 }
@@ -52,6 +60,12 @@ export function createHandlers(s: DispatcherServices): Handlers {
       throw new DomainError('PROVIDER_UNAVAILABLE', 'no hay proveedores de agente configurados')
     }
     return s.agents
+  }
+  const memory = (): MemoryHandlers => {
+    if (s.memory === undefined) {
+      throw new DomainError('PROVIDER_UNAVAILABLE', 'la memoria no está disponible')
+    }
+    return s.memory
   }
   return {
     // La autenticación la resuelve quien despacha (daemon) antes de llegar aquí; ya autenticado es un no-op.
@@ -90,6 +104,10 @@ export function createHandlers(s: DispatcherServices): Handlers {
     'agent.list': (p) => agents()['agent.list'](p),
     'agent.snapshot': (p) => agents()['agent.snapshot'](p),
     'agent.close': (p) => agents()['agent.close'](p),
+    'memory.status': (p) => memory()['memory.status'](p),
+    'memory.list': (p) => memory()['memory.list'](p),
+    'memory.search': (p) => memory()['memory.search'](p),
+    'memory.recall': (p) => memory()['memory.recall'](p),
   }
 }
 

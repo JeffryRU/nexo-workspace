@@ -47,6 +47,7 @@ Si el daemon no corre, la CLI lo arranca desacoplado (registro en `daemon.log` d
 - `nexo read <panel> [-n N] [-f] [--raw]`: últimas N líneas sin ANSI; `-f` sigue la salida.
 - `nexo focus <ref>`, `nexo kill <ref>`, `nexo close <ref>`, `nexo rename <pestaña|espacio> <nombre>`.
 - `nexo agent new | send | ls | attach | interrupt | close | respond`: sesiones de agente (ver abajo).
+- `nexo memory status | ls | search | recall`: memoria observacional (ver «Memoria observacional»).
 - `nexo daemon status | stop | log`: estado, apagado limpio y registro.
 
 Globales: `--json` (salida estable), `--no-start`, `--help`, `--version`. Salida: 0 ok, 1 uso, 2 no
@@ -186,6 +187,43 @@ CI con los cinco emitiendo). La tabla de qué ofrece cada proveedor (razonamient
 reanudar, modelos, esfuerzos…) está en [la arquitectura](docs/ARCHITECTURE.md#matriz-de-capacidades-por-proveedor-cierre-de-f3).
 
 ![Cinco proveedores de agente a la vez](docs/capturas/f3-4-varios-proveedores.png)
+
+## Memoria observacional (opcional, apagada por omisión)
+
+Un modelo barato, que eliges tú, va tomando notas de lo que pasa en las sesiones de agente de una carpeta (qué se pidió, qué se
+decidió, qué falló) y las condensa cuando crecen; así lo que hizo un agente en un proyecto no se pierde al abrir otra sesión. Es el
+[ADR 0007](docs/adr/0007-memoria-observacional.md). Trabaja en segundo plano y nunca frena las sesiones. Nada sale de tu máquina salvo
+hacia el modelo que elijas (con Ollama no sale nada) y Nexo no lee tus credenciales.
+
+Se activa en el **daemon** con variables de entorno (la memoria viene apagada: sin `NEXO_MEMORY=on` no pasa nada):
+
+```
+# Con un modelo local de Ollama (nada sale de tu máquina):
+export NEXO_MEMORY=on
+export NEXO_MEMORY_SUMMARIZER=ollama:llama3.2:3b     # PowerShell: $env:NEXO_MEMORY = 'on'; $env:NEXO_MEMORY_SUMMARIZER = 'ollama:llama3.2:3b'
+
+# O con la sesión que ya tienes en un CLI (un turno de solo texto, sin herramientas; el proveedor debe estar en NEXO_AGENT_PROVIDERS):
+export NEXO_AGENT_PROVIDERS=claude,codex
+export NEXO_MEMORY_SUMMARIZER=provider:claude:haiku  # o provider:gemini:gemini-2.5-flash, provider:codex...
+
+# Opcionales: umbrales (tokens nuevos de una sesión para observar; tokens de observaciones para condensar)
+export NEXO_MEMORY_OBSERVER_TOKENS=6000
+export NEXO_MEMORY_REFLECTOR_TOKENS=40000
+```
+
+Si el resumidor no está disponible (Ollama apagado, el modelo no instalado, el proveedor sin sesión), la memoria queda **en pausa** con el
+motivo a la vista y se retoma sola; no es un error. Para verla desde la terminal (todo con `--json` si lo quieres para un script):
+
+- `nexo memory status`: si está activada, qué resumidor usa, el motivo de una pausa y cuánto ha gastado (llamadas, tokens y costo del
+  Observador y del Reflector).
+- `nexo memory ls`: la reflexión y las observaciones de la carpeta actual (o `--cwd`), con su prioridad y el rango de bloques de origen.
+- `nexo memory search <consulta>`: búsqueda por términos.
+- `nexo memory recall <sesión> <rango>`: el texto original detrás de una observación (`5-9`), mientras la sesión siga abierta.
+
+Las observaciones se guardan en el directorio de estado (`memory/`). La inyección en los agentes y la interfaz llegan en F3.5.3 y
+F3.5.4 ([hoja de ruta](docs/ROADMAP.md)). Una prueba opcional con Ollama real (usa tu máquina):
+`NEXO_LIVE_MEMORY_OLLAMA=1 pnpm --filter @nexo/adapter-summarizer-ollama test:live`; con un proveedor real consume tu cuota:
+`NEXO_LIVE_MEMORY_PROVIDER=claude pnpm --filter @nexo/daemon test:live`.
 
 ## Estructura
 

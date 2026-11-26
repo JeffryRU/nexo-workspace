@@ -59,7 +59,13 @@ notificación del sistema si la ventana no tiene el foco, y las mediciones de re
 - **F3.5.1 Dominio, contratos y almacén** (hecho): dominio puro en `core` (observaciones, reflexiones, estimación de tokens, selección
   de bloques, lotes de 6k y umbral de 40k, bloque inyectable con escape), puertos `SummarizerPort` y `MemoryStorePort` con falsos y
   conformidad, contratos zod `memory.*` (sin implementar en el daemon) y `packages/adapters/store-memory-fs` (ver «Memoria
-  observacional (F3.5)»). F3.5.2 a F3.5.4 siguen abiertas; el ADR 0007 queda «propuesta» hasta F3.5.4.
+  observacional (F3.5)»).
+- **F3.5.2 Observador y Reflector en el daemon** (hecho): `MemoryService` en `core` (cola por proyecto, una llamada a la vez, lotes por
+  umbral, reintentos acotados, pausa visible, cancelación al cerrar; no toca el streaming), resumidores `OllamaSummarizer`
+  (`packages/adapters/summarizer-ollama`) y «vía proveedor» (`ProviderSummarizer`: un turno de solo texto sin abrir pestaña), prompts en
+  español con escape y sin copiar órdenes, `NEXO_MEMORY`, `NEXO_MEMORY_SUMMARIZER`, `NEXO_MEMORY_OBSERVER_TOKENS` y
+  `NEXO_MEMORY_REFLECTOR_TOKENS` (apagada por omisión), contabilidad por papel, métodos `memory.*` en el registro, evento
+  `memory.updated` y `nexo memory status|ls|search|recall`. F3.5.3 y F3.5.4 siguen abiertas; el ADR 0007 queda «propuesta» hasta F3.5.4.
 
 - Observador y Reflector en el daemon sobre la transcripción normalizada (`SummarizerPort`; Ollama,
   Haiku o Gemini Flash), con alcance por sesión y por proyecto.

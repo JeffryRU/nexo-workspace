@@ -137,6 +137,40 @@ describe('createDispatcher', () => {
     }
   })
 
+  it('sin servicio de memoria, cada memory.* responde PROVIDER_UNAVAILABLE; con él, delega', async () => {
+    const h = createHarness()
+    for (const method of METHOD_NAMES.filter((m) => m.startsWith('memory.'))) {
+      const out = await h.dispatch({ method, params: {} } as never)
+      expect(out, method).toMatchObject({ ok: false, error: { code: 'PROVIDER_UNAVAILABLE' } })
+    }
+    const dispatch = createDispatcher({
+      workspaces: h.workspaces,
+      terminals: h.terminals,
+      snapshot: h.snapshot,
+      subscribe: () => ({ seq: 0 }),
+      shutdown: () => {},
+      memory: {
+        'memory.status': () => ({
+          enabled: false,
+          thresholds: { observerBatchTokens: 6000, reflectorTokens: 40000 },
+          usage: { calls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 },
+        }),
+        'memory.list': () => ({ reflection: null, observations: [], nextSeq: null }),
+        'memory.search': () => ({ observations: [], truncated: false }),
+        'memory.recall': () => {
+          throw new DomainError('NOT_FOUND', 'sesión inexistente')
+        },
+      },
+    })
+    expect(await dispatch({ method: 'memory.status', params: {} })).toMatchObject({ ok: true })
+    expect(
+      await dispatch({
+        method: 'memory.recall',
+        params: { sessionId: 's1' as never, range: { from: 0, to: 1 } },
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'NOT_FOUND' } })
+  })
+
   it('con servicio de agentes, delega con los params y devuelve el resultado', async () => {
     const h = createHarness()
     const calls: unknown[] = []

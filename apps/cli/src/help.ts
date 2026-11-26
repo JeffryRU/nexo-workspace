@@ -9,6 +9,7 @@ export const COMMANDS = [
   'close',
   'rename',
   'agent',
+  'memory',
   'daemon',
 ] as const
 export type CommandName = (typeof COMMANDS)[number]
@@ -34,6 +35,7 @@ Comandos:
   close <panel|pestaña|espacio>   cierra un panel, una pestaña o un espacio
   rename <pestaña|espacio> <nombre>   renombra
   agent <sub>                sesiones de agente (new, send, ls, attach, interrupt, close, respond)
+  memory <sub>               memoria observacional (status, ls, search, recall)
   daemon status|stop|log     controla el daemon
 
 Los paneles, pestañas y espacios se indican con su id completo, un prefijo único del id
@@ -115,6 +117,21 @@ Cambia el título de una pestaña o el nombre de un espacio.
         comas; varias preguntas separadas por ";"; texto libre si la pregunta lo admite)
 
 <id> es el id de la sesión o un prefijo único. Con --json, attach emite una línea por evento.
+`,
+  memory: `Uso: nexo memory <subcomando> [opciones]
+
+  status [--cwd <ruta>]                 estado de la memoria: activada o no, resumidor, motivo de una pausa,
+                                        umbrales y uso (llamadas, tokens y costo del Observador y del Reflector)
+  ls [--cwd <ruta>] [--limit N] [--from SEQ] [--scope session|project] [--min-priority high|medium|low]
+                                        reflexión y observaciones del proyecto, con su prioridad y el rango
+                                        de bloques de donde salieron
+  search [--cwd <ruta>] [--limit N] <consulta...>
+                                        busca por términos en las observaciones
+  recall <sesión> <desde[-hasta]>       texto original de un rango de bloques de una sesión abierta
+                                        (5, 5-9, 5..9 o 5:9)
+
+El proyecto es la carpeta actual, o --cwd. La memoria viene apagada: se activa en el daemon con
+NEXO_MEMORY=on y NEXO_MEMORY_SUMMARIZER (mira el README). Con --json cada subcomando emite su resultado.
 `,
   daemon: `Uso: nexo daemon status|stop|log
 
