@@ -232,7 +232,7 @@ ocupar hasta 768 KiB, así que el daemon comprueba el tamaño serializado de cad
 - `agent.create { paneId, provider, cwd?, model?, effort?, permissionMode?, resume? }` → `{ session }`.
 - `agent.send { sessionId, text }` → `{ blockId, index, turn }` (el bloque `user` ya añadido). Con un turno en
   curso, `CONFLICT`.
-- `agent.interrupt { sessionId }`; `agent.close { sessionId }`; `agent.list` → `{ sessions }`.
+- `agent.interrupt { sessionId }`; `agent.close { sessionId }`; `agent.renew { sessionId }` → `{ session }` (renovación manual con memoria, F3.5.4); `agent.list` → `{ sessions }`.
 - `agent.respond`: `{ type: 'permission', sessionId, blockId, optionId }` o `{ type: 'question', sessionId, blockId,
   answers }`. Las respuestas a preguntas se validan con `validateAnswers`.
 - `agent.snapshot { sessionId, fromIndex?, limit? }` → `{ session, blocks, nextIndex }`: el documento paginado por
@@ -953,15 +953,15 @@ falsos de cada adaptador (`e2e/providers.ts`; orden `stream`, salida continua):
 
 ## Memoria observacional (F3.5)
 
-Implementa el [ADR 0007](adr/0007-memoria-observacional.md) (sigue «propuesta» hasta F3.5.4). La memoria vive en el daemon y trabaja
+Implementa el [ADR 0007](adr/0007-memoria-observacional.md) (aceptada en F3.5.4). La memoria vive en el daemon y trabaja
 sobre la transcripción normalizada (`Block`), así que sirve igual para todos los proveedores. La idea viene de la «Observational Memory»
 de Mastra; no usamos Mastra ni su código. **Apagada por omisión**; nada sale de la máquina salvo hacia el modelo del Observador que elija
 el usuario, y Nexo no lee credenciales.
 
 F3.5.1 dejó el dominio, los contratos, los puertos `SummarizerPort` y `MemoryStorePort` y el almacén en disco. F3.5.2 añadió
 el servicio del daemon, los dos adaptadores del resumidor, los prompts, la configuración `NEXO_MEMORY*`, el registro de los métodos
-`memory.*`, el evento `memory.updated` y `nexo memory`. F3.5.3 (esta entrega) inyecta la memoria en los agentes y añade la renovación
-de sesión; la interfaz es F3.5.4.
+`memory.*`, el evento `memory.updated` y `nexo memory`. F3.5.3 inyecta la memoria en los agentes y añade la renovación
+de sesión. F3.5.4 (esta entrega) añade la interfaz, los ajustes en caliente y la renovación manual; con ella F3.5 queda completa.
 
 ### Modelo
 
@@ -1038,12 +1038,13 @@ Cada puerto tiene su falso y su suite de conformidad en `packages/testkit` (`Fak
 Definido en `packages/contracts/src/memory.ts` (`memoryMethods`) y sumado al registro `methods` en F3.5.2; los atiende `MemoryService`
 (`handlers`). Sin servicio de memoria, el despachador responde `PROVIDER_UNAVAILABLE`. Esquemas estrictos y con tope:
 
-| Método          | Parámetros                                                                    | Resultado                                                                                            |
-| --------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `memory.status` | `{ cwd? }`                                                                    | `{ enabled, summarizer?, thresholds, pausedReason?, project?, usage, roles?, projectUsage? }`        |
-| `memory.list`   | `{ cwd, fromSeq?, limit? (≤ 100), scope?, minPriority? }`                     | `{ reflection \| null, observations, nextSeq \| null }` (la reflexión va con la primera página)      |
-| `memory.search` | `{ cwd, query (≤ 256, una línea), limit? (≤ 100) }`                           | `{ observations, truncated }`                                                                        |
-| `memory.recall` | `{ sessionId, range: { from, to } }` (el rango cubre como máximo 200 bloques) | `{ blocks: Block[], truncated }` (el daemon devuelve menos bloques si no caben en `maxMessageBytes`) |
+| Método             | Parámetros                                                                    | Resultado                                                                                            |
+| ------------------ | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `memory.status`    | `{ cwd? }`                                                                    | `{ enabled, summarizer?, thresholds, pausedReason?, project?, usage, roles?, projectUsage? }`        |
+| `memory.list`      | `{ cwd, fromSeq?, limit? (≤ 100), scope?, minPriority? }`                     | `{ reflection \| null, observations, nextSeq \| null }` (la reflexión va con la primera página)      |
+| `memory.search`    | `{ cwd, query (≤ 256, una línea), limit? (≤ 100) }`                           | `{ observations, truncated }`                                                                        |
+| `memory.recall`    | `{ sessionId, range: { from, to } }` (el rango cubre como máximo 200 bloques) | `{ blocks: Block[], truncated }` (el daemon devuelve menos bloques si no caben en `maxMessageBytes`) |
+| `memory.configure` | `{ enabled?, renewAtTokens? (10 000 a 5 000 000, o null) }`, al menos uno     | `{ enabled, renewAtTokens? }` (F3.5.4, ver «Interfaz de la memoria»)                                 |
 
 Límites nuevos en `LIMITS`: `maxObservationBytes` (2 KiB), `maxReflectionBytes` (16 KiB), `maxObservationsPerProject` (2 000),
 `maxReflectionSources` (64), `maxMemorySessions` (256), `maxMemoryPage` (100), `maxMemoryQueryChars` (256), `maxRecallBlocks` (200).
@@ -1055,11 +1056,11 @@ Devuelve como mucho 200 bloques y 512 KiB (`RECALL_MAX_BYTES`); si no caben, los
 
 `memory.status` añade tres campos opcionales a lo definido en F3.5.1: `pausedReason` (por qué la memoria está activada pero en pausa),
 `roles` (el uso del Observador y del Reflector desde que arrancó el daemon) y `projectUsage` (el uso acumulado guardado en el proyecto).
-`usage` es la suma de los dos papeles.
+`usage` es la suma de los dos papeles. F3.5.4 añade `renewAtTokens` (el umbral de renovación automática vigente; ausente = apagada).
 
 **Evento `memory.updated`** (F3.5.2): `{ cwd, kind: 'observe' | 'reflect', observations, generation, updatedAt }`. Solo avisa de que la
 memoria de un proyecto cambió (`cwd` es la clave normalizada, la misma de `memory.list`); el cliente pide `memory.list`/`memory.status`
-para ver el contenido. Pensado para que la interfaz de F3.5.4 se refresque sin sondear.
+para ver el contenido. La interfaz (F3.5.4) lo usa para refrescarse sin sondear.
 
 ### Servicio `MemoryService` (F3.5.2)
 
@@ -1210,7 +1211,7 @@ interfaz es la misma pestaña; cambia `providerSessionId` (llega en `agent.sessi
   la nueva.
 - Se pierde la caché de prompts del CLI (por eso es opcional), y lo no observado más atrás de los últimos turnos solo sobrevive si
   ya era una observación.
-- Sin interfaz todavía: no hay botón ni aviso en la pestaña (F3.5.4); `agent.session` es la única señal.
+- La interfaz (F3.5.4) muestra la señal en la pestaña y permite renovar a mano; ver «Interfaz de la memoria (F3.5.4)».
 
 **Seguridad de la inyección.** Todo texto que vuelve a entrar a un agente (reflexión, observaciones, últimos turnos, ruta del proyecto,
 id de sesión) pasa por `escapeMemoryText` (`&`, `<`, `>` y sus parecidos Unicode a entidades; fuera controles, bidi y ancho cero), así que
@@ -1224,10 +1225,68 @@ conformidad `runMemoryInjectionConformance`, que ejecutan el falso y los cinco p
 servidor o CLI falso, que el bloque llega por su mecanismo); e integración en el daemon real con el proveedor y el resumidor `fake`
 (`memory-injection.integration.test.ts`; el proveedor `fake` responde `memoria` con el bloque recibido).
 
-### Qué sigue
+### Interfaz de la memoria (F3.5.4)
 
-- **F3.5.4:** interfaz y cierre (ADR a «aceptada»): ajustes, vista de observaciones con salto al bloque de origen (`range` +
-  `memory.recall`), costo, y el evento `memory.updated` para refrescar.
+**Dónde está.** `apps/web/src/memory/`. Un botón «Memoria: Activada/Apagada» en la barra de estado abre `MemoryDialog`; en cada panel de
+agente, `MemoryBar` (sobre el redactor) avisa de que la sesión recibió memoria y ofrece renovarla. Todo el texto que viene de la memoria
+(observaciones, reflexión, texto original de un rango) se pinta como **texto plano** (`<pre>` con `white-space: pre-wrap`): ni Markdown
+ni HTML, así que etiquetas, enlaces u órdenes dentro de una observación no se interpretan ni se ejecutan; la vista tampoco manda nada de
+ese texto al daemon. La memoria sigue **apagada por omisión**.
+
+**Decisión: los ajustes viven en el daemon, en caliente.** `memory.configure { enabled?, renewAtTokens? }` (zod estricto, al menos una
+clave; `renewAtTokens` de 10 000 a 5 000 000 o `null` para quitarla) enciende o apaga la memoria y fija la renovación automática sin
+reiniciar. Alternativa descartada: que la interfaz solo mostrara la configuración de entorno. Obligaba a reiniciar el daemon (y a perder
+las sesiones abiertas) para encender una función que se prueba con ojo, y no se podía hacer desde la app de escritorio, donde el usuario
+no controla el entorno del daemon. Reglas:
+
+- Se **guarda primero** y se aplica después: `MemoryService.configure` encola las órdenes (una a la vez), llama a `onSettings` (el daemon
+  escribe `<estado>/memory-settings.json`, de forma atómica y con permisos de usuario) y solo si guardó cambia el estado. Si no se puede
+  guardar responde `INTERNAL` y no cambia nada.
+- **Lo guardado manda sobre el entorno** (`NEXO_MEMORY`, `NEXO_MEMORY_RENEW_TOKENS`) en los arranques siguientes; sin archivo, o con un
+  archivo ilegible, hostil o de otra versión (se ignora y se avisa en el registro), vale el entorno. Para volver al entorno basta borrar
+  el archivo.
+- **Siguen siendo de entorno** el resumidor (`NEXO_MEMORY_SUMMARIZER`) y los umbrales del Observador y del Reflector: cambiar de modelo
+  implica construir otro adaptador (y, con Claude o Codex, otra sesión), y no es un ajuste que se toque a menudo. La ventana lo dice.
+- Encender empieza a escuchar el bus y aprende las sesiones abiertas (`start()`); apagar deja de escucharlo y de inyectar memoria. Una
+  llamada al resumidor ya en curso termina sola (acotada por sus plazos y reintentos), y lo ya guardado se sigue leyendo con la memoria
+  apagada. `renewAtTokens()` (que `AgentService` consulta al terminar cada turno, en vez de leerlo de su configuración) vale `undefined`
+  con la memoria apagada.
+
+**Indicador de la sesión (retrocompatible).** `AgentSession` gana el campo opcional `memory: { seedTokens, renewals, renewing }`. Está
+ausente si la sesión nunca recibió memoria ni se renovó (así que las sesiones y los clientes anteriores no cambian). `seedTokens` es la
+estimación de la siembra vigente, `renewals` cuenta las renovaciones (automáticas y manuales) y `renewing` es `true` mientras se abre la
+sesión nueva del proveedor (`agent.send` responde `CONFLICT`). Llega por `agent.session` (y `agent.snapshot`/`agent.list`): `AgentService`
+publica la sesión al empezar y al terminar cada renovación.
+
+**Renovación manual: `agent.renew { sessionId }` → `{ session }`.** Misma lógica que la automática (`#renew`: bloque de renovación con
+reflexión, observaciones y últimos turnos tal cual; sesión nueva del proveedor; se mantienen el `AgentSessionId`, el panel y el documento;
+cierra la anterior), sin esperar al umbral. Errores: `NOT_FOUND` (sesión inexistente), `CONFLICT` (turno en curso, ya se renueva, sesión
+cerrada o con error, o nada que sembrar: memoria apagada o vacía), `PROVIDER_UNAVAILABLE` (el proveedor no admite memoria) y el error del
+proveedor si no puede abrir la sesión nueva (la actual queda como estaba). Una renovación manual fallida no apaga la automática de esa
+sesión. En la interfaz es el botón «Renovar sesión» (solo con la memoria encendida y entre turnos); `nexo agent renew <id>` en la CLI.
+
+**Ventana de memoria.** Ajustes (interruptor, resumidor y motivo de la pausa tomados de `memory.status`, selector de renovación
+automática), costo (tabla del Observador, el Reflector, el total desde que arrancó el daemon y lo acumulado de la carpeta, de
+`memory.status.roles` y `projectUsage`), y la reflexión y las observaciones de la carpeta de la sesión con foco (o la del espacio) con
+prioridad, alcance, fecha y rango de origen. De cada observación: «Ver texto original» (`memory.recall`; con la sesión cerrada explica que
+ya no está disponible, porque el texto vive en el documento en memoria del daemon) y «Ir al bloque», que aparece si la sesión está abierta
+en un panel: cierra la ventana, revela el panel (`revealPane`) y deja el salto en `ui.jump`, que el `AgentPanel` de esa sesión consume
+desplazando su lista virtual al primer bloque del rango (`locateBlock`, el primero con `index >= from`, por si el documento se recortó).
+Las consultas (`['memory', ...]` de `@tanstack/solid-query`) se invalidan con cada `memory.updated`.
+
+**Qué queda fuera.** `memory.search` y `memory.recall` **por MCP** (ADR 0007, punto 6) quedan para F5, cuando exista `apps/mcp`; los métodos
+ya están en el protocolo y en `@nexo/client`/`nexo memory`, así que F5 solo tiene que exponerlos. Guardar el texto original de sesiones ya
+cerradas (hoy `memory.recall` responde `NOT_FOUND` tras cerrar la sesión) tampoco se hizo: el ADR no lo pide y duplicaría transcripciones en disco.
+
+**Pruebas.** Unitarias y adversariales de `memory.configure` y `agent.renew` (contratos con prototipos y números hostiles; `MemoryService`
+con carreras de encendido y apagado; `AgentService` con el indicador, la renovación manual, los rechazos y el umbral en caliente), de la
+persistencia (`memory-settings*.test.ts`, con fast-check de ida y vuelta), integración en el daemon real (encender en caliente, reinicio,
+archivo roto, `agent.renew`), CLI (`nexo memory config`, `nexo agent renew`), de la vista (`view*.test.ts` con fast-check de
+`locateBlock`; `MemoryDialog`, `MemoryBar` y `MemoryDialog.adversarial` con observaciones y bloques con HTML, Markdown y órdenes hostiles)
+y E2E (`e2e/memory.spec.ts`): con el proveedor de prueba, el Codex falso y el Observador falso (`NEXO_MEMORY_SUMMARIZER=fake`), dos
+sesiones de proveedores distintos en la misma carpeta; la segunda recibe lo observado de la primera (el Codex falso responde `memoria` con
+las instrucciones con que se abrió el hilo), se renueva a mano y los ajustes sobreviven a un reinicio. Capturas:
+`docs/capturas/f3-5-*.png` (`NEXO_CAPTURAS=1 pnpm e2e -g capturas`).
 
 ## Protocolo (v1)
 

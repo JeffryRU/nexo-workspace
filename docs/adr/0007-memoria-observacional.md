@@ -1,6 +1,6 @@
 # ADR 0007 — Memoria observacional para todos los agentes
 
-- Estado: propuesta (se implementa después de F3, cuando haya al menos dos proveedores)
+- Estado: aceptada (implementada en F3.5.1 a F3.5.4)
 - Fecha: 2026-11-24
 - Inspiración: la «Observational Memory» de Mastra (Mastra Code). No usamos Mastra; tomamos la idea.
 
@@ -50,7 +50,13 @@ que Nexo lo vea, así que su columna «al compactar» se cubre con la renovació
    pestaña. Es opcional por proveedor, porque se pierde la caché de prompts del CLI.
 6. **Recuerdo bajo demanda:** el servidor MCP de Nexo expone `memory.search` y `memory.recall(rango)`.
    Todos estos CLIs hablan MCP, así que cualquier agente puede consultar las observaciones o el texto
-   original detrás de una de ellas.
+   original detrás de una de ellas. Los métodos ya existen en el protocolo del daemon (F3.5.2) y los usan la
+   interfaz y `nexo memory`; **su exposición por MCP queda para F5**, cuando exista `apps/mcp`.
+
+Implementado en F3.5.4: los ajustes (encender o apagar, renovación automática) se cambian en caliente con
+`memory.configure` y se guardan en el estado del daemon; la renovación también se pide a mano (`agent.renew`);
+la interfaz muestra observaciones, reflexión, costo y si una sesión recibió memoria (ver ARCHITECTURE,
+«Interfaz de la memoria»).
 
 ## Consecuencias
 
