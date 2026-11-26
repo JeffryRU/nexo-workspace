@@ -116,12 +116,32 @@ sesión; solo hay texto y razonamiento, sin herramientas ni permisos. Una prueba
 
 ![Selector de proveedor, modelo y esfuerzo con Ollama](docs/capturas/f3-1-selector.png)
 
+**Usar Codex (la CLI de OpenAI).** Instala la CLI (`npm i -g @openai/codex`) e inicia sesión **tú** con `codex login`: Nexo
+no hace login ni lee tus credenciales, solo lanza `codex app-server` y usa la sesión que ya tengas. Habilita el proveedor
+y úsalo desde la CLI o desde los chips del panel (modelos y esfuerzos salen del propio Codex; las aprobaciones de comandos
+y de cambios de archivo aparecen en línea). Sin la CLI o sin sesión, el proveedor sale deshabilitado con su motivo:
+
+```
+export NEXO_AGENT_PROVIDERS=claude,codex       # PowerShell: $env:NEXO_AGENT_PROVIDERS = 'claude,codex'
+export NEXO_CODEX_EXECUTABLE=/ruta/a/codex     # opcional: por omisión se busca «codex» en el PATH
+nexo agent new --provider codex --permissions accept-edits --cwd .
+```
+
+Los modos de permiso se traducen a la política de aprobación y al sandbox de Codex (`ask` → `untrusted` +
+`workspace-write`, `accept-edits` → `on-request` + `workspace-write`, `plan` → `on-request` + `read-only`, `bypass` →
+`never` + `danger-full-access`; tabla en [la arquitectura](docs/ARCHITECTURE.md)). En Windows Nexo lanza el `codex.exe` (o,
+si solo hay el `codex.cmd` de npm, su `codex.js` con Node) sin pasar por un shell. Una prueba opcional con Codex real
+(usa tu cuenta y consume cuota): `NEXO_LIVE_CODEX=1 pnpm --filter @nexo/adapter-provider-codex test:live`.
+
+![Aprobación de un comando de Codex en línea](docs/capturas/f3-2-aprobacion.png)
+
 ## Estructura
 
 ```
 packages/contracts   esquemas zod del protocolo v1 y del dominio compartido
 packages/core        dominio, árbol de distribución, casos de uso y puertos (sin I/O)
 packages/testkit     falsos de los puertos, generadores fast-check y suites de conformidad
+packages/jsonrpc     JSON-RPC 2.0 por líneas (puro; lo usan los adaptadores de Codex y ACP)
 packages/client      SDK tipado del protocolo (esqueleto)
 apps/daemon          raíz de composición (esqueleto)
 apps/web             interfaz SolidJS + Vite (terminales y panel de agente)
