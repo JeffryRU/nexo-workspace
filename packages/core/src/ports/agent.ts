@@ -8,6 +8,7 @@ import type {
 import type { HistoryPort } from './history.ts'
 import type { MemoryInjectionPort } from './memory-injection.ts'
 import type { Unsubscribe } from './pty.ts'
+import type { UsageLimitsPort } from './usage-limits.ts'
 
 export type AgentProviderErrorCode =
   /** El proveedor no está instalado, no ha iniciado sesión o no responde. */
@@ -99,6 +100,8 @@ export interface AgentProviderPort {
   readonly memoryInjection?: MemoryInjectionPort
   /** Opcional (F4.3): historial de sesiones con la API del propio proveedor. Sin él, el proveedor no tiene historial. */
   readonly history?: HistoryPort
+  /** Opcional (F4.4): límites de uso con la API o los eventos del propio proveedor. Sin él, no hay límites que mostrar. */
+  readonly usageLimits?: UsageLimitsPort
   /** Opcional: por qué `isAvailable()` dio `false` (la interfaz lo muestra); `undefined` si lo está o no se sabe. */
   unavailableReason?(): string | undefined
 }

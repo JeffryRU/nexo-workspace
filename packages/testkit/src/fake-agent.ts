@@ -16,6 +16,7 @@ import {
   type HistoryPort,
   type MemoryInjectionPort,
   type Unsubscribe,
+  type UsageLimitsPort,
 } from '@nexo/core'
 import { schedule } from './timers.ts'
 
@@ -117,6 +118,8 @@ export type FakeAgentProviderOptions = {
   memoryInjection?: MemoryInjectionPort
   /** Historial del proveedor (F4.3); sin él, el falso no tiene historial. */
   history?: HistoryPort
+  /** Límites de uso del proveedor (F4.4); sin él, el falso no tiene límites. */
+  usageLimits?: UsageLimitsPort
 }
 
 const realClock: ClockPort = {
@@ -322,6 +325,7 @@ export class FakeAgentProvider implements AgentProviderPort {
   readonly opened: AgentOpenOptions[] = []
   readonly memoryInjection?: MemoryInjectionPort
   readonly history?: HistoryPort
+  readonly usageLimits?: UsageLimitsPort
   readonly #clock: ClockPort
   readonly #known = new Set<string>()
   #n = 0
@@ -336,6 +340,7 @@ export class FakeAgentProvider implements AgentProviderPort {
     this.#clock = options.clock ?? realClock
     if (options.memoryInjection !== undefined) this.memoryInjection = options.memoryInjection
     if (options.history !== undefined) this.history = options.history
+    if (options.usageLimits !== undefined) this.usageLimits = options.usageLimits
   }
 
   async isAvailable(): Promise<boolean> {
