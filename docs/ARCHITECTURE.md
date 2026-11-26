@@ -130,7 +130,7 @@ Todo en `packages/core`, sin I/O; el daemon (F1.3) solo los conecta con adaptado
 
 - **Entorno** (validado con zod al arrancar): `NEXO_PORT` (4317; 0 = efímero), `NEXO_DEV`, `NEXO_STATE_DIR`,
   `NEXO_LOG_LEVEL`, `NEXO_MAX_CONNECTIONS` (128), `NEXO_AUTH_TIMEOUT_MS` (5000), `NEXO_PTY_MODE` (`host` | `direct`; por omisión
-  `host` en Windows y `direct` en Linux/macOS), `NEXO_AGENT_PROVIDERS`, `NEXO_ACP_AGENTS`, `NEXO_CLAUDE_EXECUTABLE`, `NEXO_CODEX_EXECUTABLE` y `NEXO_OLLAMA_URL` (ver «Agentes en el daemon (F2.4)»,
+  `host` en Windows y `direct` en Linux/macOS), `NEXO_AGENT_PROVIDERS`, `NEXO_ACP_AGENTS`, `NEXO_CLAUDE_EXECUTABLE`, `NEXO_CODEX_EXECUTABLE`, `NEXO_AGY_EXECUTABLE` y `NEXO_OLLAMA_URL` (ver «Agentes en el daemon (F2.4)»,
   «Proveedor Ollama (F3.1)» y «Proveedor ACP (F3.3)»).
 - **PTY aislados (issue #15, ADR 0004).** En modo `host`, node-pty corre en un proceso hijo (`@nexo/adapter-pty-host`, `child_process.fork` + IPC con
   mensajes zod validados en ambos extremos). Si el código nativo de ConPTY se cae, muere solo el host: cada terminal afectada recibe
@@ -279,7 +279,8 @@ Los rechazos son `AgentProviderError` con código `UNAVAILABLE`, `INVALID_OPTION
 el servicio de agentes (F2.2) asigna `BlockId`, `index`, `turn` y `seq`, crea los bloques `permission` y `question` a
 partir de las solicitudes y mapea `agent.respond` de vuelta a `respond`. Como un adaptador construye los eventos con
 salida ajena, el servicio **valida cada evento con `ProviderEvent`** y descarta (y registra) los inválidos.
-Contrato verificable (suite `runAgentProviderConformance`, contra el falso y contra cada adaptador): un `turn-end`
+La ficha (`providerSessionId`) es estable durante la vida de la sesión con una excepción: Antigravity no la conoce hasta el
+primer turno (hasta entonces es un UUID provisional) y la anuncia con `session-info`. Contrato verificable (suite `runAgentProviderConformance`, contra el falso y contra cada adaptador): un `turn-end`
 exacto por `send` (también tras `interrupt`, con `stopReason: 'interrupted'`), `BUSY`/`CLOSED` en `send`,
 `interrupt` idempotente, `respond` con solicitud desconocida o repetida → `UNKNOWN_REQUEST`, `close` idempotente con un
 solo `exit`, y bloques abiertos con `block-start` antes de cualquier delta.
@@ -354,11 +355,11 @@ Ollama (solo texto, sin permisos).
 espacio cierra su sesión); al apagar (`stop()`) se llama `service.closeAll()` antes de cerrar las conexiones. Sin
 proveedores (`agentProviders: []`) no hay servicio y todo `agent.*` responde `PROVIDER_UNAVAILABLE`.
 
-**Proveedores.** `NEXO_AGENT_PROVIDERS` (zod; lista separada por comas de `claude`, `codex`, `ollama`, `fake`, `gemini` y los ids declarados en `NEXO_ACP_AGENTS`; por omisión `claude`; el
+**Proveedores.** `NEXO_AGENT_PROVIDERS` (zod; lista separada por comas de `claude`, `codex`, `antigravity`, `ollama`, `fake`, `gemini` y los ids declarados en `NEXO_ACP_AGENTS`; por omisión `claude`; el
 primero es el que se precalienta) o, en código, `startDaemon({ agentProviders })`, que además acepta puertos ya
 construidos (así las pruebas inyectan el suyo). `claude` es `createClaudeProvider({ env, log })` con el entorno del
 daemon **sin las variables `NEXO_*`** y el log del daemon (redactado); `NEXO_CLAUDE_EXECUTABLE` fija el ejecutable de Claude
-Code. `codex` es `createCodexProvider({ env, log, executable: NEXO_CODEX_EXECUTABLE })` con el mismo entorno (ver «Proveedor Codex (F3.2)»). `ollama` es `createOllamaProvider({ baseUrl: NEXO_OLLAMA_URL, log })` (ver «Proveedor Ollama (F3.1)»). `gemini` y cada agente declarado en `NEXO_ACP_AGENTS` son `createAcpProvider({ agent, env, log })` (ver «Proveedor ACP (F3.3)»). `fake` es `ScriptedAgentProvider` (`apps/daemon/src/adapters/scripted-agent-provider.ts`): determinista, sin red;
+Code. `codex` es `createCodexProvider({ env, log, executable: NEXO_CODEX_EXECUTABLE })` con el mismo entorno (ver «Proveedor Codex (F3.2)»). `antigravity` es `createAntigravityProvider({ env, log, executable: NEXO_AGY_EXECUTABLE })` (ver «Proveedor Antigravity (F3.4)»). `ollama` es `createOllamaProvider({ baseUrl: NEXO_OLLAMA_URL, log })` (ver «Proveedor Ollama (F3.1)»). `gemini` y cada agente declarado en `NEXO_ACP_AGENTS` son `createAcpProvider({ agent, env, log })` (ver «Proveedor ACP (F3.3)»). `fake` es `ScriptedAgentProvider` (`apps/daemon/src/adapters/scripted-agent-provider.ts`): determinista, sin red;
 responde `Eco: <texto>`, y según la primera palabra: `lento [n]` (n trozos con retardo), `largo` (no termina hasta
 interrumpir), `permiso` y `pregunta`. Vive en la app y no en `testkit` porque el daemon real lanzado como proceso (CLI,
 E2E) tiene que poder usarlo y producción no importa `testkit`. **No se activa por accidente**: solo existe si se pide
@@ -748,14 +749,24 @@ normalizado se asocia al primer modo del agente cuyo id (o, si no, nombre), en m
 tabla (`MODE_ALIASES`); al abrir se cambia con `session/set_mode` si el modo actual es otro. Los modos que el agente no tenga no
 se ofrecen (`capabilities.permissionModes`); `ask` se ofrece siempre. Un agente que no anuncia modos solo tiene `ask`.
 
-| Modo normalizado | Ids de modo del agente reconocidos                                                 | Ejemplos                                                       |
-| ---------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `ask`            | `default`, `ask`, `normal`, `manual`, `askbeforeedits`                             | Gemini `default`, Claude `default`                             |
-| `accept-edits`   | `acceptedits`, `autoedit`, `autoapproveedits`, `edit`, `auto`                      | Gemini `autoEdit`, Claude `acceptEdits`, Codex `auto`          |
-| `plan`           | `plan`, `planning`, `readonly`                                                     | Gemini y Claude `plan`, Codex `read-only`                      |
-| `bypass`         | `bypasspermissions`, `yolo`, `fullaccess`, `dangerfullaccess`, `bypass`, `dontask` | Gemini `yolo`, Claude `bypassPermissions`, Codex `full-access` |
+| Modo normalizado | Ids de modo del agente reconocidos                                      | Ejemplos                                                       |
+| ---------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `ask`            | `default`, `ask`, `normal`, `manual`, `askbeforeedits`                  | Gemini `default`, Claude `default`                             |
+| `accept-edits`   | `acceptedits`, `autoedit`, `autoapproveedits`, `edit`                   | Gemini `autoEdit`, Claude `acceptEdits`                        |
+| `plan`           | `plan`, `planning`, `readonly`                                          | Gemini y Claude `plan`, Codex `read-only`                      |
+| `bypass`         | `bypasspermissions`, `yolo`, `fullaccess`, `dangerfullaccess`, `bypass` | Gemini `yolo`, Claude `bypassPermissions`, Codex `full-access` |
+
+**Modos que no se mapean (a propósito).** `dontAsk` de Claude Code **deniega** lo que no está preaprobado: no es acceso total,
+así que no es `bypass` (antes F3.3 lo mapeaba ahí por error) ni `ask` (que pregunta). `auto` no tiene un alcance común: en Codex
+aprueba también comandos dentro del espacio de trabajo, en Claude Code y en `agy` lo decide un clasificador o una revisión
+aparte; no equivale a `accept-edits` (solo ediciones). Ambos quedan sin modo normalizado (no se ofrecen).
 
 Un `current_mode_update` del agente (p. ej. al salir del modo plan) llega como `session-info` con el modo normalizado.
+
+**Rutas de los archivos.** ACP da rutas absolutas. Las que están **dentro de la carpeta de la sesión** se entregan **relativas** a ella
+(`src/a.ts`, y en el diff `--- a/src/a.ts`, no `a/home/usuario/proyecto/src/a.ts`); las de fuera quedan como llegan. Se decide en el
+adaptador (`paths.ts`, aplicado en `actionDraft`) y no en la vista, para que todos los clientes (web, CLI, MCP) vean lo mismo; la
+comparación ignora las mayúsculas y las barras (`\` o `/`) cuando hay letra de unidad (Windows).
 
 **Modelos.** Se usan si el agente los expone: la opción de configuración de categoría `model` (estable; se cambia con
 `session/set_config_option`, admite grupos) o, si no hay, `models` de `session/new` (inestable; se cambia con
@@ -778,7 +789,7 @@ de la carpeta del shim; si no se encuentra, el motivo pide poner en `command` la
 daemon sin las variables `NEXO_*` más el `env` del agente.
 
 **Configuración.** `NEXO_ACP_AGENTS` es un JSON validado con zod: una lista de `{ id, name, command, args?, env? }` (máx. 16;
-`id` con forma `^[a-z][a-z0-9-]{0,31}$`, único y distinto de `claude`, `codex`, `ollama` y `fake`; `name` de ≤ 64 caracteres sin
+`id` con forma `^[a-z][a-z0-9-]{0,31}$`, único y distinto de `claude`, `codex`, `antigravity`, `ollama` y `fake`; `name` de ≤ 64 caracteres sin
 control; `command` y `args` sin NUL; `env` de ≤ 64 variables, sin `NEXO_*`). Por omisión existe `{ "id": "gemini", "name": "Gemini",
 "command": "gemini", "args": ["--acp"] }`; declarar un agente con id `gemini` lo sustituye. `NEXO_AGENT_PROVIDERS` acepta `gemini` y
 los ids declarados (p. ej. `claude,gemini,mi-agente`), y la CLI usa `nexo agent new --provider gemini [--model <m>] [--permissions <modo>]`.
@@ -798,6 +809,144 @@ actualizaciones arbitrarias nunca rompen ni dejan bloques abiertos; el parche de
 adversariales (actualizaciones fuera de esquema, `tool_call_update` sin `tool_call`, permiso tras cancelar, agente que muere,
 versión de protocolo incompatible, autenticación requerida, líneas enormes, stderr ruidoso, sin respuesta a `session/cancel`,
 plazo de inactividad). Capturas: `docs/capturas/f3-3-*.png` (`NEXO_CAPTURAS=1 pnpm e2e -g capturas`, con el agente falso).
+
+### Proveedor Antigravity (F3.4)
+
+`packages/adapters/provider-antigravity` (`createAntigravityProvider({ env, log, executable? })`) implementa
+`AgentProviderPort` sobre la CLI **`agy`** de Antigravity en modo no interactivo con salida `stream-json`. Id del proveedor:
+**`antigravity`** (el nombre del producto y el que ya citaba el contrato de `ProviderId`; `agy` es solo el binario, y un id
+`agy` obligaría a explicar la abreviatura en cada chip). Importa solo `core` y `contracts`; sin dependencias nuevas.
+
+**Qué está verificado y qué no.** El formato **no sale de memoria**. En este PC está instalado `agy` **1.2.0** (versión fijada:
+`AGY_VERIFIED_VERSION`). No se ejecutó ninguna orden que arranque el modo de impresión (`-p`, ni siquiera una orden `/…` sin
+turno): consumiría o tocaría la cuenta del usuario. Por eso:
+
+| Dato                                                                                                                                                                                                                                                                                                                                      | Fuente                                                                                                          | Estado                                              |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| Banderas: `--output-format text\|json\|stream-json`, `--input-format text\|stream-json` (exige `stream-json` de salida), `--conversation <id>`, `-c`, `--model`, `--effort low\|medium\|high`, `--mode accept-edits\|plan`, `--dangerously-skip-permissions`, `--print-timeout` (5 min), `--json-schema`, subcomandos `models` y `agents` | `agy --help` y `agy <subcomando> --help` de 1.2.0 en este PC                                                    | **Verificado**                                      |
+| Sucesión `init` → `step_update`* → `result`; campos de cada evento; `step_type` (`user_input`, `agent_response`, `tool`, `checkpoint`); `tool_info`; `usage`; estados del resultado; mensaje de entrada `{"event":"user","message":{"content":…}}`; cerrar stdin termina la sesión; modos `request-review` / `always-proceed`             | documentación oficial (antigravity.google/docs/cli/headless) y `agy changelog` (notas de versión, hasta 1.5.17) | Documentado, **no comprobado con un turno real**    |
+| En `-p` no hay avisos de permiso: lo que exige aprobación y no está preaprobado se **deniega** y el turno sigue (stderr avisa); sin preguntas al usuario                                                                                                                                                                                  | notas de versión 1.1.x y documentación                                                                          | Documentado, no comprobado                          |
+| Nombres y parámetros de herramientas distintos de `run_command` (`CommandLine`) y `write_to_file`; ruta de los archivos tocados                                                                                                                                                                                                           | herramientas de Antigravity que conocemos                                                                       | **Supuesto** (cae en `other` si no encaja)          |
+| Si el `text_delta` de un paso `DONE` es el último trozo o el texto completo                                                                                                                                                                                                                                                               | —                                                                                                               | **Ambiguo**: se resuelve con una heurística (abajo) |
+| Forma de `agy models --output-format json`                                                                                                                                                                                                                                                                                                | las notas dicen que existe la salida máquina; no su forma                                                       | **Supuesto** (parser tolerante)                     |
+| El `conversation_id` es un UUID; `--conversation` con un id desconocido                                                                                                                                                                                                                                                                   | UUID: formato de los archivos de conversación; desconocido: notas 1.5.x solo hablan de una advertencia          | **Supuesto**                                        |
+| `agy --version` dice 1.2.0 pero `agy changelog` llega a 1.5.17 (hay versiones más nuevas); nada posterior a 1.2.0 se usa (`--mode auto`, `--resume`, `--effort xhigh\|max`, el modo `auto` por omisión de `-p` desde 1.5.7)                                                                                                               | `agy --version`, `agy changelog`                                                                                | Verificado                                          |
+
+La prueba en vivo está lista: `NEXO_LIVE_AGY=1 pnpm --filter @nexo/adapter-provider-antigravity test:live` (ver «Probar de
+verdad»); si algo del formato difiere, falla ahí y `protocol.ts`, `translator.ts` y `tools.ts` son los únicos sitios a tocar. Nexo
+**no hace login ni lee credenciales**: `agy` usa la sesión que el usuario ya tenga.
+
+**Una sesión = un proceso por turno.** `open` no lanza nada. Cada `send` lanza `agy --output-format stream-json --input-format
+stream-json [--conversation <id>] [--model <m>] [--effort <e>] [<bandera de modo>]` con `spawn(cmd, args[])` sin shell, escribe el
+mensaje como una línea JSON por stdin y cierra stdin (así `agy` acaba tras el turno; el texto no pasa por la línea de órdenes, sin
+límites de longitud ni problemas de comillas). El `result` es el fin del turno: **exactamente un `turn-end`**, por ese evento o
+sintético si `agy` muere sin darlo (el error sale de la línea `AGY_ERROR: {…}` de stderr, y su exit 3), si no da señales en
+30 min (`TIMEOUT`) o si el usuario interrumpe. Un mensaje que empiece por `/` lo rechaza `agy` en este modo (orden de la CLI): llega
+como error. `close` mata el proceso en curso y emite `exit` una vez; un proceso que no se puede lanzar da un error fatal
+(`AGY_EXITED`) y `exit`.
+
+**Ficha de reanudar.** La conversación vive en `agy`; `providerSessionId` es su `conversation_id`, que no se conoce hasta el
+`init` del primer turno. Antes de eso es un UUID provisional que **no** se pasa a `agy`; `session-info` anuncia el real y desde
+entonces cada turno lleva `--conversation`. (Es la única excepción a «ficha estable» del puerto; el servicio ya actualiza la ficha con
+`session-info`.) `open` con `resume` valida la forma (UUID) y lo pasa desde el primer turno.
+
+**Interrumpir.** En POSIX se envía `SIGINT` (`agy` cierra con estado `INTERRUPTED`) y, pasados 3 s, `SIGKILL`; en Windows no hay
+señales y se termina el árbol de procesos con `taskkill /T` (también los comandos que lanzó el agente). El turno acaba con
+`stopReason: 'interrupted'` y la sesión sigue usable (el siguiente turno retoma la conversación con `--conversation`).
+
+| Evento de `agy`                                                    | `ProviderEvent`                                                                                                                                                                                                                     |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `init` (`conversation_id`, `permission_mode`, `model`)             | `session-info` (ficha, modelo, modo: `request-review` → `ask`, `always-proceed` → `bypass`)                                                                                                                                         |
+| `step_update` `agent_response` (`text_delta`, `ACTIVE`/`DONE`)     | bloque `text`: cada `text_delta` `ACTIVE` es un delta; `DONE` cierra el bloque (ver heurística)                                                                                                                                     |
+| `step_update` `tool` (`tool_name`, `tool_info`)                    | `action`: `block-start` en `running` y `block-end` en `ok`, o `error` si `tool_info.error`; `output` = `tool_info.output` (o el mensaje de error)                                                                                   |
+| `tool` de edición (`write_to_file`, `replace_file_content`…)       | `action` `edit` con `diff` armado de los parámetros (`CodeContent`; `TargetContent`/`ReplacementContent`), ruta relativa a la carpeta                                                                                               |
+| `subagent_info`                                                    | `action` `other` «Subagente …»                                                                                                                                                                                                      |
+| `user_input`, `checkpoint`                                         | nada (el bloque `user` lo crea `agent.send`)                                                                                                                                                                                        |
+| `result` `SUCCESS`                                                 | `turn-end` `end-turn`; `usage` de `usage` (entrada, salida, caché, `thinking_tokens` → razonamiento), `duration_seconds`, `num_turns`                                                                                               |
+| `result` `INTERRUPTED`, `CANCELED`, `finished_reason: interrupted` | `turn-end` `interrupted`                                                                                                                                                                                                            |
+| `result` `ERROR` (+ `error`)                                       | bloque `error` no fatal y `turn-end` `error`; sesión caducada (401, `UNAUTHENTICATED`) → `AUTH_REQUIRED` fatal con la instrucción de iniciar sesión; cuota/límite → `USAGE_LIMIT`; capacidad (503) → `AGY_UNAVAILABLE` reintentable |
+| `finished_reason: print_timeout`                                   | `turn-end` `other` y aviso `PRINT_TIMEOUT` (respuesta parcial)                                                                                                                                                                      |
+| `result` sin texto previo                                          | la respuesta del resultado se muestra como bloque `text`                                                                                                                                                                            |
+| líneas que no son JSON, eventos o pasos desconocidos               | se ignoran (se cuentan y se registran)                                                                                                                                                                                              |
+
+**Heurística de `DONE`.** Si `DONE` trae `text_delta`: con el bloque aún vacío es el texto entero; si empieza por lo ya recibido y es
+más largo, se añade solo el resto (era el texto acumulado); si es idéntico y de ≥ 16 caracteres se descarta (repetición); en otro caso
+es un trozo más. Así el documento sale igual con cualquiera de las dos lecturas de la documentación.
+
+**Razonamiento, permisos, preguntas y plan: lo que `agy -p` no da.** El flujo solo informa `thinking_tokens`, no el texto del
+razonamiento (no hay bloques `reasoning`). En modo no interactivo no hay solicitudes de permiso ni preguntas, así que el proveedor no
+emite `permission-request` ni `question-request` y `respond` rechaza con `UNKNOWN_REQUEST`; tampoco hay bloque `plan`. Las
+`capabilities` lo reflejan en los **modos de permiso**, que son lo único que se controla:
+
+| Modo normalizado | Bandera de `agy`                 | Efecto real                                                                                                        |
+| ---------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `ask`            | ninguna (`request-review`)       | **No pregunta**: lo que exige aprobación y no está preaprobado en los ajustes de `agy` se deniega y el turno sigue |
+| `accept-edits`   | `--mode accept-edits`            | aprueba las ediciones de archivos                                                                                  |
+| `plan`           | `--mode plan`                    | investiga y propone, sin editar                                                                                    |
+| `bypass`         | `--dangerously-skip-permissions` | aprueba todo (la lista negra de comandos del sistema de `agy` sigue bloqueando)                                    |
+
+Quien necesite aprobar acciones desde Nexo puede declarar `agy acp` (existe en versiones posteriores a 1.2.0; no verificado aquí)
+como agente ACP en `NEXO_ACP_AGENTS`: ese camino sí tiene permisos, preguntas y plan.
+
+**Disponibilidad.** `isAvailable()` resuelve el ejecutable (`resolveAgyCommand`: `NEXO_AGY_EXECUTABLE` o `agy` en el `PATH`; en Windows
+`agy.exe`, y un `.js`/`.mjs` se lanza con Node; un `.cmd` pide apuntar a `agy.exe`) y ejecuta `agy models --output-format json`
+(≤ 20 s), que hace de comprobación de sesión y de lista de modelos; se reutiliza 30 s (3 s si falló). No disponible, con el motivo en
+`agent.providers[].reason`: no está instalado («Instala la CLI de Antigravity («agy») e inicia sesión con ella…»), «agy models» sale con
+error de sesión o no responde («Antigravity no tiene la sesión iniciada: ejecuta «agy» en una terminal e inicia sesión. Nexo no inicia
+sesión por ti.»), o falla por otra causa. Una lista de modelos ilegible no impide usarlo (`models: []`).
+
+**Capacidades.** `models` de `agy models` (`defaultModel` si lo marca), `efforts: low, medium, high` (los de `--effort` en 1.2.0),
+`permissionModes` los cuatro, `resume: true`, `warmup: false`, `streaming: true`.
+
+**Configuración.** `NEXO_AGENT_PROVIDERS` acepta `antigravity`; `NEXO_AGY_EXECUTABLE` (opcional) fija la ruta de `agy`. CLI:
+`nexo agent new --provider antigravity [--model <m>] [--effort low|medium|high] [--permissions ask|accept-edits|plan|bypass]`.
+
+**Limitaciones.** Un proceso nuevo por turno (arranque de `agy` en cada mensaje; sin `warmup`); sin imágenes; el nombre de las
+herramientas y la ruta de los archivos son supuestos hasta la prueba en vivo; sin `--json-schema`; las líneas de stdout de más de 8 MiB
+se descartan. `text.ts`, `redact.ts`, `resolve.ts` y `process.ts` se duplican de `provider-codex` (deliberado, igual que los demás).
+
+**Probar de verdad.** `NEXO_LIVE_AGY=1 pnpm --filter @nexo/adapter-provider-antigravity test:live` (usa la sesión del usuario en `agy` y
+consume cuota; comprueba la lista de modelos, un turno `plan`, que la ficha es un UUID y que `--conversation` reanuda). No corre en el CI.
+Las pruebas normales usan `test/fake-agy.mjs`, un `agy` falso (script de Node con `--version`, `models` y turnos por stream-json):
+conformidad (`runAgentProviderConformance`, sin el grupo de permisos), traductor con propiedades (secuencias arbitrarias nunca rompen el
+contrato; los deltas se conservan; ningún par sustituto se parte), `models` con propiedades y adversariales (JSON roto, líneas enormes,
+`result` en error, 401, muerte con `AGY_ERROR`, silencio y plazo, cierre en pleno turno, segundo `send`, texto hostil por stdin, proceso
+que no se puede lanzar). Capturas: `docs/capturas/f3-4-*.png` (`NEXO_CAPTURAS=1 pnpm e2e -g capturas`).
+
+### Matriz de capacidades por proveedor (cierre de F3)
+
+Lo que cada proveedor ofrece **hoy**. «—» = no lo hay en ese proveedor (la interfaz no muestra el elemento); entre paréntesis, la condición.
+
+| Capacidad          | Claude (F2.3)                     | Codex (F3.2)                      | ACP / Gemini (F3.3)                       | Antigravity (F3.4)                                | Ollama (F3.1)                     |
+| ------------------ | --------------------------------- | --------------------------------- | ----------------------------------------- | ------------------------------------------------- | --------------------------------- |
+| Streaming de texto | sí (deltas parciales)             | sí                                | sí                                        | sí (`text_delta`; formato por verificar en vivo)  | sí (NDJSON)                       |
+| Razonamiento       | sí (`thinking`)                   | sí (resumen)                      | sí (`agent_thought_chunk`)                | — (solo `thinking_tokens` en el uso)              | sí (`think`, si el modelo razona) |
+| Acciones           | sí                                | sí (comandos, archivos, web, MCP) | sí (`tool_call`)                          | sí (`tool`)                                       | —                                 |
+| Diffs              | sí (`Edit`, `Write`, `MultiEdit`) | sí (`fileChange`)                 | sí (`diff` del agente; rutas relativas)   | sí (armado de los parámetros; ruta relativa)      | —                                 |
+| Permisos en línea  | sí                                | sí (3 opciones)                   | sí (las que ofrece el agente)             | — (solo modos; `ask` deniega lo no preaprobado)   | —                                 |
+| Preguntas          | sí (`AskUserQuestion`)            | —                                 | — (elicitation sin atender)               | —                                                 | —                                 |
+| Plan               | sí (`TodoWrite`)                  | — (se ignora)                     | sí (`plan`)                               | —                                                 | —                                 |
+| Reanudar           | sí (id de sesión del SDK)         | sí (hilo)                         | sí (si el agente anuncia `loadSession`)   | sí (`--conversation`; ficha tras el primer turno) | — (historial solo en memoria)     |
+| Modelos            | sí (SDK; alias de respaldo)       | sí (`model/list`)                 | sí (si el agente los expone)              | sí (`agy models`)                                 | sí (`/api/tags`)                  |
+| Esfuerzos          | sí (`low` … `max`)                | sí (según el modelo)              | —                                         | sí (`low`, `medium`, `high`)                      | sí (`think` / `no-think`)         |
+| Interrumpir        | sí (`interrupt()`)                | sí (`turn/interrupt`)             | sí (`session/cancel`)                     | sí (SIGINT; en Windows, termina el árbol)         | sí (aborta la petición)           |
+| Precalentar        | sí (`warmUp`, hasta 4 procesos)   | —                                 | —                                         | — (un proceso por turno)                          | —                                 |
+| Modos de permiso   | los cuatro                        | los cuatro                        | los que anuncie el agente (`ask` siempre) | los cuatro (sin diálogo)                          | solo `ask`                        |
+
+La interfaz arma los chips solo con `agent.providers[].capabilities` (modelos, esfuerzos, modos); lo demás (razonamiento, plan,
+preguntas…) aparece o no según los eventos que emita el proveedor, sin ramas por proveedor en la web.
+
+### Varios proveedores a la vez (cierre de F3)
+
+Cada panel de agente tiene su sesión y su proveedor: cinco pestañas con proveedores distintos conviven en el mismo daemon sin
+estado compartido (cada sesión un proceso, o una petición HTTP en Ollama). Lo comprueban dos pruebas con los procesos y servidores
+falsos de cada adaptador (`e2e/providers.ts`; orden `stream`, salida continua):
+
+- `e2e/agent.spec.ts` («varios proveedores a la vez»): cinco paneles (el de prueba, Ollama, Codex, Gemini por ACP y Antigravity)
+  empiezan a emitir casi a la vez; al pasar por cada pestaña, el panel conserva su chip de proveedor, el texto de su proveedor y su uso.
+- `e2e/perf.spec.ts` («cambiar de pestaña con 5 agentes de proveedores distintos emitiendo a la vez»): mismas cinco pestañas emitiendo
+  durante toda la medida; p95 del cambio de pestaña con el **mismo presupuesto** que las terminales (16 ms en local, el límite del CI
+  en el job «e2e y rendimiento»). La cifra queda en `e2e/results/tab-switch-agents.json` (artefacto del job).
 
 ## Protocolo (v1)
 
@@ -898,6 +1047,9 @@ Presupuestos (los mide una prueba de rendimiento en CI, con margen):
   5 000 bloques: p95 de fotograma 16,8 ms, 0 tareas largas y 59 nodos como máximo; cambio de pestaña con 4 agentes y 2
   terminales emitiendo: p95 7,5 ms (máximo 7,9 ms; presupuesto 16 ms, límite del CI 40 ms). Un panel de agente oculto no
   recoloca su ventana de bloques al crecer, para no montarla entera al mostrarlo.
+- **Varios proveedores a la vez (F3.4), medido en `pnpm perf`:** cambio de pestaña con 5 agentes de proveedores distintos (el de prueba,
+  Ollama, Codex, Gemini por ACP y Antigravity, todos falsos) emitiendo durante toda la medida, con el mismo presupuesto de p95 que las
+  terminales (`tab-switch-agents.json`; cifras del CI en «Varios proveedores a la vez (cierre de F3)»).
 - **Agentes rápidos:** el texto se transmite en parcial (deltas); el proceso del proveedor se precalienta
   al abrir una pestaña de agente o enfocar el redactor; Codex usa un solo `app-server` para todos los hilos.
 - **Reactividad fina:** SolidJS actualiza solo los nodos que cambian; el estado en vivo vive en stores de

@@ -146,7 +146,7 @@ nexo agent new --provider gemini --cwd .
 ```
 
 Para **declarar otro agente ACP** se usa `NEXO_ACP_AGENTS` (JSON: lista de `{ id, name, command, args?, env? }`; el `id` no puede ser
-`claude`, `codex`, `ollama` ni `fake`) y se añade su id a `NEXO_AGENT_PROVIDERS`:
+`claude`, `codex`, `antigravity`, `ollama` ni `fake`) y se añade su id a `NEXO_AGENT_PROVIDERS`:
 
 ```
 export NEXO_ACP_AGENTS='[{"id":"mi-agente","name":"Mi agente","command":"mi-agente-cli","args":["--acp"]}]'
@@ -161,6 +161,32 @@ Una prueba opcional con un agente real (usa tu cuenta y consume cuota): `NEXO_LI
 
 ![Plan de un agente ACP](docs/capturas/f3-3-plan.png)
 
+**Usar Antigravity (la CLI `agy`).** Instala la CLI de Antigravity e inicia sesión **tú** con ella (`agy`): Nexo no hace login ni
+lee tus credenciales, solo lanza `agy` con salida `stream-json` y usa la sesión que ya tengas. Cada mensaje es un proceso `agy`
+que retoma la conversación (`--conversation`); los modelos salen de `agy models`. Sin la CLI o sin sesión, el proveedor sale
+deshabilitado con su motivo:
+
+```
+export NEXO_AGENT_PROVIDERS=claude,antigravity   # PowerShell: $env:NEXO_AGENT_PROVIDERS = 'claude,antigravity'
+export NEXO_AGY_EXECUTABLE=/ruta/a/agy           # opcional: por omisión se busca «agy» en el PATH
+nexo agent new --provider antigravity --permissions accept-edits --cwd .
+```
+
+`agy` en modo no interactivo **no pide permisos ni hace preguntas**: `ask` deniega lo que no esté preaprobado en los ajustes de `agy`,
+`accept-edits` y `plan` usan `--mode` y `bypass` usa `--dangerously-skip-permissions`; tampoco emite el texto del razonamiento. El
+formato `stream-json` sale de la documentación oficial y de las banderas de `agy` 1.2.0, pero no se ha comprobado con un turno real: la
+prueba en vivo (usa tu cuenta y consume cuota) es `NEXO_LIVE_AGY=1 pnpm --filter @nexo/adapter-provider-antigravity test:live`, y
+[la arquitectura](docs/ARCHITECTURE.md) dice qué está verificado y qué no.
+
+![Acciones de Antigravity con su diff](docs/capturas/f3-4-agy-acciones.png)
+
+**Varios proveedores a la vez.** Cada panel de agente tiene su proveedor: puedes tener Claude, Codex, Gemini, Antigravity y Ollama en
+pestañas distintas, trabajando al mismo tiempo, y cambiar entre ellas sin perder lo de cada uno (el cambio de pestaña se mide en el
+CI con los cinco emitiendo). La tabla de qué ofrece cada proveedor (razonamiento, acciones, diffs, permisos, preguntas, plan,
+reanudar, modelos, esfuerzos…) está en [la arquitectura](docs/ARCHITECTURE.md#matriz-de-capacidades-por-proveedor-cierre-de-f3).
+
+![Cinco proveedores de agente a la vez](docs/capturas/f3-4-varios-proveedores.png)
+
 ## Estructura
 
 ```
@@ -168,6 +194,7 @@ packages/contracts   esquemas zod del protocolo v1 y del dominio compartido
 packages/core        dominio, árbol de distribución, casos de uso y puertos (sin I/O)
 packages/testkit     falsos de los puertos, generadores fast-check y suites de conformidad
 packages/jsonrpc     JSON-RPC 2.0 por líneas (puro; lo usan los adaptadores de Codex y ACP)
+packages/adapters    pty-node, pty-host y los proveedores: claude, codex, acp, antigravity, ollama
 packages/client      SDK tipado del protocolo (esqueleto)
 apps/daemon          raíz de composición (esqueleto)
 apps/web             interfaz SolidJS + Vite (terminales y panel de agente)
