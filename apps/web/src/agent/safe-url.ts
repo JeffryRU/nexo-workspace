@@ -15,7 +15,7 @@ function isInvisible(c: number): boolean {
   )
 }
 
-function stripInvisible(text: string): string {
+export function stripInvisible(text: string): string {
   let out = ''
   for (const ch of text) if (!isInvisible(ch.codePointAt(0) as number)) out += ch
   return out
