@@ -65,6 +65,7 @@ export default defineConfig({
       project('adapter-provider-ollama', './packages/adapters/provider-ollama', 15000),
       project('adapter-provider-codex', './packages/adapters/provider-codex', 15000),
       project('adapter-provider-acp', './packages/adapters/provider-acp', 15000),
+      project('adapter-provider-antigravity', './packages/adapters/provider-antigravity', 15000),
       project('jsonrpc', './packages/jsonrpc'),
       project('client', './packages/client', 30000),
       project('daemon', './apps/daemon', 30000),
