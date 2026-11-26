@@ -947,6 +947,8 @@ falsos de cada adaptador (`e2e/providers.ts`; orden `stream`, salida continua):
 - `e2e/perf.spec.ts` («cambiar de pestaña con 5 agentes de proveedores distintos emitiendo a la vez»): mismas cinco pestañas emitiendo
   durante toda la medida; p95 del cambio de pestaña con el **mismo presupuesto** que las terminales (16 ms en local, el límite del CI
   en el job «e2e y rendimiento»). La cifra queda en `e2e/results/tab-switch-agents.json` (artefacto del job).
+  Medido en el CI (ubuntu, job «e2e y rendimiento», 50 cambios, límite del CI 40 ms): p50 1,6 ms, p95 2,8 ms, máximo 3,7 ms (hasta el
+  siguiente fotograma pintado: p50 12,3 ms, p95 13,0 ms).
 
 ## Protocolo (v1)
 
