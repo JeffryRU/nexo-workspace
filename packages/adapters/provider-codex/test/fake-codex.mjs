@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 // Servidor `codex app-server` falso para las pruebas: habla JSON-RPC por líneas (sin el campo `jsonrpc`, como
 // el real) y responde según la primera palabra del mensaje del usuario. Si existe FAKE_CODEX_LOG, anota ahí
 // (JSONL) cada línea que recibe y los argumentos con los que lo lanzaron.
-import { appendFileSync } from 'node:fs'
+import { appendFileSync, readFileSync } from 'node:fs'
 import { createInterface } from 'node:readline'
 
 const LOG = process.env.FAKE_CODEX_LOG
@@ -468,6 +468,16 @@ async function runTurn(turn, text) {
   }
 }
 
+const loadThreads = () => {
+  const file = process.env.FAKE_CODEX_THREADS_FILE
+  if (!file) return []
+  try {
+    return JSON.parse(readFileSync(file, 'utf8'))
+  } catch {
+    return []
+  }
+}
+
 function handle(msg) {
   const { id, method, params } = msg
   if (method === undefined) {
@@ -562,6 +572,34 @@ function handle(msg) {
         sandbox: { type: 'workspaceWrite' },
         reasoningEffort: null,
       })
+    case 'thread/list': {
+      // Historial (F4.3): hilos sembrados en FAKE_CODEX_THREADS_FILE (JSON). FAKE_CODEX_LIST_RAW fuerza la respuesta.
+      if (process.env.FAKE_CODEX_HISTORY_HANG === '1') return
+      if (process.env.FAKE_CODEX_LIST_FAIL === '1') return fail(-32603, 'base de datos bloqueada')
+      if (process.env.FAKE_CODEX_LIST_RAW) return reply(JSON.parse(process.env.FAKE_CODEX_LIST_RAW))
+      const cwds = params?.cwd == null ? null : [].concat(params.cwd)
+      const all = loadThreads()
+        .filter((t) => cwds === null || cwds.includes(t.cwd))
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+      const from = Number(params?.cursor ?? 0)
+      const size = Math.min(params?.limit ?? 25, Number(process.env.FAKE_CODEX_PAGE ?? 1000))
+      const data = all.slice(from, from + size).map(({ turns, ...t }) => ({ ...t, turns: [] }))
+      note({
+        list: {
+          cursor: params?.cursor ?? null,
+          cwd: params?.cwd ?? null,
+          sourceKinds: params?.sourceKinds ?? null,
+        },
+      })
+      return reply({ data, nextCursor: from + size < all.length ? String(from + size) : null })
+    }
+    case 'thread/read': {
+      if (process.env.FAKE_CODEX_HISTORY_HANG === '1') return
+      note({ read: params?.threadId })
+      const found = loadThreads().find((t) => t.id === params?.threadId)
+      if (!found) return fail(-32600, `no rollout found for thread id ${params?.threadId}`)
+      return reply({ thread: { ...found, turns: params?.includeTurns ? (found.turns ?? []) : [] } })
+    }
     case 'turn/start': {
       turnCount++
       const text = params?.input?.[0]?.text ?? ''
