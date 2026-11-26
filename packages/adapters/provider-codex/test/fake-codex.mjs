@@ -105,6 +105,18 @@ async function runTurn(turn, text) {
     case 'hang':
       item(turn, agentMessage('m1', ''), 'item/started')
       return
+    // Salida continua (para medir la interfaz con varios proveedores emitiendo a la vez).
+    case 'stream': {
+      item(turn, agentMessage('m1', ''), 'item/started')
+      const n = Number(process.env.FAKE_CODEX_STREAM_N ?? 300)
+      for (let i = 0; i < n; i++) {
+        notify('item/agentMessage/delta', { ...base(turn), itemId: 'm1', delta: 'palabra ' })
+        await sleep(Number(process.env.FAKE_CODEX_STREAM_MS ?? 10))
+      }
+      item(turn, agentMessage('m1', 'palabra '.repeat(n)), 'item/completed')
+      done(turn)
+      return
+    }
     case 'permiso': {
       item(
         turn,
