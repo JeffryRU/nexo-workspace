@@ -130,7 +130,11 @@ function killTree(child) {
 
 function processPath(pid) {
   if (WINDOWS) {
-    const r = run('powershell.exe', ['-NoProfile', '-Command', `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; (Get-Process -Id ${pid}).Path`])
+    const r = run('powershell.exe', [
+      '-NoProfile',
+      '-Command',
+      `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; (Get-Process -Id ${pid}).Path`,
+    ])
     return r.stdout.trim()
   }
   try {
@@ -482,21 +486,29 @@ async function smokeMsi(file, sandbox) {
       )}`,
     )
   }
+  // Dónde cae el MSI depende de Tauri/WiX (Program Files, a veces bajo la carpeta del editor): se busca bajo cualquier
+  // carpeta «nexo» de los sitios habituales y, si no aparece, el error lista lo que hay.
   let installDir
+  const seen = []
   for (const base of [
     process.env.ProgramFiles,
+    process.env['ProgramFiles(x86)'],
+    process.env.LOCALAPPDATA,
     process.env.LOCALAPPDATA && join(process.env.LOCALAPPDATA, 'Programs'),
   ]) {
-    if (base === undefined) continue
-    for (const name of existsSync(base) ? readdirSync(base) : []) {
-      if (/nexo/i.test(name) && existsSync(join(base, name, 'nexo', 'daemon', 'daemon.mjs'))) {
-        installDir = join(base, name)
-      }
+    if (base === undefined || !existsSync(base)) continue
+    for (const name of readdirSync(base)) {
+      if (!/nexo/i.test(name)) continue
+      seen.push(join(base, name))
+      const pkg = findPackageDir(join(base, name))
+      if (pkg !== undefined) installDir = join(pkg, '..')
     }
   }
   try {
     if (installDir === undefined)
-      throw new Error('el MSI no instaló nexo/daemon/daemon.mjs en Program Files')
+      throw new Error(
+        `el MSI no instaló nexo/daemon/daemon.mjs (carpetas «nexo» vistas: ${seen.join(', ') || 'ninguna'})`,
+      )
     log(`msi: instalado en ${installDir}`)
     await exerciseWindowsInstall(installDir, stateDir, { keepDaemonAlive: false })
   } catch (error) {
