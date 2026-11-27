@@ -36,9 +36,14 @@ la imagen de `idle`. Si falla incluso `idle`, Nexo no dibuja nada (nunca una ima
 
 [`examples/companions/robi/`](../examples/companions/robi) es un paquete real (SVG dibujados a mano, licencia CC0) con una expresión distinta para cada estado:
 
-| `idle` | `thinking` | `busy` | `waiting` | `done` | `error` |
-| :----: | :--------: | :----: | :-------: | :----: | :-----: |
-| ![idle](../examples/companions/robi/idle.svg) | ![thinking](../examples/companions/robi/thinking.svg) | ![busy](../examples/companions/robi/busy.svg) | ![waiting](../examples/companions/robi/waiting.svg) | ![done](../examples/companions/robi/done.svg) | ![error](../examples/companions/robi/error.svg) |
+<p>
+  <img src="../examples/companions/robi/idle.svg" alt="Robi: idle" title="idle" width="96" height="96">
+  <img src="../examples/companions/robi/thinking.svg" alt="Robi: thinking" title="thinking" width="96" height="96">
+  <img src="../examples/companions/robi/busy.svg" alt="Robi: busy" title="busy" width="96" height="96">
+  <img src="../examples/companions/robi/waiting.svg" alt="Robi: waiting" title="waiting" width="96" height="96">
+  <img src="../examples/companions/robi/done.svg" alt="Robi: done" title="done" width="96" height="96">
+  <img src="../examples/companions/robi/error.svg" alt="Robi: error" title="error" width="96" height="96">
+</p>
 
 Para usarla, copia la carpeta entera a la de compañeros (ver [Dónde copiarlo](#dónde-copiarlo)) y elígela:
 
