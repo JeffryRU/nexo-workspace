@@ -237,7 +237,7 @@ crecer el contexto (pierdes la caché de prompts del CLI), y con el botón «Ren
 **Interfaz.** La ventana «Memoria» tiene el interruptor y la renovación automática, el costo del Observador y del Reflector, y la
 reflexión y las observaciones de la carpeta, cada una con su prioridad, el texto original de donde salió (mientras la sesión siga
 abierta) y un salto a su bloque. Una sesión que recibió memoria lo indica en su panel. Todo el texto de la memoria se muestra como
-texto plano: nada de lo que haya dentro se interpreta ni se ejecuta. `memory.search` y `memory.recall` por MCP llegan con F5.
+texto plano: nada de lo que haya dentro se interpreta ni se ejecuta. `memory.search` y `memory.recall` están disponibles por MCP (`memory_search`, `memory_recall`; ver «Servidor MCP»).
 
 ![Ventana de memoria con las observaciones y el costo](docs/capturas/f3-5-observaciones.png)
 
@@ -268,6 +268,57 @@ frescura, el origen del dato y un botón para refrescar. Se actualiza solo con l
 
 ![Detalle de los límites de uso](docs/capturas/f4-5-limites.png)
 
+## Servidor MCP
+
+`apps/mcp` es un servidor MCP por stdio (cliente más del daemon, igual que la CLI) para que Claude Code, Codex, Gemini o una mascota externa lean —y,
+si lo permites, manejen— tus espacios, terminales y agentes. El daemon de Nexo tiene que estar corriendo (abre Nexo o ejecuta `nexo status`).
+
+Por omisión es de **solo lectura**: espacios, pestañas y paneles, salida reciente de una terminal (sin secuencias de escape), agentes y sus
+bloques, `memory_search` / `memory_recall`, historial y límites. Las herramientas de escritura no existen salvo que lo actives en el entorno del
+servidor:
+
+| Variable                                                                                             | Efecto                                                                                                             |
+| ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `NEXO_MCP_WRITE=1`                                                                                   | Registra `terminal_write`, `agent_create`, `agent_send` y `agent_interrupt` (topes de tamaño y de frecuencia).     |
+| `NEXO_MCP_ALLOW_PERMISSIONS=1`                                                                       | Además, `agent_respond` (aprobar o rechazar un permiso pendiente; nunca `allow-always`). Exige `NEXO_MCP_WRITE=1`. |
+| `NEXO_MCP_MAX_WRITE_BYTES`, `NEXO_MCP_WRITE_RATE`, `NEXO_MCP_READ_RATE`, `NEXO_MCP_MAX_OUTPUT_BYTES` | Topes (ver [Arquitectura](docs/ARCHITECTURE.md#servidor-mcp-f51)).                                                 |
+
+Los estados se pueden suscribir como recursos: `nexo://attention`, `nexo://agents/<id>/status`, `nexo://limits`, `nexo://workspaces`.
+
+Cómo registrarlo (sustituye la ruta por la de tu copia del repositorio; Node 24 ejecuta el TypeScript directamente). Estos comandos y archivos son
+de cada cliente: Nexo no toca su configuración.
+
+```bash
+# Claude Code (solo lectura; añade -e NEXO_MCP_WRITE=1 para permitir escribir). Las opciones van antes del nombre.
+claude mcp add --scope user nexo -- node /ruta/a/nexo-workspace/apps/mcp/src/main.ts
+claude mcp add --scope user -e NEXO_MCP_WRITE=1 nexo -- node /ruta/a/nexo-workspace/apps/mcp/src/main.ts
+```
+
+```toml
+# Codex: ~/.codex/config.toml
+[mcp_servers.nexo]
+command = "node"
+args = ["/ruta/a/nexo-workspace/apps/mcp/src/main.ts"]
+# env = { NEXO_MCP_WRITE = "1" }   # opcional: permitir escribir
+```
+
+```json
+// Gemini CLI: ~/.gemini/settings.json (o .gemini/settings.json del proyecto)
+{
+  "mcpServers": {
+    "nexo": {
+      "command": "node",
+      "args": ["/ruta/a/nexo-workspace/apps/mcp/src/main.ts"],
+      "env": { "NEXO_MCP_WRITE": "1" }
+    }
+  }
+}
+```
+
+En Windows usa la ruta con barras normales (`C:/Users/tu-usuario/.../apps/mcp/src/main.ts`). Si el daemon usa un directorio de estado distinto, pasa
+también `NEXO_STATE_DIR` en el `env` del servidor. Las herramientas llegan al modelo con el prefijo del cliente (`mcp__nexo__terminal_read` en
+Claude Code). Detalle de herramientas, recursos y seguridad: [Arquitectura](docs/ARCHITECTURE.md#servidor-mcp-f51).
+
 ## Estructura
 
 ```
@@ -280,7 +331,7 @@ packages/client      SDK tipado del protocolo (esqueleto)
 apps/daemon          raíz de composición (esqueleto)
 apps/web             interfaz SolidJS + Vite (terminales y panel de agente)
 apps/cli            CLI `nexo`
-apps/mcp            cliente MCP (esqueleto)
+apps/mcp            servidor MCP por stdio (cliente más del daemon)
 ```
 
 ## Documentación

@@ -51,7 +51,7 @@ que Nexo lo vea, así que su columna «al compactar» se cubre con la renovació
 6. **Recuerdo bajo demanda:** el servidor MCP de Nexo expone `memory.search` y `memory.recall(rango)`.
    Todos estos CLIs hablan MCP, así que cualquier agente puede consultar las observaciones o el texto
    original detrás de una de ellas. Los métodos ya existen en el protocolo del daemon (F3.5.2) y los usan la
-   interfaz y `nexo memory`; **su exposición por MCP queda para F5**, cuando exista `apps/mcp`.
+   interfaz y `nexo memory`; su exposición por MCP llegó con la F5.1 (`memory_search` y `memory_recall` en `apps/mcp`).
 
 Implementado en F3.5.4: los ajustes (encender o apagar, renovación automática) se cambian en caliente con
 `memory.configure` y se guardan en el estado del daemon; la renovación también se pide a mano (`agent.renew`);

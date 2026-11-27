@@ -1048,7 +1048,7 @@ Definido en `packages/contracts/src/memory.ts` (`memoryMethods`) y sumado al reg
 
 Límites nuevos en `LIMITS`: `maxObservationBytes` (2 KiB), `maxReflectionBytes` (16 KiB), `maxObservationsPerProject` (2 000),
 `maxReflectionSources` (64), `maxMemorySessions` (256), `maxMemoryPage` (100), `maxMemoryQueryChars` (256), `maxRecallBlocks` (200).
-`memory.search` y `memory.recall` por MCP quedan para F5.
+`memory.search` y `memory.recall` por MCP: `memory_search` y `memory_recall` de `apps/mcp` (ver «Servidor MCP (F5.1)»).
 
 `memory.recall` devuelve el **texto original** (los bloques tal cual) de un rango de una sesión **abierta**: el documento vive en
 memoria del daemon mientras la sesión exista, así que tras cerrarla responde `NOT_FOUND` (F3.5.4 puede decidir si guarda el texto).
@@ -1274,8 +1274,7 @@ en un panel: cierra la ventana, revela el panel (`revealPane`) y deja el salto e
 desplazando su lista virtual al primer bloque del rango (`locateBlock`, el primero con `index >= from`, por si el documento se recortó).
 Las consultas (`['memory', ...]` de `@tanstack/solid-query`) se invalidan con cada `memory.updated`.
 
-**Qué queda fuera.** `memory.search` y `memory.recall` **por MCP** (ADR 0007, punto 6) quedan para F5, cuando exista `apps/mcp`; los métodos
-ya están en el protocolo y en `@nexo/client`/`nexo memory`, así que F5 solo tiene que exponerlos. Guardar el texto original de sesiones ya
+**Qué queda fuera.** Guardar el texto original de sesiones ya
 cerradas (hoy `memory.recall` responde `NOT_FOUND` tras cerrar la sesión) tampoco se hizo: el ADR no lo pide y duplicaría transcripciones en disco.
 
 **Pruebas.** Unitarias y adversariales de `memory.configure` y `agent.renew` (contratos con prototipos y números hostiles; `MemoryService`
@@ -1957,6 +1956,111 @@ pequeños y probados con `cargo test` (`apps/desktop/src-tauri/src`):
   sin `shell`/`fs` abiertos a la página. El WebView envía `Origin` `http://tauri.localhost` (o `https://`) en Windows y
   `tauri://localhost` en Linux, todos permitidos por el daemon.
 
+## Servidor MCP (F5.1)
+
+`apps/mcp` (`node apps/mcp/src/main.ts`, binario `nexo-mcp`) es un servidor MCP por **stdio** hecho con el SDK oficial
+(`@modelcontextprotocol/sdk`) y un cliente más del daemon (ADR 0003): habla el protocolo por `@nexo/client` y no guarda estado propio. Lo lanza
+el cliente MCP (Claude Code, Codex, Gemini...) como proceso hijo. **stdout es el canal MCP**; los diagnósticos van solo a stderr, pasan por un
+redactor de secretos y nunca incluyen argumentos de las herramientas ni el contenido de terminales y agentes.
+
+**Daemon.** Se descubre igual que en la CLI (`discoverDaemon`: `NEXO_STATE_DIR` o el directorio por plataforma, con `daemon.json` y `token`) y se
+conecta de forma perezosa en la primera llamada, con una sola conexión compartida y la reconexión del cliente (que redescubre puerto y token).
+No arranca el daemon: si no corre, las herramientas responden `DAEMON_UNAVAILABLE` con el motivo (no corre, registro viejo o ilegible) y,
+tras un fallo, no se vuelve a intentar durante 1 s. `nexo_status` nunca falla: dice si hay conexión.
+
+**Configuración** (entorno, validada con zod al arrancar; un valor inválido aborta con código 2 y un mensaje por stderr):
+
+| Variable                     | Por omisión | Qué hace                                                                                                         |
+| ---------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------- |
+| `NEXO_MCP_WRITE`             | `0`         | `1` o `true` registra las herramientas de escritura. Sin ella **no existen** (ni se listan ni se pueden llamar). |
+| `NEXO_MCP_ALLOW_PERMISSIONS` | `0`         | Con `NEXO_MCP_WRITE=1`, registra además `agent_respond`. Sin `NEXO_MCP_WRITE` es un error de configuración.      |
+| `NEXO_MCP_MAX_WRITE_BYTES`   | 8192        | Tope de bytes UTF-8 de `terminal_write` y de `agent_send` por llamada (1 a 65536).                               |
+| `NEXO_MCP_WRITE_RATE`        | 30          | Escrituras por minuto en total entre todas las herramientas de escritura (1 a 600).                              |
+| `NEXO_MCP_READ_RATE`         | 300         | Lecturas por minuto (herramientas y recursos) (1 a 6000).                                                        |
+| `NEXO_MCP_MAX_OUTPUT_BYTES`  | 32768       | Tope del texto que devuelve cada herramienta (1024 a 262144); lo que sobra se recorta con un aviso.              |
+
+El resto del entorno (`NEXO_STATE_DIR`...) es el del daemon y la CLI.
+
+### Herramientas
+
+Los nombres usan guion bajo (los clientes de modelos no admiten puntos): `memory_search` es `memory.search`. Cada una trae anotaciones MCP
+(`readOnlyHint`...) y un esquema de entrada zod; los argumentos que no cumplen el esquema se rechazan **antes** de llegar al daemon. Devuelven
+texto legible (acotado) y, cuando aporta, `structuredContent` (se omite si pasara del doble del tope). Los errores del daemon se traducen a un
+resultado `isError` con su código (`NOT_FOUND`, `CONFLICT`...) y una pista; nunca llevan pilas ni rutas internas.
+
+| Herramienta       | Daemon            | Qué hace                                                                                                                                                                                |
+| ----------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `nexo_status`     | `daemon.info`     | Si el daemon responde, su versión y qué herramientas de escritura están permitidas.                                                                                                     |
+| `workspaces_list` | `workspace.list`  | Espacios, pestañas y paneles con su atención y los ids de terminal y de sesión de cada panel.                                                                                           |
+| `terminal_read`   | `terminal.read`   | Final de la salida de una terminal **sin secuencias de escape ni controles** (ANSI/OSC/DCS, bidireccionales, NUL; `\r` resuelto), acotada por líneas (100) y bytes (8192, hasta 65536). |
+| `agents_list`     | `agent.list`      | Sesiones de agente con estado, turno y bloques.                                                                                                                                         |
+| `agent_providers` | `agent.providers` | Proveedores y su disponibilidad.                                                                                                                                                        |
+| `agent_blocks`    | `agent.snapshot`  | Bloques de una sesión (por omisión los últimos 20, hasta 50). Un bloque por tipo, con texto limpio y recortado a 4 KiB.                                                                 |
+| `memory_search`   | `memory.search`   | Observaciones de la memoria de un proyecto (ADR 0007, punto 6).                                                                                                                         |
+| `memory_recall`   | `memory.recall`   | Texto original de un rango de bloques citado por una observación (hasta 50).                                                                                                            |
+| `history_list`    | `history.list`    | Sesiones anteriores de los proveedores por proyecto, con cursor.                                                                                                                        |
+| `history_read`    | `history.read`    | Transcripción de una sesión anterior como bloques, con cursor.                                                                                                                          |
+| `limits_status`   | `limits.status`   | Porcentaje usado y reinicio de las ventanas de cada proveedor; `refresh` consulta a los que se pueden consultar.                                                                        |
+
+**Lo que no se expone nunca**: lectura de archivos (`fs.*`: no hay herramienta que lea ni liste rutas; los `fs-sandbox` siguen siendo el único
+camino), credenciales o datos de la cuenta de los proveedores (el daemon ya los descarta en el borde; el MCP no añade nada), abrir o matar
+terminales, cerrar espacios, pestañas o paneles, y apagar el daemon. En los bloques, la **salida de las acciones** (lo que el agente leyó o
+ejecutó) se omite salvo `includeActionOutput: true` (y aun así a 2 KiB por bloque) y los diffs se omiten siempre: lo que un agente leyó puede
+contener secretos y este canal lo lee otro modelo. El contenido de terminales, agentes y memoria llega como **datos no confiables**: las
+descripciones de las herramientas lo recuerdan, y el texto se limpia de secuencias de escape y de caracteres bidireccionales.
+
+**Escritura (solo con `NEXO_MCP_WRITE=1`).** Cuatro herramientas, todas con el tope de frecuencia (`NEXO_MCP_WRITE_RATE`, ventana deslizante de 60 s
+compartida) y, las que llevan texto, con el tope de bytes (`NEXO_MCP_MAX_WRITE_BYTES`, sin NUL):
+
+- `terminal_write { terminalId, data }` → `terminal.write`. Un `\r` **ejecuta** lo escrito: es lo más sensible y por eso va tras el permiso.
+- `agent_create { workspaceId, provider, title?, model?, effort?, permissionMode? }`: abre una pestaña nueva con un panel de agente y una sesión
+  (igual que `nexo agent new`) **en la carpeta de un espacio que ya existe** (no admite una ruta arbitraria). `permissionMode` solo admite `ask` (por
+  omisión), `accept-edits` y `plan`; `bypass` no se ofrece. Si algo falla, cierra la pestaña que abrió.
+- `agent_send { sessionId, text }` → `agent.send` (empieza un turno).
+- `agent_interrupt { sessionId }` → `agent.interrupt`.
+
+Con `NEXO_MCP_ALLOW_PERMISSIONS=1` (además de `NEXO_MCP_WRITE=1`) aparece `agent_respond { sessionId, index, optionId }`: lee el bloque `index`,
+exige que sea un permiso **pendiente**, que `optionId` sea una de sus opciones y que no sea `allow-always`; entonces llama a `agent.respond`. Las
+respuestas a preguntas (`question`) no se ofrecen. Un agente que tiene este MCP podría aprobar los permisos de **otra** sesión, por eso es un
+interruptor aparte y apagado.
+
+### Recursos y suscripciones
+
+Los estados se publican como recursos MCP (`application/json`) y se pueden suscribir (`resources/subscribe`). Cada lectura va al daemon (no hay
+copia local que se quede vieja); el aviso (`notifications/resources/updated`) sale de los eventos del daemon: el MCP se suscribe solo a
+`pane.attention`, `agent.status`, `agent.session`, `limits.updated`, `layout.changed` y `workspace.changed` (nunca a `terminal.output`), traduce cada
+uno a las URIs que pudo cambiar y **junta los avisos 200 ms**, de modo que una avalancha de eventos son pocos avisos (uno por URI y plazo) y solo de
+las URIs suscritas (hasta 64). Tras una reconexión o un `client.resync` se avisa de todo lo suscrito.
+
+| URI                         | Contenido                                                                                                                                                                     | Cambia con                                                         |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `nexo://attention`          | `{ state, counts, panes[] }`: estado agregado (`needs-input` > `error` > `working` > `done` > `idle`) y los paneles que no están en reposo (hasta 200).                       | `pane.attention`, `agent.*`, `layout.changed`, `workspace.changed` |
+| `nexo://workspaces`         | El árbol de espacios, pestañas y paneles.                                                                                                                                     | `pane.attention`, `layout.changed`, `workspace.changed`            |
+| `nexo://agents`             | Estado de todas las sesiones.                                                                                                                                                 | `agent.status`, `agent.session`                                    |
+| `nexo://agents/<id>/status` | `{ sessionId, provider, status, turn, blockCount, permissionMode, paneId, updatedAt, reason? }`; `reason` es el motivo de `error` o `needs-input`. `done` es el fin de turno. | `agent.status`, `agent.session` de esa sesión                      |
+| `nexo://limits`             | `{ worstUsedPercent, providers[] }` con el último dato conocido (no fuerza consultas).                                                                                        | `limits.updated`                                                   |
+
+La lista de recursos incluye una entrada `nexo://agents/<id>/status` por sesión abierta; cuando aparece o desaparece una sesión se envía
+`notifications/resources/list_changed`. Un id con forma rara en la URI (`..`, `/`, espacios, más de 64 caracteres) se rechaza sin llamar al daemon.
+Si el daemon no corre al suscribirse, la suscripción se acepta y el MCP lo reintenta en segundo plano (1 s hasta 15 s) mientras haya
+suscripciones; al conectar avisa de todo lo suscrito.
+
+**Para una mascota externa (ADR 0006, F5.2/F5.3).** Basta suscribirse a `nexo://attention` (qué cara poner: `needs-input` espera al usuario,
+`working` trabaja, `done` terminó, `error` falló, `idle` reposo) y, si quiere detalle, a `nexo://agents/<id>/status`; al llegar un aviso vuelve a
+leer el recurso. No necesita escritura. El mismo contenido se puede obtener por WebSocket con `@nexo/client`.
+
+### Pruebas
+
+Unitarias y de propiedades (fast-check) de la limpieza de texto, la configuración, el limitador, las vistas y el traductor de eventos a URIs;
+servidor MCP real conectado en memoria a un `Client` del SDK con el daemon falso detrás (herramientas, recursos, suscripciones, permisos de
+escritura, topes); adversariales (ids y argumentos hostiles, tamaños enormes, intentos de escribir sin permiso, bombas de escape, errores del
+daemon con tokens, daemon caído y recuperado, 20 000 eventos seguidos, `main.ts` como proceso con basura por stdin) e integración con **el
+servidor como proceso hijo por stdio y un `Client` real** contra el **daemon real** con proveedores falsos (terminal, agente, permiso,
+interrupción, recursos y avisos, daemon que cae y vuelve).
+
+**Qué queda fuera.** Arrancar el daemon desde el MCP (la CLI lo hace; aquí se pide abrir Nexo), transporte HTTP, responder preguntas de los
+agentes, `prompts` MCP, y un recurso para el contenido de las terminales (la salida se lee con `terminal_read`).
+
 ## Compañeros (mascotas)
 
 Nexo funciona al 100 % sin mascota. Una mascota es un **paquete intercambiable** (ver ADR 0006):
@@ -1982,6 +2086,8 @@ Nexo funciona al 100 % sin mascota. Una mascota es un **paquete intercambiable**
 - Los logs pasan por un redactor de secretos (tokens, claves de API).
 - Límites de uso (F4.4): solo ventanas (porcentaje y reinicio); los datos de la cuenta que acompañan a las respuestas de los proveedores se descartan en el
   borde con esquemas zod que no los declaran; ver «Límites de uso de los proveedores (F4.4)».
+- Servidor MCP (F5.1): solo lectura salvo `NEXO_MCP_WRITE=1`; ninguna herramienta lee archivos ni expone credenciales; topes de tamaño y de
+  frecuencia; ver «Servidor MCP (F5.1)».
 - Visor (F4.2): sin HTML crudo ni red remota en el Markdown, SVG solo como `<img>`, PDF sin scripts ni anotaciones, CSP con `blob:` solo para imágenes;
   ver «Visor lateral (F4.2)».
 
