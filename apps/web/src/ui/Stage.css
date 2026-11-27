@@ -15,6 +15,6 @@
   min-height: 0;
 }
 .stage-empty {
-  margin: 24px;
+  margin: var(--space-6);
   color: var(--fg-muted);
 }

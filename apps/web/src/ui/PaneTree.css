@@ -16,6 +16,19 @@
   min-width: 0;
   min-height: 0;
 }
+/* Tamaño mínimo de un panel: si no caben, el contenedor se desplaza en vez de aplastarlos. */
+.split.row > .split-child {
+  min-width: var(--pane-min);
+}
+.split.column > .split-child {
+  min-height: calc(var(--pane-header-h) * 2);
+}
+.split.row {
+  overflow-x: auto;
+}
+.split.column {
+  overflow-y: auto;
+}
 .split-child > * {
   flex: 1;
   min-width: 0;
@@ -30,12 +43,12 @@
 }
 .divider.vertical {
   width: 1px;
-  margin: 0 2px;
+  margin: 0 var(--space-1);
   cursor: col-resize;
 }
 .divider.horizontal {
   height: 1px;
-  margin: 2px 0;
+  margin: var(--space-1) 0;
   cursor: row-resize;
 }
 /* Zona de agarre más ancha que la línea visible. */
