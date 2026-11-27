@@ -9,6 +9,7 @@ import {
   HistoryProject,
   HistorySession,
   historyMethods,
+  limitsMethods,
   memoryMethods,
   PaneKind,
 } from '@nexo/contracts'
@@ -196,6 +197,10 @@ export const FsCatOutput = z.strictObject({
   truncated: z.boolean(),
   data: z.string(),
 })
+
+// ---- límites de uso (F4.4): la salida es la de `limits.status` ----
+
+export const LimitsOutput = limitsMethods['limits.status'].result
 
 // ---- historial (F4.3): la salida es la de los métodos `history.*` ----
 

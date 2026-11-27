@@ -89,4 +89,12 @@ export const LIMITS = {
   /** Un bloque cuyo JSON pasa de esto se sustituye por un aviso (con escapes cabe en un mensaje). */
   maxHistoryBlockJsonBytes: 600 * 1024,
   maxHistoryCursorLength: 1024,
+  // Límites de uso (F4.4, `limits.*`).
+  /** Ventanas por proveedor en `limits.status`. */
+  maxUsageWindows: 16,
+  maxUsageLabelLength: 64,
+  /** Duración máxima de una ventana (un año). */
+  maxUsageWindowMinutes: 525_600,
+  /** Un dato de uso más viejo que esto se marca `fresh: false`. */
+  usageStaleAfterMs: 15 * 60 * 1000,
 } as const

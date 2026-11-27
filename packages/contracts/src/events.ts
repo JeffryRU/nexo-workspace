@@ -12,6 +12,7 @@ import {
 } from './domain.ts'
 import { LIMITS } from './limits.ts'
 import { DisplayText, lineText } from './text.ts'
+import { ProviderLimits } from './usage-limits.ts'
 
 /** Pestaña resumida (sin distribución ni paneles) para `workspace.changed`. */
 export const TabSummary = z.strictObject({ id: TabId, title: DisplayText })
@@ -98,6 +99,8 @@ export const events = {
     generation: z.int().nonnegative(),
     updatedAt: z.int().nonnegative(),
   }),
+  /** Los límites de uso de un proveedor cambiaron (F4.4): el cliente sustituye lo que tenía de ese proveedor. */
+  'limits.updated': ProviderLimits,
 } as const
 
 export type EventName = keyof typeof events

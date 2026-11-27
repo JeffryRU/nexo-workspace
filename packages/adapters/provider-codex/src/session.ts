@@ -87,6 +87,8 @@ export class CodexSession implements AgentProviderSession {
   #active: Turn | undefined
   #closing: Promise<void> | undefined
 
+  readonly #onAccount: ((method: string, params: unknown) => boolean) | undefined
+
   constructor(options: {
     client: CodexClient
     threadId: string
@@ -95,7 +97,10 @@ export class CodexSession implements AgentProviderSession {
     permissionMode: PermissionMode
     limits: SessionLimits
     log: (entry: LogEntry) => void
+    /** Notificaciones de la cuenta (límites), que no son de ningún turno; devuelve `true` si las trató. */
+    onAccountNotification?: (method: string, params: unknown) => boolean
   }) {
+    this.#onAccount = options.onAccountNotification
     this.providerSessionId = options.threadId
     this.#client = options.client
     this.#model = options.model
@@ -229,6 +234,7 @@ export class CodexSession implements AgentProviderSession {
 
   #onNotification(n: IncomingNotification): void {
     if (this.#closed) return
+    if (this.#onAccount?.(n.method, n.params) === true) return
     const ids = idsOf(n.params)
     if (ids.threadId !== undefined && ids.threadId !== this.providerSessionId) return
     if (n.method === 'serverRequest/resolved') {

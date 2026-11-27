@@ -17,6 +17,7 @@ import {
 import { RpcError } from '@nexo/jsonrpc'
 import { CodexClient, type LogEntry } from './client.ts'
 import { CodexHistory } from './history.ts'
+import { CodexUsageLimits } from './limits.ts'
 import { CodexMemoryInjection } from './memory-injection.ts'
 import { type CodexLauncher, spawnCodexProcess } from './process.ts'
 import { AccountResult, CODEX_PROTOCOL_VERSION, ModelListResult, ThreadResult } from './protocol.ts'
@@ -99,6 +100,7 @@ class CodexProvider implements AgentProviderPort {
   readonly displayName = 'Codex'
   readonly memoryInjection = new CodexMemoryInjection()
   readonly history: CodexHistory
+  readonly usageLimits: CodexUsageLimits
   readonly #o: CodexProviderOptions
   readonly #log: (entry: LogEntry) => void
   readonly #redactor: ReturnType<typeof createSecretRedactor>
@@ -113,14 +115,21 @@ class CodexProvider implements AgentProviderPort {
     this.#redactor = createSecretRedactor(options.env)
     this.#limits = { ...DEFAULT_LIMITS, ...options.limits }
     this.#launcher = options.launcher ?? spawnCodexProcess
+    const command = () =>
+      resolveCodexCommand({
+        executable: options.executable,
+        env: options.env,
+        ...(options.platform === undefined ? {} : { platform: options.platform }),
+        ...(options.resolveFs === undefined ? {} : { fs: options.resolveFs }),
+      })
+    this.usageLimits = new CodexUsageLimits({
+      command,
+      client: (cmd, cwd) => this.#client(cmd, cwd),
+      requestTimeoutMs: this.#limits.requestTimeoutMs,
+      ...(options.now === undefined ? {} : { now: options.now }),
+    })
     this.history = new CodexHistory({
-      command: () =>
-        resolveCodexCommand({
-          executable: options.executable,
-          env: options.env,
-          ...(options.platform === undefined ? {} : { platform: options.platform }),
-          ...(options.resolveFs === undefined ? {} : { fs: options.resolveFs }),
-        }),
+      command,
       client: (command, cwd) => this.#client(command, cwd),
       requestTimeoutMs: this.#limits.requestTimeoutMs,
       redact: (text) => this.#redactor.redact(text),
@@ -202,6 +211,7 @@ class CodexProvider implements AgentProviderPort {
         permissionMode: mode,
         limits: this.#limits,
         log: this.#log,
+        onAccountNotification: (method, params) => this.usageLimits.ingest(method, params),
       })
     } catch (error) {
       const tail = client.stderrTail()

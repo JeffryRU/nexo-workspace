@@ -12,6 +12,7 @@ import type { FileHandlers } from './file-service.ts'
 import type { HistoryHandlers } from './history-service.ts'
 import type { SnapshotService } from './snapshot-service.ts'
 import type { TerminalService } from './terminal-service.ts'
+import type { UsageLimitsHandlers } from './usage-limits-service.ts'
 import type { WorkspaceService } from './workspace-service.ts'
 
 /** Los métodos `agent.*`; los implementa el servicio de agentes (F2.2). */
@@ -42,6 +43,8 @@ export type DispatcherServices = {
   files?: FileHandlers
   /** Sin él, `history.*` responde `PROVIDER_UNAVAILABLE`. */
   history?: HistoryHandlers
+  /** Sin él, `limits.*` responde `PROVIDER_UNAVAILABLE`. */
+  limits?: UsageLimitsHandlers
   /** Pide el apagado del daemon; debe volver enseguida (el apagado ocurre después de responder). */
   shutdown: () => void
 }
@@ -84,6 +87,12 @@ export function createHandlers(s: DispatcherServices): Handlers {
       throw new DomainError('PROVIDER_UNAVAILABLE', 'el historial no está disponible')
     }
     return s.history
+  }
+  const limits = (): UsageLimitsHandlers => {
+    if (s.limits === undefined) {
+      throw new DomainError('PROVIDER_UNAVAILABLE', 'los límites de uso no están disponibles')
+    }
+    return s.limits
   }
   return {
     // La autenticación la resuelve quien despacha (daemon) antes de llegar aquí; ya autenticado es un no-op.
@@ -133,6 +142,7 @@ export function createHandlers(s: DispatcherServices): Handlers {
     'fs.read': (p) => files()['fs.read'](p),
     'history.list': (p) => history()['history.list'](p),
     'history.read': (p) => history()['history.read'](p),
+    'limits.status': (p) => limits()['limits.status'](p),
   }
 }
 

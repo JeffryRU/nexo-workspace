@@ -13,6 +13,7 @@ import {
   checkPreparedMemory,
 } from '@nexo/core'
 import { ClaudeHistory } from './history.ts'
+import { ClaudeUsageLimits } from './limits.ts'
 import { ClaudeMemoryInjection } from './memory-injection.ts'
 import { createSecretRedactor, type SecretRedactor } from './redact.ts'
 import { createSdkTransport } from './sdk-transport.ts'
@@ -78,6 +79,7 @@ class ClaudeProvider implements AgentProviderPort {
   readonly displayName = 'Claude Code'
   readonly memoryInjection = new ClaudeMemoryInjection()
   readonly history: ClaudeHistory
+  readonly usageLimits: ClaudeUsageLimits
   readonly warmUp?: (options: { cwd: string }) => Promise<void>
   readonly #transport: ClaudeTransport
   readonly #options: ClaudeProviderOptions
@@ -97,6 +99,7 @@ class ClaudeProvider implements AgentProviderPort {
           ? {}
           : { pathToClaudeCodeExecutable: options.pathToClaudeCodeExecutable }),
       })
+    this.usageLimits = new ClaudeUsageLimits(options.now === undefined ? {} : { now: options.now })
     this.history = new ClaudeHistory({
       transport: this.#transport,
       scrub: this.#redactor.scrub,
@@ -179,6 +182,7 @@ class ClaudeProvider implements AgentProviderPort {
       transport,
       translator,
       redact,
+      onRateLimit: (message) => this.usageLimits.ingest(message),
       ...(this.#options.log === undefined ? {} : { log: this.#options.log }),
       interruptTimeoutMs: this.#options.interruptTimeoutMs ?? 3000,
     })

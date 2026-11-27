@@ -81,9 +81,17 @@ export type {
   Unsubscribe,
 } from './ports/pty.ts'
 export { PtySpawnError } from './ports/pty.ts'
+export type {
+  UsageLimitsErrorCode,
+  UsageLimitsPort,
+  UsageReading,
+  UsageWindowInfo,
+} from './ports/usage-limits.ts'
+export { UsageLimitsError } from './ports/usage-limits.ts'
 export * from './provider-summarizer.ts'
 export * from './ring-buffer.ts'
 export * from './snapshot-service.ts'
 export * from './stream-text.ts'
 export * from './terminal-service.ts'
+export * from './usage-limits-service.ts'
 export * from './workspace-service.ts'

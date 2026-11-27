@@ -2,6 +2,7 @@ import { agentCommand } from './commands/agent.ts'
 import { daemonCommand } from './commands/daemon.ts'
 import { fsCommand } from './commands/fs.ts'
 import { historyCommand } from './commands/history.ts'
+import { limitsCommand } from './commands/limits.ts'
 import { lsCommand } from './commands/ls.ts'
 import { memoryCommand } from './commands/memory.ts'
 import { newCommand } from './commands/new.ts'
@@ -33,6 +34,7 @@ const HANDLERS: Record<CommandName, Handler> = {
   memory: memoryCommand,
   fs: fsCommand,
   history: historyCommand,
+  limits: limitsCommand,
   open: openCommand,
   daemon: daemonCommand,
 }
