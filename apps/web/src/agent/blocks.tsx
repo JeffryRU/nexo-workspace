@@ -11,6 +11,7 @@ import {
   useContext,
 } from 'solid-js'
 import { es, format } from '../i18n/es.ts'
+import { Icon, type IconName } from '../ui/Icon.tsx'
 import { PathLink } from '../viewer/PathLink.tsx'
 import { ansiClass, parseAnsi, tailLines } from './ansi.ts'
 import { diffStats, parseDiff } from './diff.ts'
@@ -124,9 +125,7 @@ function Fold(props: { id: string; head: JSX.Element; children: JSX.Element; cla
         aria-controls={bodyId}
         onClick={() => model.toggle(props.id)}
       >
-        <span class="fold-chevron" aria-hidden="true">
-          {open() ? '▾' : '▸'}
-        </span>
+        <Icon name="chevron-right" size="sm" class="fold-chevron" />
         {props.head}
       </button>
       <Show when={open()}>
@@ -157,7 +156,12 @@ function ReasoningView(props: { block: Of<'reasoning'> }) {
   )
 }
 
-const STATUS_ICON = { pending: '○', running: '◐', ok: '✓', error: '✕' } as const
+const STATUS_ICON = {
+  pending: 'circle',
+  running: 'circle-half',
+  ok: 'check',
+  error: 'x',
+} as const satisfies Record<string, IconName>
 
 function ActionView(props: { block: Of<'action'> }) {
   const b = () => props.block
@@ -182,7 +186,7 @@ function ActionView(props: { block: Of<'action'> }) {
             aria-label={es.agent.actionStatus[b().status]}
             title={es.agent.actionStatus[b().status]}
           >
-            {STATUS_ICON[b().status]}
+            <Icon name={STATUS_ICON[b().status]} size="sm" />
           </span>
           <span class="kind">{es.agent.actionKind[b().kind]}</span>
           <span class="fold-title ellipsis" title={b().title}>
