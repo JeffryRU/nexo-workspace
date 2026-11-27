@@ -13,11 +13,15 @@ const LOG_NAME = 'daemon.log'
 const MAX_LOG_BYTES = 2 * 1024 * 1024
 const DEFAULT_START_TIMEOUT_MS = 10_000
 
-/** `NEXO_DAEMON_ENTRY` o `apps/daemon/src/main.ts` relativo a este paquete. */
+/**
+ * `NEXO_DAEMON_ENTRY`, o el daemon junto a este módulo: `apps/daemon/src/main.ts` en el repositorio y
+ * `daemon/daemon.mjs` (hermano de `cli/`) en el paquete.
+ */
 export function resolveDaemonEntry(env: Env, baseUrl: string = import.meta.url): string {
   const override = env.NEXO_DAEMON_ENTRY
   if (override !== undefined && override !== '') return override
-  return fileURLToPath(new URL('../../daemon/src/main.ts', baseUrl))
+  const relative = baseUrl.endsWith('.ts') ? '../../daemon/src/main.ts' : '../daemon/daemon.mjs'
+  return fileURLToPath(new URL(relative, baseUrl))
 }
 
 export function startTimeoutMs(env: Env): number {

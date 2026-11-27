@@ -88,6 +88,12 @@ describe('launcher', () => {
     ).toMatch(/main\.ts$/)
   })
 
+  it('resolveDaemonEntry en el paquete apunta a daemon/daemon.mjs, hermano de cli/, también con espacios y no ASCII', () => {
+    const base = pathToFileURL(resolve('/opt/Nexo Árbol/cli/nexo.mjs')).href
+    const found = resolveDaemonEntry({}, base).replaceAll('\\', '/')
+    expect(found).toMatch(/\/opt\/Nexo Árbol\/daemon\/daemon\.mjs$/)
+  })
+
   it('startTimeoutMs valida NEXO_START_TIMEOUT_MS', () => {
     expect(startTimeoutMs({})).toBe(10_000)
     expect(startTimeoutMs({ NEXO_START_TIMEOUT_MS: '500' })).toBe(500)

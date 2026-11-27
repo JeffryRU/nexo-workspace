@@ -1,6 +1,5 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { createFsCompanionPort } from '@nexo/adapter-companion-fs'
 import { FsSandbox } from '@nexo/adapter-fs-sandbox'
 import {
@@ -51,6 +50,7 @@ import { SystemClock } from './adapters/system-clock.ts'
 import { UuidIds } from './adapters/uuid-ids.ts'
 import { watchAgentPanes } from './agent-warmup.ts'
 import { generateToken } from './auth.ts'
+import { defaultWebRoot } from './bundle.ts'
 import { fileCompanionSelection } from './companion-settings.ts'
 import type { AgentProviderName, MemorySummarizerSpec } from './config.ts'
 import { loadMemorySettings, saveMemorySettings } from './memory-settings.ts'
@@ -316,10 +316,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   const identity = { version: DAEMON_VERSION, pid: process.pid, startedAt }
 
   const webRoot =
-    options.webRoot === null
-      ? undefined
-      : (options.webRoot ??
-        fileURLToPath(new URL(join('..', '..', 'web', 'dist'), import.meta.url)))
+    options.webRoot === null ? undefined : (options.webRoot ?? defaultWebRoot(import.meta.url))
 
   async function createMemory(): Promise<MemoryService> {
     const m = options.memory ?? {}
