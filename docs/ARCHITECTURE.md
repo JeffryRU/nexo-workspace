@@ -1943,7 +1943,8 @@ pequeños y probados con `cargo test` (`apps/desktop/src-tauri/src`):
   comprueba `GET /health` con `X-Nexo-Daemon: 1` mediante un cliente HTTP/1.1 mínimo sobre `TcpStream` (sin crates).
 - `launcher`: si no hay daemon vivo lo lanza **desacoplado** (Windows `CREATE_NO_WINDOW | DETACHED_PROCESS`; Unix
   `setsid`) con `node apps/daemon/src/main.ts` (`NEXO_NODE`, `NEXO_DAEMON_ENTRY`, `NEXO_START_TIMEOUT_MS`), salida a
-  `daemon.log`, y espera a `/health`. En debug pone `NEXO_DEV=1` para aceptar el Origin de Vite. Node como sidecar: F6.
+  `daemon.log`, y espera a `/health`. En debug pone `NEXO_DEV=1` para aceptar el Origin de Vite. En release usa el
+  Node y el daemon **empaquetados** (F6.1, «Empaquetado»); en debug, el `node` del PATH y `apps/daemon/src/main.ts`.
 - `navigation`: solo la interfaz propia navega; `http(s)` externo va al navegador del sistema; el resto se bloquea.
 - `settings`: `NEXO_SHORTCUT` (atajo global, por omisión `Ctrl+Alt+Space`; `none` lo desactiva) y
   `NEXO_CLOSE_TO_TRAY=0` (cerrar la ventana la cierra de verdad).
@@ -1955,6 +1956,49 @@ pequeños y probados con `cargo test` (`apps/desktop/src-tauri/src`):
 - Seguridad: CSP con `connect-src ws://127.0.0.1:*` y nada externo, capability sin más permisos que esos tres y los comandos propios,
   sin `shell`/`fs` abiertos a la página. El WebView envía `Origin` `http://tauri.localhost` (o `https://`) en Windows y
   `tauri://localhost` en Linux, todos permitidos por el daemon.
+
+## Empaquetado (F6.1)
+
+Decisiones en [ADR 0008](adr/0008-empaquetado-del-daemon.md). `node tools/package/build-bundle.mjs [--out <carpeta>] [--no-web] [--with-claude]`
+(antes: `pnpm --filter @nexo/web build`) deja en `apps/desktop/src-tauri/resources/nexo` (ignorada por git) un paquete por plataforma, sin repositorio ni Node
+del sistema:
+
+```
+nexo/
+  node/node[.exe]                   Node oficial 24 (descargado al construir, SHA-256 verificado)
+  daemon/daemon.mjs  pty-host.mjs   bundles esbuild; el supervisor hace fork de pty-host.mjs
+  daemon/node_modules/node-pty/     lib + binario nativo de la plataforma (ConPTY: prebuilds y third_party)
+  cli/nexo.mjs   mcp/nexo-mcp.mjs   bundles de la CLI y del MCP
+  web/                              apps/web/dist (la sirve el daemon a navegadores)
+  bin/nexo[.cmd]  nexo-mcp[.cmd]    lanzadores: usan ../node/node[.exe]; `nexo` sigue enlaces simbólicos
+  vendor/claude[.exe]               solo con --with-claude (~380 MB)
+  manifest.json                     SHA-256 de cada archivo + el archivo oficial de Node del que salió
+```
+
+- **Rutas relativas al módulo.** `isBundled(import.meta.url)` (`apps/daemon/src/bundle.ts`) distingue el repositorio (`.ts`) del paquete (`.mjs`): la web es
+  `../web` en vez de `../../web/dist`, el host de PTY es `pty-host.mjs` junto al daemon (`hostEntryFor`, en `pty-host`) y la CLI arranca `../daemon/daemon.mjs`.
+  `NEXO_DAEMON_ENTRY` sigue mandando. El daemon que arranca la CLI (o el escritorio) usa `process.execPath` = el Node empaquetado.
+- **Claude Code.** El SDK entra en el bundle, pero su ejecutable nativo (~380 MB) no: `NEXO_CLAUDE_EXECUTABLE`, o `vendor/claude` si el paquete se construyó con
+  `--with-claude`. Antes se buscaba junto al SDK en `node_modules` (`createRequire`), ruta que en un bundle no existe. Codex, ACP/Gemini, `agy` y Ollama no cambian
+  (siguen buscándose en el PATH o por sus variables).
+- **Node verificado.** `tools/package/node-hashes.json` fija el SHA-256 de los archivos oficiales (linux/win, x64/arm64) de la versión elegida; `provisionNode`
+  rechaza una descarga cuyo hash no coincida (sin dejar nada instalado ni en caché), cruza con `SHASUMS256.txt` de nodejs.org y re-verifica la caché. Para subir
+  de versión: `node tools/package/node-runtime.mjs --print-hashes <x.y.z>` y pegar el resultado. El zip de Windows se lee con un lector propio (sin herramientas
+  externas, con CRC); el `tar.xz` de Linux, con `tar`.
+- **`launcher.rs`.** `resolve_runtime(node_override, entry_override, dev, resource_dir, current_exe)`: los overrides (`NEXO_NODE`, `NEXO_DAEMON_ENTRY`) mandan;
+  en debug `node` del PATH y `main.ts` del repositorio; en release `<recursos>/nexo/node/node[.exe]` y `<recursos>/nexo/daemon/daemon.mjs` (la carpeta de recursos viene de
+  Tauri en `setup`; si no, la del ejecutable; se quita el prefijo `\\?\` de Windows). Si falta algo, `spawn_daemon` falla con «la instalación está incompleta: falta el
+  Node/daemon empaquetado en …; reinstala Nexo Workspace» (o, con override, con el nombre de la variable). Un daemon corrupto lo ve el usuario como tiempo agotado con la
+  indicación de `daemon.log`.
+- **Tauri.** `apps/desktop/src-tauri/tauri.bundle.conf.json` declara `bundle.resources: { "resources/nexo/": "nexo/" }` y se mezcla con
+  `tauri build --config src-tauri/tauri.bundle.conf.json` (F6.2 activa los instaladores). No se usa `externalBin` a propósito (acabaría en `/usr/bin/node` en el `.deb`).
+- **Smoke test** (`tools/package/smoke.mjs`, job `package` del CI en Ubuntu y Windows): copia el paquete a una ruta con espacios y no ASCII, lo verifica contra su
+  manifiesto y, solo con `bin/nexo[.cmd]`: `--version`; abre una terminal real que ejecuta el Node empaquetado (en Windows, vía pty host; en Linux también con
+  `--pty-mode host`); `GET /health` con el puerto y token de `daemon.json`; abre un agente `fake` y espera su eco; `daemon stop` y comprueba que el proceso muere;
+  por último comprueba que un `daemon.mjs` modificado hace fallar la verificación. Ante un fallo imprime `daemon.log` y mata al daemon.
+- **Pruebas.** `tools/test/package*.test.ts` (hashes, zip hostil, descarga con hash distinto, manifiesto corrupto/ausente/con rutas hostiles, lanzadores),
+  `bundle.test.ts`, `entry.test.ts`, el caso de rutas del paquete en `support.test.ts` y, en Rust, `launcher::bundled` (release, dev, overrides, recursos ausentes,
+  directorios en vez de archivos, rutas con espacios y no ASCII, `\\?\`, arranque real desde un paquete simulado en Unix y coherencia con `tauri.bundle.conf.json`).
 
 ## Servidor MCP (F5.1)
 

@@ -140,4 +140,8 @@ Antigravity y de Ollama, una consulta propia de los límites de Claude (solo inf
 
 ## F6 — Empaquetado
 
-- Instaladores: Windows (NSIS/MSI) y Linux (AppImage, .deb). Node empaquetado como sidecar.
+- **F6.1 Daemon empaquetado y Node como sidecar** (#78, hecho): `tools/package` construye por plataforma un paquete con el daemon, el pty host, la CLI y el MCP
+  como bundles esbuild, `node-pty` aparte con su binario nativo, la web, los lanzadores `nexo`/`nexo-mcp` y el Node oficial (SHA-256 fijado en el repositorio y
+  cruzado con `SHASUMS256.txt`, solo al construir); `launcher.rs` usa el paquete en release y conserva el flujo de desarrollo; smoke test en Ubuntu y Windows
+  (/health, terminal, agente falso, parada) desde una ruta con espacios y no ASCII. Ver «Empaquetado (F6.1)» y el ADR 0008.
+- **F6.2 Instaladores** (pendiente): Windows (NSIS/MSI) y Linux (AppImage, .deb) sobre ese paquete, icono, workflow de release y docs de instalación.
