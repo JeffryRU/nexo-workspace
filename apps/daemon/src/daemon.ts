@@ -1,6 +1,7 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createFsCompanionPort } from '@nexo/adapter-companion-fs'
 import { FsSandbox } from '@nexo/adapter-fs-sandbox'
 import {
   type AcpAgentConfig,
@@ -19,6 +20,8 @@ import {
   type AgentProviderPort,
   AgentService,
   type AgentServiceConfig,
+  CompanionService,
+  type CompanionTiming,
   createDispatcher,
   type EventBusPort,
   FileService,
@@ -48,6 +51,7 @@ import { SystemClock } from './adapters/system-clock.ts'
 import { UuidIds } from './adapters/uuid-ids.ts'
 import { watchAgentPanes } from './agent-warmup.ts'
 import { generateToken } from './auth.ts'
+import { fileCompanionSelection } from './companion-settings.ts'
 import type { AgentProviderName, MemorySummarizerSpec } from './config.ts'
 import { loadMemorySettings, saveMemorySettings } from './memory-settings.ts'
 import { probeDaemon } from './probe.ts'
@@ -129,6 +133,10 @@ export type DaemonOptions = {
   history?: HistoryServiceConfig
   /** Plazos, caché y contención de los límites de uso (F4.4); por omisión los de `DEFAULT_USAGE_LIMITS_CONFIG`. */
   limits?: UsageLimitsConfig
+  /** Carpeta de los paquetes de compañeros (F5.2); por omisión `<estado>/companions`. */
+  companionsDir?: string
+  /** Tiempos mínimos de la mascota (F5.2); por omisión los de `DEFAULT_COMPANION_TIMING`. */
+  companionTiming?: CompanionTiming
   /** Puerto de archivos para `fs.*` (pruebas); por omisión, `FsSandbox` sobre las carpetas de los espacios abiertos. */
   files?: FileSystemPort
   /**
@@ -281,6 +289,16 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
           logger,
           ...(options.limits === undefined ? {} : { config: options.limits }),
         })
+  const companions = new CompanionService({
+    port: createFsCompanionPort({ dir: options.companionsDir ?? join(paths.dir, 'companions') }),
+    store: fileCompanionSelection(paths.dir, (reason) =>
+      logger.warn('companion-settings.json ignorado', { reason }),
+    ),
+    bus,
+    clock,
+    logger,
+    ...(options.companionTiming === undefined ? {} : { timing: options.companionTiming }),
+  })
   const memory = await createMemory()
   const stopWarmup = watchAgentPanes({ bus, panes: layout, provider: providers[0], logger })
   const workspaces = new WorkspaceService({
@@ -435,6 +453,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
         files: files.handlers,
         ...(history === undefined ? {} : { history: history.handlers }),
         ...(limits === undefined ? {} : { limits: limits.handlers }),
+        companions: companions.handlers,
         snapshot: new SnapshotService({ layout, identity, currentSeq: hooks.currentSeq }),
         subscribe: hooks.subscribe,
         shutdown: () => {
@@ -455,6 +474,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       stopWarmup()
       history?.close()
       limits?.close()
+      companions.close()
       terminals.shutdown()
       await memory
         .stop()
@@ -505,6 +525,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     stopWarmup()
     history?.close()
     limits?.close()
+    companions.close()
     terminals.shutdown()
     await memory.stop().catch(() => {})
     await agentService?.closeAll().catch(() => {})

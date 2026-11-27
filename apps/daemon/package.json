@@ -12,6 +12,7 @@
     "test:live": "vitest run --config live.vitest.config.ts"
   },
   "dependencies": {
+    "@nexo/adapter-companion-fs": "workspace:*",
     "@nexo/adapter-fs-sandbox": "workspace:*",
     "@nexo/adapter-provider-acp": "workspace:*",
     "@nexo/adapter-provider-antigravity": "workspace:*",

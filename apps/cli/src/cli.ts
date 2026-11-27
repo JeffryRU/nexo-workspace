@@ -1,4 +1,5 @@
 import { agentCommand } from './commands/agent.ts'
+import { companionCommand } from './commands/companion.ts'
 import { daemonCommand } from './commands/daemon.ts'
 import { fsCommand } from './commands/fs.ts'
 import { historyCommand } from './commands/history.ts'
@@ -35,6 +36,7 @@ const HANDLERS: Record<CommandName, Handler> = {
   fs: fsCommand,
   history: historyCommand,
   limits: limitsCommand,
+  companion: companionCommand,
   open: openCommand,
   daemon: daemonCommand,
 }
