@@ -60,7 +60,11 @@ const limitsNotice = (usedPercent: number) => [
   {
     rateLimits: {
       limitId: 'codex',
-      primary: { usedPercent, windowDurationMins: 300, resetsAt: 4_102_444_800 },
+      primary: {
+        usedPercent,
+        windowDurationMins: 300,
+        resetsAt: Math.floor(Date.now() / 1000) + 2 * 3600,
+      },
       secondary: null,
     },
   },
@@ -319,11 +323,25 @@ test.describe('capturas F4.5', () => {
     const notify = join(tmp, 'notify.json')
     writeFileSync(threadsFile, JSON.stringify(list))
     writeFileSync(notify, JSON.stringify(limitsNotice(78)))
+    // Lectura directa con reinicios realistas (el Codex falso usa por omisión el año 2100).
+    const inSeconds = (h: number) => Math.floor(Date.now() / 1000) + h * 3600
+    const limitsFile = join(tmp, 'limits.json')
+    writeFileSync(
+      limitsFile,
+      JSON.stringify({
+        rateLimits: {
+          limitId: 'codex',
+          primary: { usedPercent: 42, windowDurationMins: 300, resetsAt: inSeconds(2) },
+          secondary: { usedPercent: 7, windowDurationMins: 10080, resetsAt: inSeconds(72) },
+        },
+      }),
+    )
     const stack = await Stack.start({
       NEXO_AGENT_PROVIDERS: 'fake,codex',
       NEXO_CODEX_EXECUTABLE: FAKE_CODEX,
       FAKE_CODEX_THREADS_FILE: threadsFile,
       FAKE_CODEX_NOTIFY_FILE: notify,
+      FAKE_CODEX_LIMITS_FILE: limitsFile,
     })
     try {
       await stack.json([
@@ -347,8 +365,9 @@ test.describe('capturas F4.5', () => {
         '--name',
         'avisos',
       ])
-      await stack.nexo(['agent', 'send', created.sessionId, '--stdin'], { input: 'notificar' })
       await app.goto(stack.url())
+      await expect(limitsButton(app)).toContainText('codex 42 %')
+      await stack.nexo(['agent', 'send', created.sessionId, '--stdin'], { input: 'notificar' })
       await expect(limitsButton(app)).toContainText('codex 78 %')
       await historyButton(app).click()
       await expect(dialog(app).locator('.history-session')).toHaveCount(3)

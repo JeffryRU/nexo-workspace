@@ -247,6 +247,27 @@ Una prueba opcional con Ollama real (usa tu máquina):
 `NEXO_LIVE_MEMORY_OLLAMA=1 pnpm --filter @nexo/adapter-summarizer-ollama test:live`; con un proveedor real consume tu cuota:
 `NEXO_LIVE_MEMORY_PROVIDER=claude pnpm --filter @nexo/daemon test:live`.
 
+## Historial y límites de uso
+
+La barra de estado tiene el botón **Historial** y, a su lado, el indicador de **límites de uso**.
+
+**Historial.** Lista las sesiones pasadas de los proveedores agrupadas por proyecto (Claude Code y Codex; los agentes ACP que lo anuncian solo
+listan; Antigravity y Ollama no tienen). Filtra por proveedor, busca por título o carpeta (sobre lo ya cargado; «Cargar más» amplía la búsqueda) y
+dice qué proveedor no está disponible o no tiene historial sin romper al resto. **Ver** abre la sesión de solo lectura con el mismo render de
+bloques del panel de agente (sin redactor y sin nada que responder), con enlaces de archivo que abren el visor; **Reanudar en una pestaña**
+abre una pestaña nueva y continúa la sesión (`agent.create { resume }`). Los títulos y mensajes del historial se muestran como texto o con el
+render seguro de Markdown: nada de lo que haya dentro se interpreta ni se ejecuta.
+
+![Historial agrupado por proyecto](docs/capturas/f4-5-historial.png)
+
+![Una sesión antigua de solo lectura](docs/capturas/f4-5-sesion.png)
+
+**Límites.** Un chip por proveedor con su peor porcentaje (normal, alto desde el 70 %, crítico desde el 90 %) o «desconocido» (p. ej. Claude
+hasta que una sesión informa sus límites). Al pulsarlo se despliega el detalle: cada ventana con su porcentaje, el reinicio en hora local, la
+frescura, el origen del dato y un botón para refrescar. Se actualiza solo con los avisos del daemon.
+
+![Detalle de los límites de uso](docs/capturas/f4-5-limites.png)
+
 ## Estructura
 
 ```
