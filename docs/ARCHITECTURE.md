@@ -2236,6 +2236,10 @@ un `<img>` roto) y el selector avisa «No se pudieron leer las imágenes de la m
 - **Sitio:** columna izquierda de la ventana, **debajo** de la lista de espacios (`.side-column`: barra lateral + mascota). No es una capa flotante:
   ocupa su propio espacio, así que no puede tapar pestañas, paneles, compositor ni barra de estado, y el puntero no se queda en ella
   (`pointer-events: none` en el dibujo). En ventanas de menos de 520 px de alto no se muestra.
+- **Anchos estrechos (360-1280 px):** la barra lateral pasa a `clamp(132px, 34vw, 232px)` (a 360 px la mascota, de 96 px, sigue centrada en ella), la barra de estado
+  puede pasar a dos filas y oculta el nombre de la app por debajo de 640 px, y el selector se centra respecto de la ventana (`position: fixed`,
+  `min(520px, 100vw - 24px)`). La `×` de ocultar es siempre visible (tenue; sin «pasar el ratón» en pantallas táctiles) y usa el mismo `icon-button` que el resto.
+  Capturas: `docs/capturas/f5-ancho-*.png`.
 - **Siempre `<img>`.** Un estado sin hoja es un `<img>` de 96 px (`object-fit: contain`, `image-rendering: pixelated`); nunca SVG incrustado, `<object>`
   ni `<iframe>`. Cada imagen nueva entra con un fundido de 180 ms (`keyed` recrea el elemento; no hay dos a la vez).
 - **Hojas de sprites** (`sheet`): un visor del tamaño de un cuadro (ampliado en enteros) con el `<img>` de la hoja desplazado (`frameOffset`,

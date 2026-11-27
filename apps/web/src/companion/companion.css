@@ -54,11 +54,14 @@
   position: absolute;
   top: 4px;
   right: 6px;
-  opacity: 0;
+  /* Siempre visible (tenue): en pantallas táctiles no hay «pasar el ratón». */
+  opacity: 0.55;
   transition: opacity 120ms;
 }
-.companion-dock:hover .companion-hide,
-.companion-dock:focus-within .companion-hide {
+.companion-hide:focus-visible {
+  opacity: 1;
+}
+.companion-dock:hover .companion-hide {
   opacity: 1;
 }
 .companion-dock[data-state="waiting"] .companion-art {
@@ -96,8 +99,10 @@
   }
 }
 
-.companion-dialog {
-  width: min(520px, 94vw);
+.modal.companion-dialog {
+  width: min(520px, calc(100% - 24px));
+  min-width: 0;
+  max-height: calc(100% - 24px);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -173,4 +178,12 @@
 }
 .companion-hint {
   margin: 0;
+}
+/* Centrado respecto de la ventana (no de la rejilla, que en anchos muy estrechos puede desbordarse). */
+.modal-backdrop.companion-backdrop {
+  position: fixed;
+}
+.modal.companion-dialog {
+  width: min(520px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
 }

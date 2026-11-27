@@ -25,7 +25,8 @@
   --opacity-dim: 0.6;
   --opacity-subtle: 0.55;
   --radius: 6px;
-  --sidebar-width: 232px;
+  /* La barra lateral se estrecha en ventanas angostas (360 px: 132 px) para que quede sitio al contenido. */
+  --sidebar-width: clamp(132px, 34vw, 232px);
 
   --font-ui:
     system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, "Helvetica Neue", Arial,
@@ -105,4 +106,12 @@ button {
   color: var(--fg-muted);
   background: var(--bg-sunken);
   border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+  row-gap: 0;
+  min-width: 0;
+}
+@media (max-width: 640px) {
+  .statusbar > span:first-child {
+    display: none;
+  }
 }

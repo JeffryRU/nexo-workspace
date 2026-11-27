@@ -126,6 +126,7 @@
 }
 
 .status-toggle {
+  white-space: nowrap;
   margin-left: auto;
   border: 0;
   background: transparent;

@@ -75,7 +75,7 @@ export function CompanionDialog() {
 
   return (
     <Show when={app.ui.companionOpen()}>
-      <div class="modal-backdrop">
+      <div class="modal-backdrop companion-backdrop">
         <div
           ref={dialog}
           class="modal companion-dialog"
