@@ -9,6 +9,7 @@ export function createUiState(keymap: KeyMap = DEFAULT_KEYMAP) {
   const [helpOpen, setHelpOpen] = createSignal(false)
   const [searchOpen, setSearchOpen] = createSignal(false)
   const [memoryOpen, setMemoryOpen] = createSignal(false)
+  const [historyOpen, setHistoryOpen] = createSignal(false)
   /** Bloque de origen al que debe saltar el panel de una sesión (lo pide la vista de memoria). */
   const [jump, setJump] = createSignal<MemoryJump | undefined>()
   const [error, setError] = createSignal<string | undefined>()
@@ -27,6 +28,8 @@ export function createUiState(keymap: KeyMap = DEFAULT_KEYMAP) {
     setSearchOpen,
     memoryOpen,
     setMemoryOpen,
+    historyOpen,
+    setHistoryOpen,
     jump,
     setJump,
     error,

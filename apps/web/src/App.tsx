@@ -3,8 +3,10 @@ import { createEffect, createMemo, Match, onCleanup, onMount, Show, Switch } fro
 import { type AppModel, ModelProvider } from './app/model.tsx'
 import { useAttentionEffects } from './attention/effects.ts'
 import type { InfoFailure } from './daemon/info.ts'
+import { HistoryDialog, HistoryToggle } from './history/HistoryDialog.tsx'
 import { es } from './i18n/es.ts'
 import { paneIdsOf } from './layout/tree.ts'
+import { LimitsIndicator } from './limits/LimitsIndicator.tsx'
 import { MemoryDialog, MemoryToggle } from './memory/MemoryDialog.tsx'
 import { useMemoryEvents } from './memory/queries.ts'
 import { installShortcuts } from './shortcuts/handler.ts'
@@ -91,6 +93,8 @@ function Workbench(props: { model: AppModel }) {
           <SearchBar />
           <footer class="statusbar">
             <span>{es.appName}</span>
+            <LimitsIndicator />
+            <HistoryToggle />
             <MemoryToggle />
             <NotificationToggle />
             <Show when={info.data}>{(d) => <span class="muted">v{d().version}</span>}</Show>
@@ -99,6 +103,7 @@ function Workbench(props: { model: AppModel }) {
         <ReconnectBanner />
         <HelpDialog />
         <MemoryDialog />
+        <HistoryDialog />
         <Toast />
       </div>
     </Show>

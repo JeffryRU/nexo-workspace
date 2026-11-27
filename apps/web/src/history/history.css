@@ -1,0 +1,142 @@
+.history-dialog {
+  width: min(860px, 94vw);
+  height: min(680px, 85vh);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.history-head h2 {
+  margin: 0;
+}
+.history-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+.history-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.history-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.history-search {
+  flex: 1;
+  min-width: 180px;
+}
+.history-field select,
+.history-field input {
+  font: inherit;
+  color: var(--fg-strong);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 3px 8px;
+}
+.history-search input {
+  flex: 1;
+  min-width: 0;
+}
+.history-hint,
+.history-notice,
+.history-error {
+  margin: 0;
+}
+.history-notice {
+  color: var(--warn);
+}
+.history-error {
+  color: var(--danger);
+}
+.history-projects {
+  display: grid;
+  gap: 10px;
+}
+.history-project h3 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: var(--fg-strong);
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.history-cwd {
+  font-weight: normal;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.history-sessions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+.history-session {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 8px;
+  border-radius: var(--radius);
+}
+.history-session:hover {
+  background: var(--bg-hover);
+}
+.history-session-main {
+  display: grid;
+  min-width: 0;
+}
+.history-session-title {
+  color: var(--fg-strong);
+}
+.history-session-meta {
+  font-size: 11px;
+}
+.history-session-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.history-tag {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 7px;
+  font-size: 11px;
+}
+.history-readonly {
+  color: var(--warn);
+}
+.history-more {
+  align-self: center;
+}
+.history-session-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.history-session-info {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+}
+.history-transcript {
+  display: grid;
+  gap: 10px;
+  flex: none;
+  padding: 4px 2px;
+}

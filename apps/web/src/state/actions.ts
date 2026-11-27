@@ -221,6 +221,44 @@ export function createActions(deps: {
       if (split !== undefined) await actions.focusPane(split.pane.id)
     },
 
+    /** Abre `path` en el visor de la pestaña activa (desde el panel con foco). Sin pestaña activa, no hace nada. */
+    async openInViewerHere(path: string): Promise<void> {
+      const s = store.snapshot()
+      const workspace = findWorkspace(s, ui.activeWorkspaceId()) ?? s.workspaces[0]
+      const paneId = workspace === undefined ? undefined : activeTabOf(workspace)?.focusedPaneId
+      if (paneId == null) return
+      await actions.openInViewer(paneId, path)
+    },
+
+    /**
+     * Reanuda una sesión del historial en una pestaña nueva con un panel de agente (`agent.create { resume }`).
+     * `true` si el daemon creó la sesión; si falla, el aviso lo da `run` y la pestaña queda con el panel de inicio.
+     */
+    async resumeInNewTab(
+      session: { provider: string; sessionId: string; cwd?: string | undefined },
+      workspaceId: WorkspaceId | undefined = currentWorkspaceId(),
+    ): Promise<boolean> {
+      if (workspaceId === undefined) return false
+      const created = await run((c) => c.call('tab.create', { workspaceId }))
+      const initial = created?.tab.panes[0]
+      if (initial === undefined) return false
+      const split = await run((c) =>
+        c.call('pane.split', { paneId: initial.id, direction: 'row', kind: 'agent' }),
+      )
+      if (split === undefined) return false
+      await run((c) => c.call('pane.close', { paneId: initial.id }))
+      const resumed = await run((c) =>
+        c.call('agent.create', {
+          paneId: split.pane.id,
+          provider: session.provider,
+          resume: session.sessionId,
+          ...(session.cwd === undefined || session.cwd === '' ? {} : { cwd: session.cwd }),
+        }),
+      )
+      await actions.focusPane(split.pane.id)
+      return resumed !== undefined
+    },
+
     async swapPanes(paneId: PaneId, otherPaneId: PaneId): Promise<void> {
       if (paneId === otherPaneId) return
       await run((c) => c.call('pane.swap', { paneId, otherPaneId }))

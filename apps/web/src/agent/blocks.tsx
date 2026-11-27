@@ -18,9 +18,15 @@ import { formatDuration, usageParts } from './format.ts'
 import { Markdown } from './markdown.tsx'
 import type { AgentPaneModel } from './pane-model.ts'
 
-export const AgentModelContext = createContext<AgentPaneModel>()
+/** Lo que los bloques necesitan de su modelo: el panel de agente lo cumple y la vista de historial usa una versión de solo lectura. */
+export type BlockModel = Pick<
+  AgentPaneModel,
+  'block' | 'expanded' | 'toggle' | 'respondPermission' | 'respondQuestion' | 'removed' | 'status'
+>
 
-export function useAgentModel(): AgentPaneModel {
+export const AgentModelContext = createContext<BlockModel>()
+
+export function useAgentModel(): BlockModel {
   const m = useContext(AgentModelContext)
   if (m === undefined) throw new Error('falta el modelo del panel de agente')
   return m
