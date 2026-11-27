@@ -310,10 +310,18 @@ function SessionView(props: { picked: Picked; onBack: () => void; onResumed: () 
           <strong class="ellipsis" title={props.picked.title}>
             {props.picked.title}
           </strong>
-          <span class="muted">
-            {names.name(s().provider)}
-            {` · ${formatLocalWhen(s().updatedAt)}`}
-            <Show when={props.picked.cwd}>{(cwd) => ` · ${cwd()}`}</Show>
+          <span class="history-session-info-meta muted">
+            <span class="history-meta-fixed">
+              {names.name(s().provider)}
+              {` · ${formatLocalWhen(s().updatedAt)}`}
+            </span>
+            <Show when={props.picked.cwd}>
+              {(cwd) => (
+                <span class="history-meta-cwd ellipsis" title={cwd()}>
+                  {` · ${cwd()}`}
+                </span>
+              )}
+            </Show>
           </span>
         </div>
         <span class="history-tag history-readonly" title={es.history.readOnlyHint}>
