@@ -1,7 +1,11 @@
 //! Arranque del daemon: si no hay uno vivo lo lanza desacoplado y espera a que responda `/health`.
 //!
-//! TODO(F6, docs/ROADMAP.md#f6--empaquetado): empaquetar Node como sidecar; hoy se usa `node` del
-//! sistema (`NEXO_NODE`) y `apps/daemon/src/main.ts` del repositorio (`NEXO_DAEMON_ENTRY`).
+//! Dónde están Node y el daemon (F6.1):
+//! - **release**: los del paquete (recurso de Tauri `nexo/node/node[.exe]` y `nexo/daemon/daemon.mjs`, ver
+//!   `tools/package`); no se usa el `node` del sistema ni el repositorio.
+//! - **desarrollo** (debug): `node` del PATH y `apps/daemon/src/main.ts` del repositorio.
+//!
+//! En ambos, `NEXO_NODE` y `NEXO_DAEMON_ENTRY` mandan sobre lo anterior.
 
 use crate::discovery::{discover, DaemonLocation};
 use std::ffi::OsString;
@@ -13,12 +17,16 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 const LOG_NAME: &str = "daemon.log";
+/// Carpeta del paquete dentro de los recursos de Tauri (debe coincidir con `tauri.bundle.conf.json`).
+pub const BUNDLE_DIR: &str = "nexo";
 const MAX_LOG_BYTES: u64 = 2 * 1024 * 1024;
 
 #[derive(Debug)]
 pub enum LaunchError {
-    /// No se encontró `main.ts` del daemon.
-    EntryNotFound(PathBuf),
+    /// No se encontró el daemon (`main.ts` en desarrollo, `daemon.mjs` del paquete en release).
+    EntryNotFound { path: PathBuf, bundled: bool },
+    /// No se encontró el Node indicado (el empaquetado o `NEXO_NODE`).
+    NodeNotFound { path: PathBuf, bundled: bool },
     /// No se pudo lanzar `node` (no instalado, sin permisos...).
     Spawn { node: OsString, reason: String },
     /// No hubo respuesta a tiempo; `last` es el último motivo del descubrimiento.
@@ -30,10 +38,37 @@ pub enum LaunchError {
 impl fmt::Display for LaunchError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::EntryNotFound(p) => write!(
+            Self::EntryNotFound {
+                path,
+                bundled: true,
+            } => write!(
+                f,
+                "la instalación está incompleta: falta el daemon empaquetado en \"{}\"; reinstala Nexo Workspace",
+                path.display()
+            ),
+            Self::EntryNotFound {
+                path,
+                bundled: false,
+            } => write!(
                 f,
                 "no se encontró el daemon en \"{}\"; define NEXO_DAEMON_ENTRY con la ruta de apps/daemon/src/main.ts",
-                p.display()
+                path.display()
+            ),
+            Self::NodeNotFound {
+                path,
+                bundled: true,
+            } => write!(
+                f,
+                "la instalación está incompleta: falta el Node empaquetado en \"{}\"; reinstala Nexo Workspace",
+                path.display()
+            ),
+            Self::NodeNotFound {
+                path,
+                bundled: false,
+            } => write!(
+                f,
+                "no se encontró el Node en \"{}\"; revisa NEXO_NODE o instala Node 24",
+                path.display()
             ),
             Self::Spawn { node, reason } => write!(
                 f,
@@ -56,6 +91,8 @@ pub struct LaunchConfig {
     pub state_dir: PathBuf,
     pub node: OsString,
     pub entry: PathBuf,
+    /// `node` y `entry` salen del paquete (afecta solo a los mensajes de error).
+    pub bundled: bool,
     /// Pone `NEXO_DEV=1` para que el daemon acepte el Origin de Vite.
     pub dev: bool,
     pub timeout: Duration,
@@ -66,26 +103,108 @@ pub struct LaunchConfig {
 }
 
 impl LaunchConfig {
-    pub fn from_env(state_dir: PathBuf, dev: bool) -> Self {
+    /// `resource_dir`: carpeta de recursos de Tauri (en release, donde está `nexo/`).
+    pub fn from_env(state_dir: PathBuf, dev: bool, resource_dir: Option<PathBuf>) -> Self {
         let env_value = |name: &str| std::env::var_os(name).filter(|v| !v.is_empty());
         let timeout_ms = std::env::var("NEXO_START_TIMEOUT_MS")
             .ok()
             .and_then(|v| v.parse::<u64>().ok())
             .filter(|ms| (1..=300_000).contains(ms))
             .unwrap_or(15_000);
+        let current_exe = std::env::current_exe().ok();
+        let runtime = resolve_runtime(
+            env_value("NEXO_NODE"),
+            env_value("NEXO_DAEMON_ENTRY").map(PathBuf::from),
+            dev,
+            resource_dir.as_deref(),
+            current_exe.as_deref(),
+        );
         Self {
             state_dir,
-            node: env_value("NEXO_NODE").unwrap_or_else(|| "node".into()),
-            entry: resolve_entry(
-                env_value("NEXO_DAEMON_ENTRY").map(PathBuf::from),
-                std::env::current_exe().ok().as_deref(),
-            ),
+            node: runtime.node,
+            entry: runtime.entry,
+            bundled: runtime.bundled,
             dev,
             timeout: Duration::from_millis(timeout_ms),
             poll: Duration::from_millis(150),
             health_timeout: Duration::from_millis(1000),
             extra_env: Vec::new(),
         }
+    }
+}
+
+/// Node y daemon elegidos, y si salen del paquete.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Runtime {
+    pub node: OsString,
+    pub entry: PathBuf,
+    pub bundled: bool,
+}
+
+/// Quita el prefijo `\\?\` de las rutas de Windows: Node no lo admite bien en la ruta del script.
+pub fn strip_verbatim(path: &Path) -> PathBuf {
+    let text = path.to_string_lossy();
+    if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
+        return PathBuf::from(format!(r"\\{rest}"));
+    }
+    if let Some(rest) = text.strip_prefix(r"\\?\") {
+        if rest.as_bytes().get(1) == Some(&b':') {
+            return PathBuf::from(rest);
+        }
+    }
+    path.to_path_buf()
+}
+
+/// Ruta del Node empaquetado dentro de los recursos.
+pub fn bundled_node(resource_dir: &Path) -> PathBuf {
+    let exe = if cfg!(windows) { "node.exe" } else { "node" };
+    strip_verbatim(resource_dir)
+        .join(BUNDLE_DIR)
+        .join("node")
+        .join(exe)
+}
+
+/// Ruta del daemon empaquetado dentro de los recursos.
+pub fn bundled_entry(resource_dir: &Path) -> PathBuf {
+    strip_verbatim(resource_dir)
+        .join(BUNDLE_DIR)
+        .join("daemon")
+        .join("daemon.mjs")
+}
+
+/// Elige Node y daemon. Los overrides mandan siempre; si no, en desarrollo van el `node` del PATH y el
+/// `main.ts` del repositorio y en release los del paquete (`resource_dir`, o la carpeta del ejecutable
+/// si Tauri no la da). No comprueba que existan: `spawn_daemon` lo hace con un error claro.
+pub fn resolve_runtime(
+    node_override: Option<OsString>,
+    entry_override: Option<PathBuf>,
+    dev: bool,
+    resource_dir: Option<&Path>,
+    current_exe: Option<&Path>,
+) -> Runtime {
+    let resources = || -> PathBuf {
+        resource_dir
+            .map(Path::to_path_buf)
+            .or_else(|| current_exe.and_then(|e| e.parent().map(Path::to_path_buf)))
+            .unwrap_or_default()
+    };
+    let bundled = !dev && (node_override.is_none() || entry_override.is_none());
+    let node = node_override.unwrap_or_else(|| {
+        if dev {
+            "node".into()
+        } else {
+            bundled_node(&resources()).into_os_string()
+        }
+    });
+    let entry = match entry_override {
+        Some(path) => path,
+        None if dev => resolve_entry(None, current_exe),
+        None => bundled_entry(&resources()),
+    };
+    Runtime {
+        node,
+        entry,
+        bundled,
     }
 }
 
@@ -116,10 +235,21 @@ pub fn resolve_entry(override_path: Option<PathBuf>, current_exe: Option<&Path>)
     from_build
 }
 
-/// Lanza `node main.ts` desacoplado. Su salida va a `daemon.log` (el daemon ya redacta el token).
+/// Lanza `node <entry>` desacoplado. Su salida va a `daemon.log` (el daemon ya redacta el token).
 pub fn spawn_daemon(config: &LaunchConfig) -> Result<(), LaunchError> {
     if !config.entry.is_file() {
-        return Err(LaunchError::EntryNotFound(config.entry.clone()));
+        return Err(LaunchError::EntryNotFound {
+            path: config.entry.clone(),
+            bundled: config.bundled,
+        });
+    }
+    // `node` a secas se busca en el PATH al lanzar; una ruta (con separador) debe existir ya.
+    let node_path = Path::new(&config.node);
+    if node_path.components().count() > 1 && !node_path.is_file() {
+        return Err(LaunchError::NodeNotFound {
+            path: node_path.to_path_buf(),
+            bundled: config.bundled,
+        });
     }
     fs::create_dir_all(&config.state_dir)
         .map_err(|e| LaunchError::Io(format!("no se pudo crear el directorio de estado: {e}")))?;
@@ -244,6 +374,7 @@ mod tests {
             state_dir: root.join("state"),
             node: fake_node(root).into_os_string(),
             entry,
+            bundled: false,
             dev,
             timeout: Duration::from_millis(4000),
             poll: Duration::from_millis(50),
@@ -319,6 +450,7 @@ mod launcher_adversarial {
             state_dir: root.join("state"),
             node: "nexo-node-que-no-existe-xyz".into(),
             entry,
+            bundled: false,
             dev: false,
             timeout: Duration::from_millis(300),
             poll: Duration::from_millis(20),
@@ -333,7 +465,7 @@ mod launcher_adversarial {
         let mut cfg = base(root.path());
         cfg.entry = root.path().join("no-existe.ts");
         let error = ensure_daemon(&cfg).unwrap_err();
-        assert!(matches!(error, LaunchError::EntryNotFound(_)));
+        assert!(matches!(error, LaunchError::EntryNotFound { .. }));
         assert!(error.to_string().contains("NEXO_DAEMON_ENTRY"));
     }
 
@@ -344,7 +476,7 @@ mod launcher_adversarial {
         cfg.entry = root.path().to_path_buf();
         assert!(matches!(
             ensure_daemon(&cfg),
-            Err(LaunchError::EntryNotFound(_))
+            Err(LaunchError::EntryNotFound { .. })
         ));
     }
 
@@ -388,5 +520,230 @@ mod launcher_adversarial {
             ensure_daemon(&cfg),
             Err(LaunchError::Spawn { .. })
         ));
+    }
+}
+
+#[cfg(test)]
+mod bundled {
+    use super::*;
+
+    fn exe() -> Option<&'static Path> {
+        None
+    }
+
+    #[test]
+    fn release_usa_node_y_daemon_del_paquete() {
+        let res = Path::new("recursos");
+        let rt = resolve_runtime(None, None, false, Some(res), exe());
+        assert!(rt.bundled);
+        assert_eq!(PathBuf::from(&rt.node), bundled_node(res));
+        assert_eq!(rt.entry, bundled_entry(res));
+        let node = PathBuf::from(&rt.node);
+        assert!(
+            node.ends_with(Path::new("nexo").join("node").join(if cfg!(windows) {
+                "node.exe"
+            } else {
+                "node"
+            }))
+        );
+        assert!(rt
+            .entry
+            .ends_with(Path::new("nexo").join("daemon").join("daemon.mjs")));
+    }
+
+    #[test]
+    fn release_ignora_el_node_del_sistema_y_el_repositorio() {
+        let rt = resolve_runtime(None, None, false, Some(Path::new("r")), exe());
+        assert_ne!(rt.node, OsString::from("node"));
+        assert!(!rt.entry.ends_with("main.ts"));
+    }
+
+    #[test]
+    fn desarrollo_conserva_node_del_path_y_main_ts_del_repositorio() {
+        let rt = resolve_runtime(None, None, true, Some(Path::new("r")), exe());
+        assert!(!rt.bundled);
+        assert_eq!(rt.node, OsString::from("node"));
+        assert!(rt.entry.ends_with(Path::new("daemon/src/main.ts")));
+    }
+
+    #[test]
+    fn los_overrides_mandan_en_release_y_en_desarrollo() {
+        for dev in [false, true] {
+            let rt = resolve_runtime(
+                Some("/mi/node".into()),
+                Some(PathBuf::from("/mi/daemon.mjs")),
+                dev,
+                Some(Path::new("r")),
+                exe(),
+            );
+            assert_eq!(rt.node, OsString::from("/mi/node"));
+            assert_eq!(rt.entry, PathBuf::from("/mi/daemon.mjs"));
+            assert!(!rt.bundled, "con ambos overrides nada sale del paquete");
+        }
+    }
+
+    #[test]
+    fn un_solo_override_sigue_usando_el_paquete_para_lo_otro() {
+        let res = Path::new("r");
+        let rt = resolve_runtime(Some("/mi/node".into()), None, false, Some(res), exe());
+        assert_eq!(rt.node, OsString::from("/mi/node"));
+        assert_eq!(rt.entry, bundled_entry(res));
+        assert!(rt.bundled);
+    }
+
+    #[test]
+    fn sin_carpeta_de_recursos_usa_la_del_ejecutable() {
+        let exe = Path::new("/opt/nexo/nexo-desktop");
+        let rt = resolve_runtime(None, None, false, None, Some(exe));
+        assert_eq!(rt.entry, bundled_entry(Path::new("/opt/nexo")));
+    }
+
+    #[test]
+    fn rutas_con_espacios_y_no_ascii_se_conservan() {
+        let res = Path::new("/Programas/Nexo Árbol ñandú/recursos");
+        let rt = resolve_runtime(None, None, false, Some(res), exe());
+        assert!(rt.entry.to_string_lossy().contains("Nexo Árbol ñandú"));
+        assert!(PathBuf::from(&rt.node)
+            .to_string_lossy()
+            .contains("Nexo Árbol ñandú"));
+    }
+
+    #[test]
+    fn strip_verbatim_quita_el_prefijo_de_windows() {
+        let f = |s: &str| strip_verbatim(Path::new(s)).to_string_lossy().into_owned();
+        assert_eq!(f(r"\\?\C:\Program Files\Nexo"), r"C:\Program Files\Nexo");
+        assert_eq!(f(r"\\?\UNC\servidor\recurso\x"), r"\\servidor\recurso\x");
+        // Lo que no es un prefijo verbatim de unidad o UNC no se toca.
+        assert_eq!(f(r"C:\normal"), r"C:\normal");
+        assert_eq!(f("/usr/lib/nexo"), "/usr/lib/nexo");
+        assert_eq!(f(r"\\?\Volume{1234}\x"), r"\\?\Volume{1234}\x");
+        assert_eq!(f(""), "");
+    }
+
+    fn release_config(root: &Path, node: &Path, entry: &Path) -> LaunchConfig {
+        LaunchConfig {
+            state_dir: root.join("state"),
+            node: node.as_os_str().to_owned(),
+            entry: entry.to_path_buf(),
+            bundled: true,
+            dev: false,
+            timeout: Duration::from_millis(300),
+            poll: Duration::from_millis(20),
+            health_timeout: Duration::from_millis(200),
+            extra_env: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn paquete_ausente_da_un_error_claro_de_instalacion_incompleta() {
+        let root = tempfile::tempdir().unwrap();
+        let res = root.path().join("sin paquete ñ");
+        let rt = resolve_runtime(None, None, false, Some(&res), exe());
+        let cfg = release_config(root.path(), Path::new(&rt.node), &rt.entry);
+        let error = spawn_daemon(&cfg).unwrap_err();
+        assert!(matches!(
+            error,
+            LaunchError::EntryNotFound { bundled: true, .. }
+        ));
+        let text = error.to_string();
+        assert!(text.contains("instalación está incompleta"), "{text}");
+        assert!(text.contains("reinstala"), "{text}");
+        assert!(!text.contains("NEXO_DAEMON_ENTRY"), "{text}");
+    }
+
+    #[test]
+    fn falta_node_pero_hay_daemon() {
+        let root = tempfile::tempdir().unwrap();
+        let res = root.path();
+        fs::create_dir_all(res.join("nexo").join("daemon")).unwrap();
+        fs::write(bundled_entry(res), "// x").unwrap();
+        let rt = resolve_runtime(None, None, false, Some(res), exe());
+        let cfg = release_config(root.path(), Path::new(&rt.node), &rt.entry);
+        let error = spawn_daemon(&cfg).unwrap_err();
+        assert!(matches!(
+            error,
+            LaunchError::NodeNotFound { bundled: true, .. }
+        ));
+        assert!(error.to_string().contains("Node empaquetado"));
+    }
+
+    #[test]
+    fn node_o_daemon_que_son_directorios_se_rechazan() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join("un directorio");
+        fs::create_dir_all(&dir).unwrap();
+        let cfg = release_config(root.path(), &dir, &dir);
+        assert!(matches!(
+            spawn_daemon(&cfg),
+            Err(LaunchError::EntryNotFound { .. })
+        ));
+        let file = root.path().join("daemon.mjs");
+        fs::write(&file, "x").unwrap();
+        let cfg = release_config(root.path(), &dir, &file);
+        assert!(matches!(
+            spawn_daemon(&cfg),
+            Err(LaunchError::NodeNotFound { .. })
+        ));
+    }
+
+    #[test]
+    fn node_override_inexistente_con_ruta_no_dice_que_la_instalacion_esta_incompleta() {
+        let root = tempfile::tempdir().unwrap();
+        let file = root.path().join("daemon.mjs");
+        fs::write(&file, "x").unwrap();
+        let mut cfg = release_config(root.path(), &root.path().join("no-existe"), &file);
+        cfg.bundled = false;
+        let text = spawn_daemon(&cfg).unwrap_err().to_string();
+        assert!(text.contains("NEXO_NODE"), "{text}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn arranca_el_paquete_desde_una_ruta_con_espacios_y_no_ascii() {
+        use crate::discovery::{daemon_json, GOOD_TOKEN};
+        use crate::health::testing::{nexo_response, serve_forever};
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = tempfile::tempdir().unwrap();
+        let res = root.path().join("Recursos de Nexo ñandú");
+        fs::create_dir_all(res.join("nexo").join("node")).unwrap();
+        fs::create_dir_all(res.join("nexo").join("daemon")).unwrap();
+        fs::write(bundled_entry(&res), "// falso").unwrap();
+        let node = bundled_node(&res);
+        fs::write(
+            &node,
+            "#!/bin/sh\necho \"$@\" > \"$FAKE_SRC/args.txt\"\ncp \"$FAKE_SRC/daemon.json\" \"$NEXO_STATE_DIR/daemon.json\"\ncp \"$FAKE_SRC/token\" \"$NEXO_STATE_DIR/token\"\n",
+        )
+        .unwrap();
+        fs::set_permissions(&node, fs::Permissions::from_mode(0o755)).unwrap();
+
+        let src = root.path().join("src");
+        fs::create_dir_all(&src).unwrap();
+        let port = serve_forever(nexo_response());
+        fs::write(src.join("daemon.json"), daemon_json(port)).unwrap();
+        fs::write(src.join("token"), GOOD_TOKEN).unwrap();
+
+        let rt = resolve_runtime(None, None, false, Some(&res), exe());
+        let mut cfg = release_config(root.path(), Path::new(&rt.node), &rt.entry);
+        cfg.timeout = Duration::from_millis(4000);
+        cfg.extra_env = vec![("FAKE_SRC".into(), src.clone().into_os_string())];
+        let found = ensure_daemon(&cfg).unwrap();
+        assert_eq!(found.port, port);
+        let args = fs::read_to_string(src.join("args.txt")).unwrap();
+        assert!(args.contains("daemon.mjs"), "{args}");
+        assert!(args.contains("Recursos de Nexo ñandú"), "{args}");
+    }
+
+    #[test]
+    fn la_configuracion_de_tauri_coloca_el_paquete_donde_el_lanzador_lo_busca() {
+        let text = include_str!("../tauri.bundle.conf.json");
+        let json: serde_json::Value = serde_json::from_str(text).unwrap();
+        let resources = json["bundle"]["resources"].as_object().unwrap();
+        assert_eq!(
+            resources.get("resources/nexo/").and_then(|v| v.as_str()),
+            Some(format!("{BUNDLE_DIR}/").as_str())
+        );
+        // Node va como recurso (no como externalBin): un externalBin acabaría en /usr/bin/node al instalar el .deb.
+        assert!(json["bundle"].get("externalBin").is_none());
     }
 }
