@@ -134,7 +134,8 @@
 .history-session-info {
   display: grid;
   min-width: 0;
-  flex: 1;
+  /* Con poco ancho baja a su propia fila: así el título y la ruta no quedan en un hilo. */
+  flex: 1 1 calc(var(--pane-min) * 2);
 }
 .history-session-info-meta {
   display: flex;
