@@ -97,4 +97,19 @@ export const LIMITS = {
   maxUsageWindowMinutes: 525_600,
   /** Un dato de uso más viejo que esto se marca `fresh: false`. */
   usageStaleAfterMs: 15 * 60 * 1000,
+  // Compañeros (F5.2, `companion.*`).
+  /** Tamaño de `companion.json`. */
+  maxCompanionManifestBytes: 64 * 1024,
+  /** Un recurso (imagen) de un paquete: cabe en una sola respuesta en base64. */
+  maxCompanionAssetBytes: 512 * 1024,
+  /** Suma de los recursos de un paquete. */
+  maxCompanionPackageBytes: 8 * 1024 * 1024,
+  /** Recursos distintos por paquete. */
+  maxCompanionFiles: 64,
+  /** Paquetes que lista el daemon (el resto se ignora). */
+  maxCompanions: 64,
+  maxCompanionPathLength: 128,
+  /** Lado máximo, en píxeles, de una imagen o de un cuadro de hoja (si se puede leer del encabezado). */
+  maxCompanionImageSide: 4096,
+  maxCompanionFrames: 256,
 } as const

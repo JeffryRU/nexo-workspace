@@ -9,6 +9,7 @@ import {
   ProviderSessionToken,
   Token,
 } from './agent.ts'
+import { companionMethods } from './companion.ts'
 import {
   AgentSessionId,
   BlockId,
@@ -270,6 +271,7 @@ export const methods = {
   ...fsMethods,
   ...historyMethods,
   ...limitsMethods,
+  ...companionMethods,
 } as const
 
 export type MethodName = keyof typeof methods

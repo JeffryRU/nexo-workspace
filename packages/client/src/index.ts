@@ -20,6 +20,7 @@ export {
   type ResyncReason,
   type Snapshot,
 } from './client.ts'
+export { type CompanionApi, companionApi } from './companion-api.ts'
 export { type ClientErrorCode, NexoClientError } from './errors.ts'
 export { type FsApi, type FsFile, type FsReadAllOptions, fsApi } from './fs-api.ts'
 export {

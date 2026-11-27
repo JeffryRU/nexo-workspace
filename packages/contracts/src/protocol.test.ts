@@ -106,6 +106,11 @@ describe('parseRequest', () => {
       'history.list': { provider: 'claude', cwd: '/work/app', limit: 20 },
       'history.read': { provider: 'claude', sessionId: 'abc-123', limit: 50 },
       'limits.status': { provider: 'codex', refresh: true },
+      'companion.list': {},
+      'companion.get': { id: 'tiny' },
+      'companion.select': { id: null },
+      'companion.asset': { id: 'tiny', path: 'idle.png' },
+      'companion.state': {},
     }
     expect(Object.keys(samples).sort()).toEqual([...METHOD_NAMES].sort())
     for (const [method, params] of Object.entries(samples)) {
@@ -122,6 +127,7 @@ describe('parseRequest', () => {
         'agent.session',
         'agent.status',
         'client.resync',
+        'companion.state',
         'layout.changed',
         'limits.updated',
         'memory.updated',

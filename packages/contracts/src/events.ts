@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { AgentDelta, AgentSession, Block } from './agent.ts'
+import { CompanionStateView } from './companion.ts'
 import {
   AgentSessionId,
   Attention,
@@ -101,6 +102,8 @@ export const events = {
   }),
   /** Los límites de uso de un proveedor cambiaron (F4.4): el cliente sustituye lo que tenía de ese proveedor. */
   'limits.updated': ProviderLimits,
+  /** El estado de la mascota o el compañero elegido cambió (F5.2). */
+  'companion.state': CompanionStateView,
 } as const
 
 export type EventName = keyof typeof events
