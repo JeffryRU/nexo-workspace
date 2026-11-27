@@ -114,6 +114,8 @@ export function formatRemaining(resetsAt: number | undefined, now: number): stri
   if (resetsAt === undefined || !Number.isFinite(resetsAt) || !Number.isFinite(now))
     return undefined
   const diff = resetsAt - now
+  // Dos extremos finitos pueden restarse a Infinity: no hay tiempo que decir.
+  if (!Number.isFinite(diff)) return undefined
   if (diff <= 0) return es.limits.already
   const minutes = Math.ceil(diff / 60_000)
   if (minutes < 60) return format(es.limits.inMinutes, { minutes })
