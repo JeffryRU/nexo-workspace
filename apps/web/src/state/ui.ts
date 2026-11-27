@@ -11,6 +11,10 @@ export function createUiState(keymap: KeyMap = DEFAULT_KEYMAP) {
   const [memoryOpen, setMemoryOpen] = createSignal(false)
   const [historyOpen, setHistoryOpen] = createSignal(false)
   const [companionOpen, setCompanionOpen] = createSignal(false)
+  /** Cajón de espacios abierto (solo existe en ventanas estrechas; no se guarda). */
+  const [drawerOpen, setDrawerOpen] = createSignal(false)
+  /** Ventana estrecha (< 760 px): la barra lateral es un cajón. Lo fija el banco de trabajo con `matchMedia`. */
+  const [narrow, setNarrow] = createSignal(false)
   /** Bloque de origen al que debe saltar el panel de una sesión (lo pide la vista de memoria). */
   const [jump, setJump] = createSignal<MemoryJump | undefined>()
   const [error, setError] = createSignal<string | undefined>()
@@ -33,6 +37,10 @@ export function createUiState(keymap: KeyMap = DEFAULT_KEYMAP) {
     setHistoryOpen,
     companionOpen,
     setCompanionOpen,
+    drawerOpen,
+    setDrawerOpen,
+    narrow,
+    setNarrow,
     jump,
     setJump,
     error,

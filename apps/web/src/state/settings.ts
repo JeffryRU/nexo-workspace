@@ -8,9 +8,17 @@ export type SettingsStorage = {
 export const SETTINGS_KEY = 'nexo.settings'
 
 /** Lo que se guarda (versionado por campos: lo desconocido o de otro tipo se ignora). */
-export type StoredSettings = { notifications: boolean; companionHidden: boolean }
+export type StoredSettings = {
+  notifications: boolean
+  companionHidden: boolean
+  sidebarCollapsed: boolean
+}
 
-const DEFAULTS: StoredSettings = { notifications: false, companionHidden: false }
+const DEFAULTS: StoredSettings = {
+  notifications: false,
+  companionHidden: false,
+  sidebarCollapsed: false,
+}
 
 /** Lee los ajustes guardados; cualquier basura (JSON roto, tipos distintos) cae a los valores por omisión. */
 export function readSettings(storage: SettingsStorage | undefined): StoredSettings {
@@ -22,13 +30,15 @@ export function readSettings(storage: SettingsStorage | undefined): StoredSettin
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
       return { ...DEFAULTS }
     }
-    const { notifications, companionHidden } = parsed as {
+    const { notifications, companionHidden, sidebarCollapsed } = parsed as {
       notifications?: unknown
       companionHidden?: unknown
+      sidebarCollapsed?: unknown
     }
     return {
       notifications: typeof notifications === 'boolean' ? notifications : false,
       companionHidden: typeof companionHidden === 'boolean' ? companionHidden : false,
+      sidebarCollapsed: typeof sidebarCollapsed === 'boolean' ? sidebarCollapsed : false,
     }
   } catch {
     return { ...DEFAULTS }
@@ -43,11 +53,13 @@ export function createSettings(storage?: SettingsStorage) {
   const initial = readSettings(storage)
   const [notifications, setNotificationsSignal] = createSignal(initial.notifications)
   const [companionHidden, setCompanionHiddenSignal] = createSignal(initial.companionHidden)
+  const [sidebarCollapsed, setSidebarCollapsedSignal] = createSignal(initial.sidebarCollapsed)
   const save = (): void => {
     try {
       const value: StoredSettings = {
         notifications: notifications(),
         companionHidden: companionHidden(),
+        sidebarCollapsed: sidebarCollapsed(),
       }
       storage?.setItem(SETTINGS_KEY, JSON.stringify(value))
     } catch {
@@ -64,6 +76,12 @@ export function createSettings(storage?: SettingsStorage) {
     companionHidden,
     setCompanionHidden(value: boolean): void {
       setCompanionHiddenSignal(value)
+      save()
+    },
+    /** La barra lateral colapsada (F5.4): preferencia de esta ventana para anchos amplios; en estrecho es un cajón. */
+    sidebarCollapsed,
+    setSidebarCollapsed(value: boolean): void {
+      setSidebarCollapsedSignal(value)
       save()
     },
   }

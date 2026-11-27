@@ -33,6 +33,7 @@ describe('createNotifications', () => {
       expect(JSON.parse(data.get(SETTINGS_KEY) as string)).toEqual({
         notifications: true,
         companionHidden: false,
+        sidebarCollapsed: false,
       })
       await n.toggle()
       expect(n.state()).toBe('off')
