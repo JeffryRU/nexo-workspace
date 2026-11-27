@@ -42,6 +42,45 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: node tools/stress/pty-stress.mjs --rounds 30 --variants host-mixed,host-output-exit,host-resize-exit
 
+  # F6.1: paquete de ejecución (daemon, CLI, MCP, node-pty y el Node oficial como sidecar). Se construye de cero,
+  # se copia a una ruta con espacios y no ASCII y se prueba SOLO con sus lanzadores (sin repositorio ni el Node del
+  # sistema en el camino): /health, terminal real, agente falso y parada. Sin secretos.
+  package:
+    name: paquete y smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @nexo/web build
+      - name: Construye el paquete (descarga Node y verifica su SHA-256)
+        run: node tools/package/build-bundle.mjs --out dist/nexo-package
+      - name: Tamaño del paquete
+        shell: bash
+        run: |
+          du -sh dist/nexo-package
+          du -sh dist/nexo-package/* | sort -h
+          {
+            echo '### Tamaño del paquete (${{ matrix.os }})'
+            echo '```'
+            du -sh dist/nexo-package/* | sort -h
+            du -sh dist/nexo-package
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Smoke test del paquete
+        run: node tools/package/smoke.mjs --bundle dist/nexo-package
+      - name: Smoke test con el pty host (Linux)
+        if: runner.os == 'Linux'
+        run: node tools/package/smoke.mjs --bundle dist/nexo-package --pty-mode host
+
   desktop:
     name: desktop rust (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

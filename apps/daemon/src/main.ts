@@ -1,4 +1,5 @@
 import process from 'node:process'
+import { bundledClaudeExecutable } from './bundle.ts'
 import { parseEnv } from './config.ts'
 import { DaemonAlreadyRunningError, startDaemon } from './daemon.ts'
 
@@ -10,6 +11,8 @@ async function main(): Promise<number> {
     console.error(`nexo-daemon: ${(error as Error).message}`)
     return 1
   }
+  // Sin NEXO_CLAUDE_EXECUTABLE, el paquete puede traer el suyo en vendor/ (build con --with-claude).
+  const claudeExecutable = env.claudeExecutable ?? bundledClaudeExecutable(import.meta.url)
   let running: Awaited<ReturnType<typeof startDaemon>> | undefined
   const shutdown = (signal: string) => {
     running?.logger.info('apagando', { signal })
@@ -22,7 +25,7 @@ async function main(): Promise<number> {
       logLevel: env.logLevel,
       agentProviders: env.agentProviders,
       acpAgents: env.acpAgents,
-      ...(env.claudeExecutable === undefined ? {} : { claudeExecutable: env.claudeExecutable }),
+      ...(claudeExecutable === undefined ? {} : { claudeExecutable }),
       ...(env.codexExecutable === undefined ? {} : { codexExecutable: env.codexExecutable }),
       ...(env.agyExecutable === undefined ? {} : { agyExecutable: env.agyExecutable }),
       ollamaUrl: env.ollamaUrl,

@@ -183,7 +183,6 @@ fn setup_shortcut(app: &AppHandle, shortcut: &str) {
 pub fn run() {
     let settings = settings::from_process_env();
     let dev = cfg!(debug_assertions);
-    let launch = LaunchConfig::from_env(state_dir::default_dir(), dev);
     let close_to_tray = settings.close_to_tray;
     let shortcut = settings.shortcut.clone();
 
@@ -194,12 +193,18 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_notification::init())
-        .manage(AppState {
-            launch,
-            starting: Arc::new(Mutex::new(())),
-        })
         .invoke_handler(tauri::generate_handler![daemon_info])
         .setup(move |app| {
+            // En release los recursos (Node y daemon empaquetados) cuelgan de la carpeta de recursos de Tauri.
+            let launch = LaunchConfig::from_env(
+                state_dir::default_dir(),
+                dev,
+                app.path().resource_dir().ok(),
+            );
+            app.manage(AppState {
+                launch,
+                starting: Arc::new(Mutex::new(())),
+            });
             let handle = app.handle();
             build_window(handle, dev)?;
             setup_tray(handle)?;

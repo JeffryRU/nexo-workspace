@@ -1,0 +1,10 @@
+{
+  "version": "24.22.3",
+  "source": "https://nodejs.org/dist/v24.22.3/SHASUMS256.txt",
+  "files": {
+    "node-v24.22.3-linux-arm64.tar.xz": "6e51a2ada00f0011cc266f65d98922b403d7ad88f809ca2aa615a5fe1ce6e86c",
+    "node-v24.22.3-linux-x64.tar.xz": "4f2b175a6d53a5c617a80dba2676238a0688cef28c6da4eba35c7d844e66fcfb",
+    "node-v24.22.3-win-arm64.zip": "b3cc74a295b39d4f273271e96f58c06dd2b35757ca12abec64c7d0598b434f14",
+    "node-v24.22.3-win-x64.zip": "e612af99f626ab415ea225af6bce5c971feb448cb5cae250bb1c3fa50c5f7d9f"
+  }
+}

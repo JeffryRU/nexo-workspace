@@ -3,7 +3,14 @@ import { fileURLToPath } from 'node:url'
 import { type LoggerPort, PtySpawnError } from '@nexo/core'
 import { type HostEvent, type HostRequest, parseHostEvent } from './protocol.ts'
 
-export const DEFAULT_HOST_ENTRY = fileURLToPath(new URL('./host.ts', import.meta.url))
+/** En el paquete el host es `pty-host.mjs`, hermano del bundle; en el repositorio, `host.ts` (Node ejecuta TS). */
+export function hostEntryFor(moduleUrl: string): string {
+  return fileURLToPath(
+    new URL(moduleUrl.endsWith('.ts') ? './host.ts' : './pty-host.mjs', moduleUrl),
+  )
+}
+
+export const DEFAULT_HOST_ENTRY = hostEntryFor(import.meta.url)
 
 export type HostDownInfo = {
   /** `crash`: el host murió solo; `protocol`: se mató por mensajes inválidos repetidos; `disposed`: parada pedida. */

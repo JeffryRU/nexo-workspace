@@ -295,6 +295,13 @@ claude mcp add --scope user nexo -- node /ruta/a/nexo-workspace/apps/mcp/src/mai
 claude mcp add --scope user -e NEXO_MCP_WRITE=1 nexo -- node /ruta/a/nexo-workspace/apps/mcp/src/main.ts
 ```
 
+Con el **paquete** (ver «Paquete sin Node ni repositorio») no hace falta Node ni el repositorio: se registra el lanzador, que usa su propio Node.
+
+```bash
+claude mcp add --scope user nexo -- "/ruta/al/paquete/bin/nexo-mcp"        # Linux
+claude mcp add --scope user nexo -- "C:\ruta\al\paquete\bin\nexo-mcp.cmd"  # Windows
+```
+
 ```toml
 # Codex: ~/.codex/config.toml
 [mcp_servers.nexo]
@@ -328,6 +335,22 @@ amplios se puede colapsar (queda un carril con la mascota) y la preferencia se r
 
 ![Terminal con tres paneles a 1920 px](docs/capturas/f5-4-terminal-1920.png)
 ![Agente con un permiso pendiente a 360 px](docs/capturas/f5-4-agente-permiso-360.png)
+
+## Paquete sin Node ni repositorio
+
+`node tools/package/build-bundle.mjs` (tras `pnpm --filter @nexo/web build`) construye, para tu plataforma, un paquete autónomo en
+`apps/desktop/src-tauri/resources/nexo` con el daemon, la CLI, el MCP, `node-pty` y el Node oficial 24 (descargado al construir y verificado con SHA-256; nunca en
+ejecución). La app de escritorio en release lo usa tal cual; también se puede usar a mano:
+
+```bash
+node tools/package/smoke.mjs --bundle apps/desktop/src-tauri/resources/nexo   # comprueba el paquete de punta a punta
+apps/desktop/src-tauri/resources/nexo/bin/nexo ls                              # nexo.cmd en Windows
+ln -s "$PWD/apps/desktop/src-tauri/resources/nexo/bin/nexo" ~/.local/bin/nexo  # opcional: en el PATH (Linux)
+```
+
+En Windows, añade la carpeta `bin` del paquete al PATH si quieres `nexo` en cualquier terminal. El Claude Code que trae el SDK pesa unos 380 MB y no va en el paquete
+salvo con `--with-claude`; si no, define `NEXO_CLAUDE_EXECUTABLE`. Los instaladores (NSIS, AppImage, .deb) son F6.2. Detalles en
+[Arquitectura](docs/ARCHITECTURE.md#empaquetado-f61).
 
 ## Estructura
 
