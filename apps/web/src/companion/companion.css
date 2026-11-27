@@ -1,27 +1,16 @@
 /* Mascota (F5.3): ocupa su propio sitio bajo la lista de espacios; nunca flota sobre el contenido. */
-.side-column {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  min-width: 0;
-}
-.side-column > .sidebar {
-  flex: 1;
-  min-height: 0;
-}
 .companion-dock {
+  --companion-size: 96px;
   position: relative;
   flex: none;
   display: flex;
   justify-content: center;
-  padding: 8px 8px 10px;
-  background: var(--bg-sunken);
-  border-right: 1px solid var(--border);
+  padding: var(--space-3) var(--space-3) var(--space-4);
   border-top: 1px solid var(--border);
 }
 .companion-art {
-  width: 96px;
-  height: 96px;
+  width: var(--companion-size);
+  height: var(--companion-size);
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -31,8 +20,8 @@
 }
 .companion-img {
   display: block;
-  width: 96px;
-  height: 96px;
+  width: var(--companion-size);
+  height: var(--companion-size);
   object-fit: contain;
   image-rendering: pixelated;
   animation: companion-in 180ms ease-out;
@@ -100,25 +89,12 @@
 }
 
 .modal.companion-dialog {
-  width: min(520px, calc(100% - 24px));
-  min-width: 0;
-  max-height: calc(100% - 24px);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.companion-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.companion-head h2 {
-  margin: 0;
+  width: min(520px, 100%);
 }
 .companion-choices {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-2);
   margin: 0;
   padding: 0;
   border: 0;
@@ -126,17 +102,18 @@
 }
 .companion-choices legend {
   padding: 0;
-  margin-bottom: 4px;
+  margin-bottom: var(--space-2);
   color: var(--fg-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 .companion-choice {
   display: flex;
-  gap: 8px;
+  gap: var(--space-3);
   align-items: flex-start;
-  padding: 6px 8px;
+  min-height: var(--hit);
+  padding: var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   cursor: pointer;
@@ -157,13 +134,13 @@
   color: var(--fg-strong);
 }
 .companion-invalid h3 {
-  margin: 4px 0;
-  font-size: 12px;
+  margin: var(--space-2) 0;
+  font-size: var(--text-sm);
   color: var(--fg-muted);
 }
 .companion-invalid ul {
   margin: 0;
-  padding-left: 18px;
+  padding-left: var(--space-5);
   overflow-wrap: anywhere;
 }
 .companion-error {
@@ -172,18 +149,24 @@
 }
 .companion-show {
   display: flex;
-  gap: 8px;
+  gap: var(--space-3);
   align-items: center;
-  margin-top: 4px;
+  min-height: var(--hit);
 }
 .companion-hint {
   margin: 0;
 }
-/* Centrado respecto de la ventana (no de la rejilla, que en anchos muy estrechos puede desbordarse). */
-.modal-backdrop.companion-backdrop {
-  position: fixed;
+
+/* Carril (barra lateral colapsada): la mascota se dibuja al 60 % y sin botón de ocultar (se oculta desde el selector). */
+.side-column.rail .companion-dock {
+  --companion-size: 58px;
+  padding: var(--space-3) 0;
+  border-top: 0;
 }
-.modal.companion-dialog {
-  width: min(520px, calc(100vw - 24px));
-  max-height: calc(100vh - 24px);
+.side-column.rail .companion-sheet {
+  transform: scale(0.6);
+  transform-origin: 0 0;
+}
+.side-column.rail .companion-hide {
+  display: none;
 }

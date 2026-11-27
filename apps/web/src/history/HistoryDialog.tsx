@@ -1,9 +1,11 @@
 import type { HistoryProject, HistorySession } from '@nexo/contracts'
-import { createEffect, createMemo, createSignal, For, Show } from 'solid-js'
+import { createMemo, createSignal, For, Show } from 'solid-js'
 import { AgentModelContext, BlockView } from '../agent/blocks.tsx'
 import { MarkdownEnvContext } from '../agent/markdown.tsx'
 import { useModel } from '../app/model.tsx'
 import { es, format } from '../i18n/es.ts'
+import { Dialog } from '../ui/Dialog.tsx'
+import { Icon } from '../ui/Icon.tsx'
 import { useHistoryBlocks, useHistoryList, useProviderNames } from './queries.ts'
 import { createReadOnlyModel } from './readonly-model.ts'
 import {
@@ -39,7 +41,8 @@ export function HistoryToggle() {
       aria-haspopup="dialog"
       onClick={() => app.ui.setHistoryOpen(true)}
     >
-      {es.history.open}
+      <Icon name="clock" />
+      <span class="status-label">{es.history.open}</span>
     </button>
   )
 }
@@ -51,45 +54,29 @@ export function HistoryToggle() {
  */
 export function HistoryDialog() {
   const app = useModel()
-  let dialog!: HTMLDivElement
   const [picked, setPicked] = createSignal<Picked | undefined>()
-  createEffect(() => {
-    // Al cambiar de vista el botón pulsado desaparece: el foco vuelve a la ventana para que Escape siga funcionando.
-    picked()
-    if (app.ui.historyOpen()) dialog?.focus()
-    else setPicked(undefined)
-  })
-  const close = () => app.ui.setHistoryOpen(false)
+  const close = () => {
+    setPicked(undefined)
+    app.ui.setHistoryOpen(false)
+  }
 
   return (
     <Show when={app.ui.historyOpen()}>
-      <div class="modal-backdrop">
-        <div
-          ref={dialog}
-          class="modal history-dialog"
-          role="dialog"
-          aria-modal="true"
-          aria-label={es.history.title}
-          tabIndex={-1}
-          onKeyDown={(e) => {
-            if (e.key !== 'Escape') return
-            if (picked() === undefined) close()
-            else setPicked(undefined)
-          }}
-        >
-          <header class="history-head">
-            <h2>{es.history.title}</h2>
-            <button type="button" class="text-button" onClick={close}>
-              {es.history.close}
-            </button>
-          </header>
-          <Show when={picked()} fallback={<HistoryList onPick={setPicked} onResumed={close} />}>
-            {(p) => (
-              <SessionView picked={p()} onBack={() => setPicked(undefined)} onResumed={close} />
-            )}
-          </Show>
-        </div>
-      </div>
+      {/* Al cambiar de vista el botón pulsado desaparece: el foco vuelve a la caja para que Escape siga funcionando. */}
+      <Dialog
+        label={es.history.title}
+        closeLabel={es.history.close}
+        class="history-dialog"
+        onClose={close}
+        onEscape={() => (picked() === undefined ? close() : setPicked(undefined))}
+        refocus={picked}
+      >
+        <Show when={picked()} fallback={<HistoryList onPick={setPicked} onResumed={close} />}>
+          {(p) => (
+            <SessionView picked={p()} onBack={() => setPicked(undefined)} onResumed={close} />
+          )}
+        </Show>
+      </Dialog>
     </Show>
   )
 }
@@ -315,7 +302,8 @@ function SessionView(props: { picked: Picked; onBack: () => void; onResumed: () 
     <div class="history-body">
       <div class="history-session-head">
         <button type="button" class="text-button" onClick={props.onBack}>
-          ← {es.history.back}
+          <Icon name="arrow-left" size="sm" />
+          {es.history.back}
         </button>
         <div class="history-session-info">
           <strong class="ellipsis" title={props.picked.title}>

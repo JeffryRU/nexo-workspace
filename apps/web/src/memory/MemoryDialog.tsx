@@ -1,10 +1,12 @@
 import { memoryApi } from '@nexo/client'
 import { type MemoryUsageTotals, type Observation, PaneId } from '@nexo/contracts'
 import { useMutation, useQueryClient } from '@tanstack/solid-query'
-import { createEffect, createMemo, createSignal, For, Show } from 'solid-js'
+import { createMemo, createSignal, For, Show } from 'solid-js'
 import { type AppModel, useModel } from '../app/model.tsx'
 import { es, format } from '../i18n/es.ts'
 import { activeTabOf } from '../state/store.ts'
+import { Dialog } from '../ui/Dialog.tsx'
+import { Icon } from '../ui/Icon.tsx'
 import { useCurrentWorkspaceId } from '../ui/parts.tsx'
 import { useMemoryList, useMemoryRecall, useMemoryStatus } from './queries.ts'
 import {
@@ -51,10 +53,10 @@ function Cost(props: { label: string; usage: MemoryUsageTotals }) {
   return (
     <tr>
       <th scope="row">{props.label}</th>
-      <td>{props.usage.calls}</td>
-      <td>{formatTokens(props.usage.inputTokens)}</td>
-      <td>{formatTokens(props.usage.outputTokens)}</td>
-      <td>{formatCost(props.usage.costUsd)}</td>
+      <td class="num">{props.usage.calls}</td>
+      <td class="num">{formatTokens(props.usage.inputTokens)}</td>
+      <td class="num">{formatTokens(props.usage.outputTokens)}</td>
+      <td class="num">{formatCost(props.usage.costUsd)}</td>
     </tr>
   )
 }
@@ -166,11 +168,6 @@ export function MemoryDialog() {
   const cwd = useMemoryCwd()
   const status = useMemoryStatus(cwd)
   const list = useMemoryList(cwd)
-  let dialog!: HTMLDivElement
-  createEffect(() => {
-    if (app.ui.memoryOpen()) dialog?.focus()
-  })
-
   const configure = useMutation(() => ({
     mutationFn: async (params: { enabled?: boolean; renewAtTokens?: number | null }) => {
       const client = app.agentClient()
@@ -189,100 +186,96 @@ export function MemoryDialog() {
 
   return (
     <Show when={app.ui.memoryOpen()}>
-      <div class="modal-backdrop">
-        <div
-          ref={dialog}
-          class="modal memory-dialog"
-          role="dialog"
-          aria-modal="true"
-          aria-label={es.memory.title}
-          tabIndex={-1}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') app.ui.setMemoryOpen(false)
-          }}
-        >
-          <header class="memory-head">
-            <h2>{es.memory.title}</h2>
-            <button type="button" class="text-button" onClick={() => app.ui.setMemoryOpen(false)}>
-              {es.memory.close}
-            </button>
-          </header>
-
-          <section class="memory-section" aria-label={es.memory.settings}>
-            <label class="memory-switch">
-              <input
-                type="checkbox"
-                checked={status.data?.enabled ?? false}
-                disabled={status.data === undefined || configure.isPending}
-                onChange={(e) => configure.mutate({ enabled: e.currentTarget.checked })}
-              />
-              <span>{es.memory.enabled}</span>
-            </label>
-            <p class="muted">{es.memory.enabledHint}</p>
-            <Show when={status.data}>
-              {(s) => (
-                <>
-                  <p class="muted" data-testid="memory-summarizer">
-                    {s().summarizer === undefined
-                      ? es.memory.noSummarizer
-                      : format(es.memory.summarizer, { name: s().summarizer ?? '' })}
-                    {'. '}
-                    {es.memory.summarizerHint}
-                  </p>
-                  <Show when={s().pausedReason}>
-                    {(reason) => (
-                      <p class="memory-paused" role="status">
-                        {format(es.memory.paused, { reason: reason() })}
-                      </p>
-                    )}
-                  </Show>
-                </>
-              )}
-            </Show>
-            <label class="memory-renew">
-              <span>{es.memory.renewLabel}</span>
-              <select
-                aria-label={es.memory.renewLabel}
-                disabled={status.data === undefined || configure.isPending}
-                onChange={(e) => {
-                  const v = e.currentTarget.value
-                  configure.mutate({ renewAtTokens: v === '' ? null : Number(v) })
-                }}
-              >
-                <option value="" selected={status.data?.renewAtTokens === undefined}>
-                  {es.memory.renewOff}
-                </option>
-                <For each={renewChoices()}>
-                  {(n) => (
-                    <option value={String(n)} selected={status.data?.renewAtTokens === n}>
-                      {format(es.memory.renewOption, { tokens: formatTokens(n) })}
-                    </option>
+      <Dialog
+        label={es.memory.title}
+        closeLabel={es.memory.close}
+        class="memory-dialog"
+        onClose={() => app.ui.setMemoryOpen(false)}
+      >
+        <section class="memory-section" aria-label={es.memory.settings}>
+          <label class="memory-switch">
+            <input
+              type="checkbox"
+              checked={status.data?.enabled ?? false}
+              disabled={status.data === undefined || configure.isPending}
+              onChange={(e) => configure.mutate({ enabled: e.currentTarget.checked })}
+            />
+            <span>{es.memory.enabled}</span>
+          </label>
+          <p class="muted">{es.memory.enabledHint}</p>
+          <Show when={status.data}>
+            {(s) => (
+              <>
+                <p class="muted" data-testid="memory-summarizer">
+                  {s().summarizer === undefined
+                    ? es.memory.noSummarizer
+                    : format(es.memory.summarizer, { name: s().summarizer ?? '' })}
+                  {'. '}
+                  {es.memory.summarizerHint}
+                </p>
+                <Show when={s().pausedReason}>
+                  {(reason) => (
+                    <p class="memory-paused" role="status">
+                      {format(es.memory.paused, { reason: reason() })}
+                    </p>
                   )}
-                </For>
-              </select>
-            </label>
-            <p class="muted">{es.memory.renewHint}</p>
-            <Show when={configure.isError}>
-              <p class="memory-error" role="alert">
-                {format(es.memory.saveFailed, {
-                  message: String(configure.error?.message ?? configure.error),
-                })}
-              </p>
-            </Show>
-          </section>
+                </Show>
+              </>
+            )}
+          </Show>
+          <label class="memory-renew">
+            <span>{es.memory.renewLabel}</span>
+            <select
+              aria-label={es.memory.renewLabel}
+              disabled={status.data === undefined || configure.isPending}
+              onChange={(e) => {
+                const v = e.currentTarget.value
+                configure.mutate({ renewAtTokens: v === '' ? null : Number(v) })
+              }}
+            >
+              <option value="" selected={status.data?.renewAtTokens === undefined}>
+                {es.memory.renewOff}
+              </option>
+              <For each={renewChoices()}>
+                {(n) => (
+                  <option value={String(n)} selected={status.data?.renewAtTokens === n}>
+                    {format(es.memory.renewOption, { tokens: formatTokens(n) })}
+                  </option>
+                )}
+              </For>
+            </select>
+          </label>
+          <p class="muted">{es.memory.renewHint}</p>
+          <Show when={configure.isError}>
+            <p class="memory-error" role="alert">
+              {format(es.memory.saveFailed, {
+                message: String(configure.error?.message ?? configure.error),
+              })}
+            </p>
+          </Show>
+        </section>
 
-          <section class="memory-section" aria-label={es.memory.cost}>
-            <h3>{es.memory.cost}</h3>
-            <Show when={status.data?.roles} fallback={<p class="muted">{es.memory.loading}</p>}>
-              {(roles) => (
+        <section class="memory-section" aria-label={es.memory.cost}>
+          <h3>{es.memory.cost}</h3>
+          <Show when={status.data?.roles} fallback={<p class="muted">{es.memory.loading}</p>}>
+            {(roles) => (
+              <div class="table-wrap">
                 <table class="memory-cost">
                   <thead>
                     <tr>
                       <th />
-                      <th scope="col">{es.memory.calls}</th>
-                      <th scope="col">{es.memory.tokensIn}</th>
-                      <th scope="col">{es.memory.tokensOut}</th>
-                      <th scope="col">USD</th>
+                      <th scope="col" class="num">
+                        {es.memory.calls}
+                      </th>
+                      <th scope="col" class="num">
+                        {es.memory.tokensIn}
+                      </th>
+                      <th scope="col" class="num">
+                        {es.memory.tokensOut}
+                      </th>
+                      <th scope="col" class="num">
+                        USD
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -297,66 +290,66 @@ export function MemoryDialog() {
                     </Show>
                   </tbody>
                 </table>
-              )}
-            </Show>
-          </section>
+              </div>
+            )}
+          </Show>
+        </section>
 
-          <section class="memory-section" aria-label={es.memory.observations}>
-            <Show when={cwd()} fallback={<p class="muted">{es.memory.noProject}</p>}>
-              {(dir) => (
-                <>
-                  <p class="muted ellipsis" title={dir()}>
-                    {format(es.memory.projectLabel, { cwd: dir() })}
+        <section class="memory-section" aria-label={es.memory.observations}>
+          <Show when={cwd()} fallback={<p class="muted">{es.memory.noProject}</p>}>
+            {(dir) => (
+              <>
+                <p class="muted ellipsis" title={dir()}>
+                  {format(es.memory.projectLabel, { cwd: dir() })}
+                </p>
+                <Show when={list.isPending}>
+                  <p class="muted">{es.memory.loading}</p>
+                </Show>
+                <Show when={list.isError}>
+                  <p class="memory-error" role="alert">
+                    {format(es.memory.loadFailed, {
+                      message: String(list.error?.message ?? list.error),
+                    })}
                   </p>
-                  <Show when={list.isPending}>
-                    <p class="muted">{es.memory.loading}</p>
-                  </Show>
-                  <Show when={list.isError}>
-                    <p class="memory-error" role="alert">
-                      {format(es.memory.loadFailed, {
-                        message: String(list.error?.message ?? list.error),
-                      })}
-                    </p>
-                  </Show>
-                  <Show when={list.data}>
-                    {(data) => (
-                      <>
-                        <h3>{es.memory.reflectionTitle}</h3>
-                        <Show
-                          when={data().reflection}
-                          fallback={<p class="muted">{es.memory.noReflection}</p>}
-                        >
-                          {(r) => (
-                            <>
-                              <p class="muted">
-                                {format(es.memory.reflectionGeneration, {
-                                  generation: r().generation,
-                                })}
-                              </p>
-                              <pre class="memory-text memory-reflection">{r().text}</pre>
-                            </>
-                          )}
-                        </Show>
-                        <h3>{es.memory.observations}</h3>
-                        <Show
-                          when={data().observations.length > 0}
-                          fallback={<p class="muted">{es.memory.noObservations}</p>}
-                        >
-                          <ul class="memory-list">
-                            <For each={data().observations}>
-                              {(o) => <ObservationItem observation={o} />}
-                            </For>
-                          </ul>
-                        </Show>
-                      </>
-                    )}
-                  </Show>
-                </>
-              )}
-            </Show>
-          </section>
-        </div>
-      </div>
+                </Show>
+                <Show when={list.data}>
+                  {(data) => (
+                    <>
+                      <h3>{es.memory.reflectionTitle}</h3>
+                      <Show
+                        when={data().reflection}
+                        fallback={<p class="muted">{es.memory.noReflection}</p>}
+                      >
+                        {(r) => (
+                          <>
+                            <p class="muted">
+                              {format(es.memory.reflectionGeneration, {
+                                generation: r().generation,
+                              })}
+                            </p>
+                            <pre class="memory-text memory-reflection">{r().text}</pre>
+                          </>
+                        )}
+                      </Show>
+                      <h3>{es.memory.observations}</h3>
+                      <Show
+                        when={data().observations.length > 0}
+                        fallback={<p class="muted">{es.memory.noObservations}</p>}
+                      >
+                        <ul class="memory-list">
+                          <For each={data().observations}>
+                            {(o) => <ObservationItem observation={o} />}
+                          </For>
+                        </ul>
+                      </Show>
+                    </>
+                  )}
+                </Show>
+              </>
+            )}
+          </Show>
+        </section>
+      </Dialog>
     </Show>
   )
 }
@@ -374,9 +367,12 @@ export function MemoryToggle() {
       aria-haspopup="dialog"
       onClick={() => app.ui.setMemoryOpen(true)}
     >
-      {status.data === undefined
-        ? es.memory.open
-        : `${es.memory.open}: ${status.data.enabled ? es.memory.stateOn : es.memory.stateOff}`}
+      <Icon name="layers" />
+      <span class="status-label">
+        {status.data === undefined
+          ? es.memory.open
+          : `${es.memory.open}: ${status.data.enabled ? es.memory.stateOn : es.memory.stateOff}`}
+      </span>
     </button>
   )
 }

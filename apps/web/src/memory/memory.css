@@ -1,26 +1,19 @@
-.memory-dialog {
-  width: min(760px, 92vw);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.memory-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.memory-head h2 {
-  margin: 0;
+.modal.memory-dialog {
+  width: min(760px, 100%);
 }
 .memory-section {
   display: grid;
-  gap: 4px;
-  padding: 8px 0;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
   border-top: 1px solid var(--border);
 }
+.memory-section:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
 .memory-section h3 {
-  margin: 6px 0 2px;
-  font-size: 13px;
+  margin: var(--space-3) 0 var(--space-1);
+  font-size: var(--text-md);
   color: var(--fg-strong);
 }
 .memory-section p {
@@ -30,7 +23,8 @@
 .memory-renew {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: var(--space-3);
 }
 .memory-renew select {
   font: inherit;
@@ -38,7 +32,9 @@
   background: var(--bg-sunken);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 2px 6px;
+  height: var(--hit);
+  padding: 0 var(--space-3);
+  max-width: 100%;
 }
 .memory-paused {
   color: var(--warn);
@@ -46,18 +42,42 @@
 .memory-error {
   color: var(--danger);
 }
+.table-wrap {
+  overflow-x: auto;
+}
 .memory-cost {
+  width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .memory-cost th,
 .memory-cost td {
-  padding: 2px 10px 2px 0;
+  padding: var(--space-2) var(--space-3);
   text-align: left;
   font-weight: normal;
+  white-space: nowrap;
 }
-.memory-cost td {
+.memory-cost tbody tr + tr {
+  border-top: 1px solid var(--border);
+}
+/* Columnas numéricas: alineadas a la derecha y con cifras de ancho fijo para que los decimales casen. */
+.memory-cost .num {
+  text-align: right;
   font-variant-numeric: tabular-nums;
+}
+.memory-cost tbody th {
+  color: var(--fg-strong);
+  white-space: normal;
+}
+.memory-cost thead th {
+  white-space: normal;
+  vertical-align: bottom;
+}
+@media (max-width: 520px) {
+  .memory-cost th,
+  .memory-cost td {
+    padding: var(--space-2);
+  }
 }
 .memory-cost thead th {
   color: var(--fg-muted);
@@ -67,13 +87,13 @@
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 8px;
+  gap: var(--space-3);
 }
 .memory-obs {
   border: 1px solid var(--border);
   border-left-width: 3px;
   border-radius: var(--radius);
-  padding: 6px 10px;
+  padding: var(--space-3) var(--space-4);
   background: var(--bg-elevated);
 }
 .memory-obs[data-priority="high"] {
@@ -89,9 +109,9 @@
 .memory-obs-origin {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-3);
   align-items: center;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--fg-muted);
 }
 .memory-obs-seq {
@@ -99,48 +119,44 @@
 }
 .memory-tag {
   border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  padding: 0 var(--space-3);
 }
 /* El texto de una observación es dato: se muestra tal cual, sin interpretar nada. */
 .memory-text {
-  margin: 4px 0;
-  font: 12px / 1.45 var(--font-mono);
+  margin: var(--space-2) 0;
+  font: var(--text-sm) / 1.45 var(--font-mono);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   color: var(--fg);
 }
 .memory-source {
-  margin-top: 4px;
-  padding: 4px 8px;
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-left: 2px solid var(--border);
   background: var(--bg-sunken);
 }
 .memory-source-label {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--fg-muted);
 }
 .memory-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  padding: 3px 10px;
-  font-size: 12px;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
   border-top: 1px solid var(--border);
   background: var(--bg-sunken);
   color: var(--fg-muted);
 }
 .memory-badge {
   border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  padding: 0 var(--space-4);
   color: var(--ok);
 }
 .memory-bar [aria-busy="true"] {
   opacity: var(--opacity-dim);
-}
-/* Con dos interruptores en la barra de estado, solo el primero empuja a la derecha. */
-.memory-toggle + .status-toggle {
-  margin-left: 0;
 }

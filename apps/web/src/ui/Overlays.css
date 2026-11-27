@@ -3,75 +3,53 @@
   display: grid;
   place-content: center;
   justify-items: center;
-  gap: 8px;
-  padding: 24px;
+  gap: var(--space-3);
+  padding: var(--space-6);
   text-align: center;
 }
 .status-screen h1 {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--text-lg);
   color: var(--fg-strong);
 }
 .status-screen p {
   margin: 0;
   max-width: 56ch;
 }
-.banner {
+.banner,
+.toast {
   position: absolute;
-  top: 8px;
-  left: 50%;
-  transform: translateX(-50%);
   display: flex;
-  gap: 12px;
+  gap: var(--space-4);
   align-items: center;
-  padding: 6px 12px;
+  padding: var(--space-3) var(--space-4);
   background: var(--bg-elevated);
   border: 1px solid var(--warn);
   border-radius: var(--radius);
-  z-index: 20;
+  max-width: calc(100% - 2 * var(--space-4));
+  z-index: var(--z-toast);
+}
+.banner {
+  top: var(--space-3);
+  left: 50%;
+  transform: translateX(-50%);
 }
 .toast {
-  position: absolute;
-  right: 12px;
-  bottom: 28px;
-  max-width: 420px;
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  padding: 8px 12px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--danger);
-  border-radius: var(--radius);
-  z-index: 20;
+  right: var(--space-4);
+  bottom: calc(var(--statusbar-h) + var(--space-3));
+  width: max-content;
+  max-width: min(420px, calc(100% - 2 * var(--space-4)));
+  border-color: var(--danger);
 }
-.modal-backdrop {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  background: rgb(0 0 0 / 0.5);
-  z-index: 30;
-}
-.modal {
-  min-width: 360px;
-  max-width: 90vw;
-  max-height: 85vh;
-  overflow: auto;
-  padding: 16px 20px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-}
-.modal h2 {
-  margin: 0 0 12px;
-  font-size: 15px;
-  color: var(--fg-strong);
+.toast > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .shortcut-list {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 6px 24px;
-  margin: 0 0 12px;
+  gap: var(--space-3) var(--space-6);
+  margin: 0;
 }
 .shortcut-list dt {
   color: var(--fg);
@@ -79,24 +57,27 @@
 .shortcut-list dd {
   margin: 0;
   display: flex;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: var(--space-2);
   justify-content: flex-end;
 }
 kbd {
-  font: 11px var(--font-mono);
-  padding: 1px 6px;
+  font: var(--text-xs) var(--font-mono);
+  padding: var(--space-1) var(--space-2);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--bg-sunken);
   color: var(--fg-strong);
 }
 .searchbar {
   position: absolute;
-  top: 40px;
-  right: 16px;
+  top: calc(var(--bar-h) + var(--space-2));
+  right: var(--space-4);
   display: flex;
-  gap: 2px;
-  padding: 4px;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: calc(100% - 2 * var(--space-4));
+  padding: var(--space-2);
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -108,6 +89,9 @@ kbd {
   background: var(--bg-sunken);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 2px 8px;
+  height: var(--hit);
+  padding: 0 var(--space-3);
   width: 200px;
+  min-width: 0;
+  flex: 1 1 120px;
 }
