@@ -85,9 +85,11 @@ describe('Layout', () => {
 describe('Pane, Tab, Workspace, Attention', () => {
   const pane = { id: 'p1', kind: 'terminal', title: 'Terminal', attention: 'idle' }
 
-  it('Pane: kind terminal|agent y attention válidos', () => {
+  it('Pane: kind terminal|agent|viewer y attention válidos', () => {
     expect(Pane.safeParse(pane).success).toBe(true)
-    expect(Pane.safeParse({ ...pane, kind: 'viewer' }).success).toBe(false)
+    expect(Pane.safeParse({ ...pane, kind: 'browser' }).success).toBe(false)
+    expect(Pane.safeParse({ ...pane, kind: 'viewer', viewerPath: '/a/b.md' }).success).toBe(true)
+    expect(Pane.safeParse({ ...pane, kind: 'viewer', viewerPath: '' }).success).toBe(false)
     expect(Pane.safeParse({ ...pane, attention: 'sleeping' }).success).toBe(false)
     expect(Pane.safeParse({ ...pane, terminalId: 't1' }).success).toBe(true)
     for (const a of ['idle', 'working', 'needs-input', 'done', 'error']) {

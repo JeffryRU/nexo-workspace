@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest'
 import { FakeAgentProvider } from './fake-agent.ts'
 import {
   FakeClock,
-  FakeFileSystem,
   FakeLogger,
   FakeNotifier,
   FakeProcessLauncher,
@@ -101,21 +100,6 @@ describe('otros falsos', () => {
     log.warn('c')
     log.error('d')
     expect(log.entries.map((e) => e.level)).toEqual(['debug', 'info', 'warn', 'error'])
-  })
-
-  it('FakeFileSystem lee, escribe, lista y borra', async () => {
-    const fs = new FakeFileSystem()
-    await fs.mkdir('/a')
-    await fs.writeText('/a/x.txt', 'hola')
-    expect(await fs.readText('/a/x.txt')).toBe('hola')
-    expect(await fs.readDir('/a')).toEqual(['x.txt'])
-    expect((await fs.stat('/a/x.txt')).size).toBe(4)
-    expect((await fs.stat('/a')).isDirectory).toBe(true)
-    await fs.remove('/a/x.txt')
-    expect(await fs.exists('/a/x.txt')).toBe(false)
-    await expect(fs.readText('/nada')).rejects.toThrow('ENOENT')
-    await expect(fs.stat('/nada')).rejects.toThrow('ENOENT')
-    await expect(fs.readDir('/nada')).rejects.toThrow('ENOENT')
   })
 
   it('FakeProcessLauncher y FakeAgentProvider son programables', async () => {

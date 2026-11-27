@@ -73,8 +73,18 @@ export class WorkspaceService {
   }
 
   split(params: MethodParams<'pane.split'>): MethodResult<'pane.split'> {
-    const pane = this.#layout.split(params.paneId, params.direction, params.kind, params.ratio)
+    const pane = this.#layout.split(
+      params.paneId,
+      params.direction,
+      params.kind,
+      params.ratio,
+      params.path,
+    )
     return { pane, layout: this.#layout.layoutOfPane(pane.id) }
+  }
+
+  openViewer(params: MethodParams<'viewer.open'>): MethodResult<'viewer.open'> {
+    return { pane: this.#layout.openViewer(params.paneId, params.path) }
   }
 
   closePane(params: MethodParams<'pane.close'>): MethodResult<'pane.close'> {

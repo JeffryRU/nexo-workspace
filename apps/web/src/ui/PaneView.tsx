@@ -1,5 +1,5 @@
 import type { PaneId } from '@nexo/contracts'
-import { createMemo, Show } from 'solid-js'
+import { createMemo, Match, Show, Switch } from 'solid-js'
 import { AgentPanel } from '../agent/AgentPanel.tsx'
 import { useModel } from '../app/model.tsx'
 import { es } from '../i18n/es.ts'
@@ -7,6 +7,7 @@ import { findPaneTab } from '../state/store.ts'
 import { paneTitle } from '../terminal/title.ts'
 import { AttentionDot } from './parts.tsx'
 import { TerminalView } from './TerminalView.tsx'
+import { ViewerPlaceholder } from './ViewerPlaceholder.tsx'
 import './PaneView.css'
 
 export function PaneView(props: { paneId: PaneId }) {
@@ -15,9 +16,12 @@ export function PaneView(props: { paneId: PaneId }) {
   const pane = () => located()?.tab.panes.find((p) => p.id === props.paneId)
   const focused = () => located()?.tab.focusedPaneId === props.paneId
   const isAgent = () => pane()?.kind === 'agent'
+  const isViewer = () => pane()?.kind === 'viewer'
   const title = () => {
     const t = paneTitle(pane()?.title ?? '')
-    return isAgent() && t.label === '' ? { label: es.agent.paneTitle, full: es.agent.paneTitle } : t
+    if (t.label !== '') return t
+    const fallback = isAgent() ? es.agent.paneTitle : isViewer() ? es.viewer.paneTitle : undefined
+    return fallback === undefined ? t : { label: fallback, full: fallback }
   }
   const swapping = () => ui.swapSource() !== undefined
 
@@ -97,8 +101,7 @@ export function PaneView(props: { paneId: PaneId }) {
               </button>
             </span>
           </header>
-          <Show
-            when={p().kind === 'agent'}
+          <Switch
             fallback={
               <TerminalView
                 paneId={props.paneId}
@@ -112,13 +115,18 @@ export function PaneView(props: { paneId: PaneId }) {
               />
             }
           >
-            <AgentPanel
-              paneId={props.paneId}
-              sessionId={p().agentSessionId}
-              defaultCwd={located()?.workspace.cwd}
-              focused={focused()}
-            />
-          </Show>
+            <Match when={p().kind === 'agent'}>
+              <AgentPanel
+                paneId={props.paneId}
+                sessionId={p().agentSessionId}
+                defaultCwd={located()?.workspace.cwd}
+                focused={focused()}
+              />
+            </Match>
+            <Match when={p().kind === 'viewer'}>
+              <ViewerPlaceholder path={p().viewerPath} />
+            </Match>
+          </Switch>
         </section>
       )}
     </Show>

@@ -10,6 +10,7 @@ export const COMMANDS = [
   'rename',
   'agent',
   'memory',
+  'fs',
   'daemon',
 ] as const
 export type CommandName = (typeof COMMANDS)[number]
@@ -36,6 +37,7 @@ Comandos:
   rename <pestaña|espacio> <nombre>   renombra
   agent <sub>                sesiones de agente (new, send, ls, attach, interrupt, close, respond)
   memory <sub>               memoria observacional (status, config, ls, search, recall)
+  fs <sub>                   archivos de los espacios de trabajo (stat, cat)
   daemon status|stop|log     controla el daemon
 
 Los paneles, pestañas y espacios se indican con su id completo, un prefijo único del id
@@ -137,6 +139,16 @@ Cambia el título de una pestaña o el nombre de un espacio.
 
 El proyecto es la carpeta actual, o --cwd. La memoria viene apagada: se activa con
 nexo memory config --on (o NEXO_MEMORY=on) y hace falta NEXO_MEMORY_SUMMARIZER (mira el README). Con --json cada subcomando emite su resultado.
+`,
+  fs: `Uso: nexo fs <subcomando> <ruta> [opciones]
+
+  stat <ruta>                           tipo (por firma y extensión), tamaño, fecha y tope de lectura
+  cat <ruta> [--max-bytes N] [--base64] contenido: texto UTF-8 (sin secuencias de escape) o, con --base64,
+                                        cualquier tipo en base64; --max-bytes (1 MiB, máx. 64 MiB) acota
+
+Solo se leen archivos dentro de las carpetas de los espacios de trabajo abiertos; las carpetas ocultas
+sensibles (.ssh, .gnupg, .aws, .claude, .env...), los enlaces que salen de ellas y las rutas de
+dispositivo se rechazan. Las rutas relativas se resuelven contra la carpeta actual.
 `,
   daemon: `Uso: nexo daemon status|stop|log
 

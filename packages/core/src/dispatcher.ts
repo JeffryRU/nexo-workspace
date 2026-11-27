@@ -8,6 +8,7 @@ import {
   type MethodResult,
 } from '@nexo/contracts'
 import { DomainError } from './errors.ts'
+import type { FileHandlers } from './file-service.ts'
 import type { SnapshotService } from './snapshot-service.ts'
 import type { TerminalService } from './terminal-service.ts'
 import type { WorkspaceService } from './workspace-service.ts'
@@ -36,6 +37,8 @@ export type DispatcherServices = {
   agents?: AgentHandlers
   /** Sin él, todo `memory.*` responde `PROVIDER_UNAVAILABLE`. */
   memory?: MemoryHandlers
+  /** Sin él, `fs.*` responde `PROVIDER_UNAVAILABLE`. */
+  files?: FileHandlers
   /** Pide el apagado del daemon; debe volver enseguida (el apagado ocurre después de responder). */
   shutdown: () => void
 }
@@ -67,6 +70,12 @@ export function createHandlers(s: DispatcherServices): Handlers {
     }
     return s.memory
   }
+  const files = (): FileHandlers => {
+    if (s.files === undefined) {
+      throw new DomainError('PROVIDER_UNAVAILABLE', 'el acceso a archivos no está disponible')
+    }
+    return s.files
+  }
   return {
     // La autenticación la resuelve quien despacha (daemon) antes de llegar aquí; ya autenticado es un no-op.
     auth: () => ({}),
@@ -91,6 +100,7 @@ export function createHandlers(s: DispatcherServices): Handlers {
     'pane.focus': (p) => s.workspaces.focusPane(p),
     'pane.resize': (p) => s.workspaces.resizePane(p),
     'pane.swap': (p) => s.workspaces.swapPanes(p),
+    'viewer.open': (p) => s.workspaces.openViewer(p),
     'terminal.spawn': (p) => s.terminals.spawn(p),
     'terminal.write': (p) => s.terminals.write(p),
     'terminal.resize': (p) => s.terminals.resize(p),
@@ -110,6 +120,8 @@ export function createHandlers(s: DispatcherServices): Handlers {
     'memory.search': (p) => memory()['memory.search'](p),
     'memory.recall': (p) => memory()['memory.recall'](p),
     'memory.configure': (p) => memory()['memory.configure'](p),
+    'fs.stat': (p) => files()['fs.stat'](p),
+    'fs.read': (p) => files()['fs.read'](p),
   }
 }
 

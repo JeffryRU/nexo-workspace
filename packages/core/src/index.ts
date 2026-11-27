@@ -1,6 +1,9 @@
 export * from './agent-service.ts'
 export * from './dispatcher.ts'
 export * from './errors.ts'
+export * from './file-read.ts'
+export * from './file-rules.ts'
+export * from './file-service.ts'
 export * from './layout.ts'
 export * from './layout-service.ts'
 export * from './memory-inject.ts'
@@ -19,6 +22,8 @@ export type {
   AgentResponse,
 } from './ports/agent.ts'
 export { AgentProviderError } from './ports/agent.ts'
+export type { FileSystemErrorCode, FileSystemPort } from './ports/file-system.ts'
+export { FileSystemError } from './ports/file-system.ts'
 export type {
   AbortSignalLike,
   MemoryStoreErrorCode,
@@ -43,8 +48,6 @@ export type {
   BusEvent,
   ClockPort,
   EventBusPort,
-  FileStat,
-  FileSystemPort,
   IdPort,
   LogFields,
   LoggerPort,

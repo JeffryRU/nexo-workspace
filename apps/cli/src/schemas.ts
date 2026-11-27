@@ -3,6 +3,9 @@ import {
   Attention,
   Block,
   BlockRange,
+  FileType,
+  FsEncoding,
+  fsMethods,
   memoryMethods,
   PaneKind,
 } from '@nexo/contracts'
@@ -166,4 +169,19 @@ export const MemoryRecallOutput = z.strictObject({
   sessionId: AgentSessionId,
   range: BlockRange,
   ...memoryMethods['memory.recall'].result.shape,
+})
+
+// ---- archivos (F4.1) ----
+
+export const FsStatOutput = fsMethods['fs.stat'].result
+export const FsCatOutput = z.strictObject({
+  path: z.string(),
+  type: FileType,
+  mime: z.string(),
+  size: z.int().nonnegative(),
+  encoding: FsEncoding,
+  /** Bytes del archivo leídos. */
+  bytes: z.int().nonnegative(),
+  truncated: z.boolean(),
+  data: z.string(),
 })

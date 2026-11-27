@@ -21,6 +21,7 @@ export {
   type Snapshot,
 } from './client.ts'
 export { type ClientErrorCode, NexoClientError } from './errors.ts'
+export { type FsApi, type FsFile, type FsReadAllOptions, fsApi } from './fs-api.ts'
 export { type MemoryApi, memoryApi } from './memory-api.ts'
 export {
   SUBPROTOCOL,
