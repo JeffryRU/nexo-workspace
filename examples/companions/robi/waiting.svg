@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+<title>Robi: waiting</title>
+<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#dde1e8"/><stop offset="1" stop-color="#c9cfd9"/></linearGradient></defs>
+<ellipse cx="48" cy="92" rx="22" ry="2.6" fill="#11141a" opacity="0.7"/>
+<g>
+<path d="M48 22V13" stroke="#8c94a3" stroke-width="3" stroke-linecap="round"/>
+<circle cx="48" cy="10" r="4.5" fill="#e5c07b"/>
+<rect x="11" y="35" width="8" height="16" rx="4" fill="#8c94a3"/><rect x="77" y="35" width="8" height="16" rx="4" fill="#8c94a3"/>
+<rect x="30" y="66" width="36" height="22" rx="9" fill="#8c94a3"/>
+<rect x="30" y="64" width="36" height="22" rx="9" fill="url(#g)"/>
+<rect x="21" y="68" width="8" height="15" rx="4" fill="#8c94a3"/><rect x="67" y="68" width="8" height="15" rx="4" fill="#8c94a3"/>
+<rect x="17" y="24" width="62" height="44" rx="15" fill="#8c94a3"/>
+<rect x="17" y="21" width="62" height="44" rx="15" fill="url(#g)"/>
+<rect x="24" y="27" width="48" height="31" rx="10" fill="#1b1f26"/>
+<rect x="24" y="27" width="48" height="31" rx="10" fill="none" stroke="#11141a" stroke-width="2"/>
+<ellipse cx="40" cy="41" rx="5" ry="6.5" fill="#e5c07b"/><ellipse cx="56" cy="41" rx="5" ry="6.5" fill="#e5c07b"/><circle cx="41.5" cy="39" r="2" fill="#1b1f26"/><circle cx="57.5" cy="39" r="2" fill="#1b1f26"/><ellipse cx="48" cy="52" rx="2.6" ry="2.2" fill="none" stroke="#e5c07b" stroke-width="2"/>
+<circle cx="48" cy="78" r="3.4" fill="#e5c07b"/>
+</g>
+<path d="M80 14.5a5.5 5.5 0 1 1 8 4.9c-2 1.1-2.5 2-2.5 3.6" fill="none" stroke="#e5c07b" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="85.5" cy="29" r="1.8" fill="#e5c07b"/>
+</svg>
