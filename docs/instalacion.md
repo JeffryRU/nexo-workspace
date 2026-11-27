@@ -51,7 +51,8 @@ aviso desaparecerá.
 ### Windows (MSI)
 
 `msiexec /i nexo-workspace_<versión>_windows_x64.msi` (o `/qn` para silencioso). Instala para todos los usuarios y pide
-administrador. Desinstalar: `msiexec /x nexo-workspace_<versión>_windows_x64.msi`. También lo marca SmartScreen.
+administrador (`INSTALLDIR="C:RutaNexo"` elige la carpeta). No instales a la vez el NSIS y el MSI: comparten la clave de registro de la
+carpeta de instalación. Desinstalar: `msiexec /x nexo-workspace_<versión>_windows_x64.msi`. También lo marca SmartScreen.
 
 ### Linux (.deb)
 

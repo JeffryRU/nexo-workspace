@@ -477,35 +477,25 @@ async function smokeMsi(file, sandbox) {
   log(`msi: ${basename(file)}`)
   const stateDir = join(sandbox, 'estado msi ñ')
   const logFile = join(sandbox, 'msi.log')
-  const install = run('msiexec.exe', ['/i', file, '/qn', '/norestart', '/l*v', logFile])
+  // INSTALLDIR explícito: NSIS y MSI comparten la clave de registro de la carpeta de instalación y, sin él, el MSI
+  // reutiliza la del NSIS (hallazgo del CI). Con una carpeta propia la prueba es determinista.
+  const installDir = join(sandbox, 'Nexo msi ñ')
+  const install = run(
+    'msiexec.exe',
+    ['/i', `"${file}"`, '/qn', '/norestart', '/l*v', `"${logFile}"`, `INSTALLDIR="${installDir}"`],
+    { windowsVerbatimArguments: true },
+  )
   if (install.status !== 0) {
     throw new Error(
-      `msiexec /i salió con ${install.status}\n${await readFile(logFile, 'utf8').then(
-        (t) => t.slice(-3000),
-        () => '',
-      )}`,
+      `msiexec /i salió con ${install.status}
+${await readFile(logFile, 'utf8').then(
+  (t) => t.slice(-3000),
+  () => '',
+)}`,
     )
   }
-  // Dónde cae el MSI depende de Tauri/WiX (Program Files, a veces bajo la carpeta del editor): se busca bajo cualquier
-  // carpeta «nexo» de los sitios habituales y, si no aparece, el error lista lo que hay.
-  let installDir
-  const seen = []
-  for (const base of [
-    process.env.ProgramFiles,
-    process.env['ProgramFiles(x86)'],
-    process.env.LOCALAPPDATA,
-    process.env.LOCALAPPDATA && join(process.env.LOCALAPPDATA, 'Programs'),
-  ]) {
-    if (base === undefined || !existsSync(base)) continue
-    for (const name of readdirSync(base)) {
-      if (!/nexo/i.test(name)) continue
-      seen.push(join(base, name))
-      const pkg = findPackageDir(join(base, name))
-      if (pkg !== undefined) installDir = join(pkg, '..')
-    }
-  }
   try {
-    if (installDir === undefined) {
+    if (findPackageDir(installDir) === undefined) {
       // El registro de msiexec puede ser UTF-16.
       const raw = await readFile(logFile).catch(() => Buffer.alloc(0))
       const text =
@@ -521,7 +511,7 @@ ${search.stdout}`)
         /INSTALLDIR|TARGETDIR|APPLICATIONFOLDER|Installation (success|failed)|Product:/i
       const lines = text.split(/\r?\n/).filter((l) => interesting.test(l))
       throw new Error(
-        `el MSI no instaló nexo/daemon/daemon.mjs (carpetas «nexo» vistas: ${seen.join(', ') || 'ninguna'})\n${lines.slice(0, 40).join('\n')}`,
+        `el MSI no instaló nexo/daemon/daemon.mjs en ${installDir}\n${lines.slice(0, 40).join('\n')}`,
       )
     }
     log(`msi: instalado en ${installDir}`)
