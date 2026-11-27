@@ -176,7 +176,13 @@ describe('vistas con todos los campos opcionales', () => {
         observedAt: 5,
         reason: 'dato viejo\n',
         windows: [
-          { id: 'five_hour', label: 'Cinco horas', usedPercent: 12, resetsAt: 99, state: 'warning' },
+          {
+            id: 'five_hour',
+            label: 'Cinco horas',
+            usedPercent: 12,
+            resetsAt: 99,
+            state: 'warning',
+          },
         ],
       },
     ] as never)
@@ -199,7 +205,10 @@ describe('vistas con todos los campos opcionales', () => {
     pane.attention = 'working'
     const [v] = buildWorkspaces([ws])
     expect(v).toMatchObject({ cwd: '/work/proyecto', activeTabId: 'tab-bbbb2222' })
-    expect(v?.tabs[0]?.panes[0]).toMatchObject({ agentSessionId: SESSION_ID, viewerPath: '/a/b.md' })
+    expect(v?.tabs[0]?.panes[0]).toMatchObject({
+      agentSessionId: SESSION_ID,
+      viewerPath: '/a/b.md',
+    })
     expect(buildAttention([ws]).panes[0]?.agentSessionId).toBe(SESSION_ID)
     const bare = workspace({ cwd: undefined as never, activeTabId: undefined as never })
     expect(buildWorkspaces([bare])[0]).not.toHaveProperty('cwd')

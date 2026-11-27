@@ -1,21 +1,21 @@
 import { McpError } from '@modelcontextprotocol/sdk/types.js'
 import { afterEach, describe, expect, it } from 'vitest'
+import type { LinkEvent } from './link.ts'
 import { ReasonTracker } from './resources.ts'
 import {
   block,
   callTool,
   connectPair,
-  type Pair,
   PANE_ID,
-  session,
+  type Pair,
   SESSION_ID,
+  session,
   TAB_ID,
   TERM_ID,
   WS_ID,
   workspace,
 } from './test-helpers.ts'
 import { agentStatusUri, URI } from './views.ts'
-import type { LinkEvent } from './link.ts'
 
 let pair: Pair | undefined
 afterEach(async () => {
@@ -27,7 +27,12 @@ describe('ReasonTracker', () => {
   const status = (id: string, st: string, reason?: string) =>
     ({
       name: 'agent.status',
-      data: { sessionId: id, status: st, updatedAt: 1, ...(reason === undefined ? {} : { reason }) },
+      data: {
+        sessionId: id,
+        status: st,
+        updatedAt: 1,
+        ...(reason === undefined ? {} : { reason }),
+      },
     }) as LinkEvent
 
   it('guarda el motivo de error o needs-input y lo borra al cambiar', () => {
@@ -62,9 +67,9 @@ describe('ReasonTracker', () => {
 describe('recursos (casos límite)', () => {
   it('una URI de sesión con un id inválido es un error de parámetros', async () => {
     pair = await connectPair()
-    await expect(pair.client.readResource({ uri: 'nexo://agents/a%20b/status' })).rejects.toBeInstanceOf(
-      McpError,
-    )
+    await expect(
+      pair.client.readResource({ uri: 'nexo://agents/a%20b/status' }),
+    ).rejects.toBeInstanceOf(McpError)
   })
 
   it('las lecturas de recursos también tienen tope de frecuencia', async () => {
@@ -80,7 +85,9 @@ describe('recursos (casos límite)', () => {
         throw new Error('caído')
       },
     })
-    await expect(pair.client.readResource({ uri: URI.agents })).rejects.toThrow(/DAEMON_UNAVAILABLE/)
+    await expect(pair.client.readResource({ uri: URI.agents })).rejects.toThrow(
+      /DAEMON_UNAVAILABLE/,
+    )
   })
 
   it('el estado de una sesión sin motivo no trae reason', async () => {
@@ -177,7 +184,14 @@ describe('herramientas con todos sus argumentos opcionales', () => {
     pair = await connectPair()
     pair.fake.handlers.set('memory.recall', () => ({
       blocks: [
-        block(1, { type: 'action', kind: 'exec', status: 'ok', tool: 'Bash', title: 'x', output: 'hola' }),
+        block(1, {
+          type: 'action',
+          kind: 'exec',
+          status: 'ok',
+          tool: 'Bash',
+          title: 'x',
+          output: 'hola',
+        }),
       ],
       truncated: true,
     }))
@@ -190,9 +204,9 @@ describe('herramientas con todos sus argumentos opcionales', () => {
     expect(r.text).toContain('salida:\nhola')
     expect(r.text).toContain('menos bloques')
     pair.fake.handlers.set('memory.recall', () => ({ blocks: [], truncated: false }))
-    expect((await callTool(pair, 'memory_recall', { sessionId: SESSION_ID, from: 1, to: 1 })).text).toBe(
-      '(sin bloques)',
-    )
+    expect(
+      (await callTool(pair, 'memory_recall', { sessionId: SESSION_ID, from: 1, to: 1 })).text,
+    ).toBe('(sin bloques)')
   })
 
   it('agent_blocks avisa de que hay más y de los rangos vacíos', async () => {
@@ -202,14 +216,25 @@ describe('herramientas con todos sus argumentos opcionales', () => {
       blocks: [],
       nextIndex: 60,
     }))
-    const r = await callTool(pair, 'agent_blocks', { sessionId: SESSION_ID, fromIndex: 50, limit: 10 })
+    const r = await callTool(pair, 'agent_blocks', {
+      sessionId: SESSION_ID,
+      fromIndex: 50,
+      limit: 10,
+    })
     expect(r.text).toContain('(sin bloques en ese rango)')
     expect(r.text).toContain('fromIndex=60')
   })
 
   it('agent_providers sin motivo, con modelo por omisión y no disponible sin razón', async () => {
     pair = await connectPair()
-    const caps = { permissionModes: ['ask'], models: [], efforts: [], resume: false, warmup: false, streaming: true }
+    const caps = {
+      permissionModes: ['ask'],
+      models: [],
+      efforts: [],
+      resume: false,
+      warmup: false,
+      streaming: true,
+    }
     pair.fake.handlers.set('agent.providers', () => ({
       providers: [
         { id: 'a', name: 'A', available: true, capabilities: { ...caps, defaultModel: 'm1' } },
@@ -219,7 +244,9 @@ describe('herramientas con todos sus argumentos opcionales', () => {
     const r = await callTool(pair, 'agent_providers')
     expect(r.text).toContain('a (A): disponible')
     expect(r.text).toContain('b (B): no disponible')
-    expect(r.structured).toMatchObject({ providers: [{ defaultModel: 'm1' }, { available: false }] })
+    expect(r.structured).toMatchObject({
+      providers: [{ defaultModel: 'm1' }, { available: false }],
+    })
   })
 
   it('terminal_read marca truncated si lo dice el daemon aunque el texto quepa', async () => {
@@ -247,7 +274,12 @@ describe('herramientas con todos sus argumentos opcionales', () => {
     pair = await connectPair({
       config: { write: true, allowPermissions: true, maxWriteBytes: 100, writePerMinute: 7 },
     })
-    pair.fake.handlers.set('daemon.info', () => ({ version: '9', protocol: 1, pid: 1, startedAt: 'x' }))
+    pair.fake.handlers.set('daemon.info', () => ({
+      version: '9',
+      protocol: 1,
+      pid: 1,
+      startedAt: 'x',
+    }))
     const r = await callTool(pair, 'nexo_status')
     expect(r.text).toContain('permitida')
     expect(r.structured).toMatchObject({
@@ -271,7 +303,10 @@ describe('escritura (casos límite)', () => {
     const r = await create(pair, { model: 'fake-1', effort: 'low', title: '   ' })
     expect(r.error).toBe(false)
     expect(pair.fake.callsTo('agent.create')[0]).toMatchObject({ model: 'fake-1', effort: 'low' })
-    expect(pair.fake.callsTo('tab.create')[0]).toEqual({ workspaceId: WS_ID, cwd: '/work/proyecto' })
+    expect(pair.fake.callsTo('tab.create')[0]).toEqual({
+      workspaceId: WS_ID,
+      cwd: '/work/proyecto',
+    })
   })
 
   it('agent_create: una pestaña sin paneles y un cierre que falla no tapan el error', async () => {
@@ -304,7 +339,11 @@ describe('escritura (casos límite)', () => {
       ],
       nextIndex: null,
     }))
-    const r = await callTool(pair, 'agent_respond', { sessionId: SESSION_ID, index: 3, optionId: 'a' })
+    const r = await callTool(pair, 'agent_respond', {
+      sessionId: SESSION_ID,
+      index: 3,
+      optionId: 'a',
+    })
     expect(r.text).toMatch(/NOT_FOUND/)
     expect(pair.fake.callsTo('agent.respond')).toHaveLength(0)
   })
