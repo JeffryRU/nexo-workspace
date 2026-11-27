@@ -51,8 +51,8 @@ const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 const MODELS_RETRY_MS = 60_000
 
 const UNAVAILABLE_MESSAGE =
-  'Claude Code no está disponible: falta @anthropic-ai/claude-agent-sdk o su ejecutable ' +
-  '(configura pathToClaudeCodeExecutable).'
+  'Claude Code no está disponible: no se encontró su ejecutable. Instala Claude Code para que `claude` ' +
+  'esté en el PATH (o en ~/.local/bin) y reinicia Nexo, o apunta NEXO_CLAUDE_EXECUTABLE a su ruta.'
 
 export type ClaudeProviderOptions = {
   /** Transporte del SDK; por omisión el real (`@anthropic-ai/claude-agent-sdk`). */
