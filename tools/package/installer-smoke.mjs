@@ -480,6 +480,8 @@ async function smokeMsi(file, sandbox) {
   // INSTALLDIR explícito: NSIS y MSI comparten la clave de registro de la carpeta de instalación y, sin él, el MSI
   // reutiliza la del NSIS (hallazgo del CI). Con una carpeta propia la prueba es determinista.
   const installDir = join(sandbox, 'Nexo msi ñ')
+  // El instalador NSIS que acaba de desinstalarse puede dejar su clave de registro y el MSI la preferiría a INSTALLDIR.
+  run('reg.exe', ['delete', 'HKCU\\Software\\Nexo Workspace', '/f'])
   const install = run(
     'msiexec.exe',
     ['/i', `"${file}"`, '/qn', '/norestart', '/l*v', `"${logFile}"`, `INSTALLDIR="${installDir}"`],
