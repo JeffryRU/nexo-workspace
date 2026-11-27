@@ -754,7 +754,12 @@ mod bundled {
         let json: serde_json::Value = serde_json::from_str(&text).unwrap();
         let bundle = &json["bundle"];
         assert_eq!(bundle["active"], true);
-        for field in ["category", "publisher", "shortDescription", "longDescription"] {
+        for field in [
+            "category",
+            "publisher",
+            "shortDescription",
+            "longDescription",
+        ] {
             assert!(
                 bundle[field].as_str().is_some_and(|v| !v.is_empty()),
                 "falta bundle.{field}"
@@ -765,7 +770,9 @@ mod bundled {
             let path = manifest.join(icon.as_str().unwrap());
             assert!(path.is_file(), "falta el icono {}", path.display());
         }
-        let hooks = bundle["windows"]["nsis"]["installerHooks"].as_str().unwrap();
+        let hooks = bundle["windows"]["nsis"]["installerHooks"]
+            .as_str()
+            .unwrap();
         let hooks_text = fs::read_to_string(manifest.join(hooks)).unwrap();
         // El gancho detiene el daemon con la CLI empaquetada y nunca borra el estado del usuario.
         assert!(hooks_text.contains("daemon stop"));
