@@ -15,7 +15,7 @@ describe('hostEntryFor', () => {
   })
 
   it('un módulo sin extensión .ts se trata como paquete (nunca apunta a un .ts inexistente)', () => {
-    expect(hostEntryFor('file:///x/daemon.js')).toMatch(/pty-host\.mjs$/)
-    expect(hostEntryFor('file:///x/daemon.mjs?v=1')).toMatch(/pty-host\.mjs$/)
+    expect(hostEntryFor(pathToFileURL('/x/daemon.js').href)).toMatch(/pty-host\.mjs$/)
+    expect(hostEntryFor(`${pathToFileURL('/x/daemon.mjs').href}?v=1`)).toMatch(/pty-host\.mjs$/)
   })
 })
