@@ -117,9 +117,10 @@ function checkInstalledPackage(pkg) {
   log(`paquete instalado en ${pkg} (node, daemon, CLI, web y mascota de ejemplo presentes)`)
 }
 
+/** Cierra la app. En Windows sin `/T`: el daemon (desacoplado) cuelga del mismo árbol y debe sobrevivir a la app. */
 function killTree(child) {
   if (child.pid === undefined) return
-  if (WINDOWS) run('taskkill', ['/PID', String(child.pid), '/T', '/F'])
+  if (WINDOWS) run('taskkill', ['/PID', String(child.pid), '/F'])
   else {
     try {
       process.kill(-child.pid, 'SIGTERM')
