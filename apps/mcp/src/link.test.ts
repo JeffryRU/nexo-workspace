@@ -145,3 +145,62 @@ describe('describeError', () => {
     expect(d.message).not.toContain('Bearer abc')
   })
 })
+
+describe('DaemonLink (casos límite)', () => {
+  it('un fallo que no es Error ni de descubrimiento también se traduce', async () => {
+    const { link } = make(async () => {
+      throw 'cadena suelta'
+    })
+    await expect(link.get()).rejects.toThrow(/desconocido/)
+  })
+
+  it('un fallo con mensaje de Error lo cita', async () => {
+    const { link } = make(async () => {
+      throw new Error('ECONNREFUSED')
+    })
+    await expect(link.get()).rejects.toThrow(/ECONNREFUSED/)
+  })
+
+  it('close tolera un cliente que falla al cerrarse y llamadas concurrentes fallidas comparten el error', async () => {
+    const fake = new FakeClient()
+    fake.close = () => {
+      throw new Error('ya cerrado')
+    }
+    const { link } = make(async () => fake)
+    await link.get()
+    expect(() => link.close()).not.toThrow()
+
+    const failing = make(
+      async () => {
+        throw new DiscoveryError('NOT_RUNNING', 'x')
+      },
+      { cooldown: 5000 },
+    )
+    const results = await Promise.allSettled([failing.link.get(), failing.link.get()])
+    expect(results.map((r) => r.status)).toEqual(['rejected', 'rejected'])
+  })
+
+  it('el cierre de un cliente viejo no afecta a la conexión nueva', async () => {
+    const clients = [new FakeClient(), new FakeClient()]
+    let n = 0
+    const { link } = make(async () => clients[n++] as FakeClient)
+    await link.get()
+    clients[0]?.emitState('closed')
+    await link.get()
+    clients[0]?.emitState('closed')
+    expect(link.connected).toBe(true)
+    clients[1]?.emitState('open')
+    expect(link.connected).toBe(true)
+  })
+
+  it('un oyente que lanza algo que no es Error se registra igual', async () => {
+    const fake = new FakeClient()
+    const { link, logs } = make(async () => fake)
+    link.onEvent(() => {
+      throw 'texto'
+    })
+    await link.get()
+    fake.emitResync()
+    expect(logs.some((l) => l.includes('falló'))).toBe(true)
+  })
+})

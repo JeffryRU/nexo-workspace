@@ -164,3 +164,54 @@ describe('invalidationFor', () => {
     expect(invalidationFor(ev('algo.raro', {}), known)).toEqual({ uris: [], listChanged: false })
   })
 })
+
+describe('vistas con todos los campos opcionales', () => {
+  it('buildLimits conserva etiquetas, reinicio, estado, frescura y motivo', () => {
+    const v = buildLimits([
+      {
+        provider: 'claude',
+        status: 'ok',
+        reached: true,
+        fresh: false,
+        observedAt: 5,
+        reason: 'dato viejo\n',
+        windows: [
+          { id: 'five_hour', label: 'Cinco horas', usedPercent: 12, resetsAt: 99, state: 'warning' },
+        ],
+      },
+    ] as never)
+    expect(v.providers[0]).toMatchObject({
+      reached: true,
+      fresh: false,
+      observedAt: 5,
+      reason: 'dato viejo',
+      windows: [{ id: 'five_hour', label: 'Cinco horas', resetsAt: 99, state: 'warning' }],
+    })
+  })
+
+  it('buildWorkspaces y buildAttention llevan cwd, pestaña activa, sesión y visor', () => {
+    const ws = workspace()
+    const pane = ws.tabs[0]?.panes[0]
+    if (pane === undefined) throw new Error('sin panel')
+    pane.kind = 'agent'
+    pane.agentSessionId = SESSION_ID as never
+    pane.viewerPath = '/a/b.md'
+    pane.attention = 'working'
+    const [v] = buildWorkspaces([ws])
+    expect(v).toMatchObject({ cwd: '/work/proyecto', activeTabId: 'tab-bbbb2222' })
+    expect(v?.tabs[0]?.panes[0]).toMatchObject({ agentSessionId: SESSION_ID, viewerPath: '/a/b.md' })
+    expect(buildAttention([ws]).panes[0]?.agentSessionId).toBe(SESSION_ID)
+    const bare = workspace({ cwd: undefined as never, activeTabId: undefined as never })
+    expect(buildWorkspaces([bare])[0]).not.toHaveProperty('cwd')
+    expect(buildWorkspaces([bare])[0]).not.toHaveProperty('activeTabId')
+  })
+
+  it('invalidationFor: una sesión que se cierra invalida su estado y la atención', () => {
+    const r = invalidationFor(
+      { name: 'agent.session', data: { sessionId: SESSION_ID, removed: true } } as LinkEvent,
+      new Set(),
+    )
+    expect(r.uris).toEqual([URI.attention, URI.agents, agentStatusUri(SESSION_ID)])
+    expect(buildAgentStatus(session({ title: 'x\ny' })).title).toBe('x y')
+  })
+})

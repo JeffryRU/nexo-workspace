@@ -111,3 +111,44 @@ describe('renderBlock', () => {
     )
   })
 })
+
+describe('renderBlock (casos límite)', () => {
+  it('permiso sin detalle, pregunta sin opciones, plan largo y uso parcial', () => {
+    const perm = r(0, {
+      type: 'permission',
+      tool: 'Bash',
+      title: 'ls',
+      state: 'accepted',
+      options: [{ id: 'a', label: 'Sí', kind: 'allow-once' }],
+    })
+    expect(perm.text).not.toContain('detalle')
+    const q = r(0, {
+      type: 'question',
+      state: 'answered',
+      questions: [{ id: 'q', question: 'libre', options: [], multiSelect: false, allowText: true }],
+    })
+    expect(q.text).toBe('libre')
+    const plan = r(0, {
+      type: 'plan',
+      entries: Array.from({ length: 80 }, (_, i) => ({ text: `p${i}`, status: 'pending' })),
+    })
+    expect(plan.text.split('\n')).toHaveLength(50)
+    expect(r(0, { type: 'usage', stopReason: 'error', usage: {} }).text).toBe('fin: error')
+    expect(r(0, { type: 'usage', stopReason: 'other', usage: { costUsd: 2 } }).text).toBe(
+      'fin: other, costo US$ 2',
+    )
+  })
+
+  it('acción con salida vacía, sin salida o con código nulo', () => {
+    const base = { type: 'action', kind: 'read', status: 'running', tool: 'Read', title: 't' }
+    expect(r(0, { ...base, output: '' }).text).toBe('read Read: t')
+    expect(r(0, { ...base, output: '' }, { includeActionOutput: true }).text).toBe('read Read: t')
+    expect(r(0, { ...base, exitCode: null }).text).toBe('read Read: t')
+    expect(r(0, base, { includeActionOutput: true }).text).toBe('read Read: t')
+  })
+
+  it('texto del agente sin truncar no marca truncated', () => {
+    expect(r(0, { type: 'text', text: 'x', complete: true }).truncated).toBeUndefined()
+    expect(r(0, { type: 'user', text: 'x' }).truncated).toBeUndefined()
+  })
+})
