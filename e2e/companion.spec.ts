@@ -240,6 +240,11 @@ test.describe('capturas F5.3', () => {
   const shot = async (app: Page, name: string) => {
     // Deja terminar el fundido de entrada de la imagen (180 ms) antes de la captura.
     await app.waitForTimeout(450)
+    // La ruta de trabajo de la prueba no es la de nadie: se sustituye por una de ejemplo.
+    await app.evaluate(() => {
+      for (const el of document.querySelectorAll('.chip.fixed.ellipsis'))
+        el.textContent = '~/tienda-web'
+    })
     mkdirSync(OUT, { recursive: true })
     await app.screenshot({ path: join(OUT, `f5-${name}.png`) })
   }
