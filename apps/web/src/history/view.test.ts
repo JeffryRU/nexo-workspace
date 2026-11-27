@@ -101,13 +101,15 @@ describe('formato y bloques', () => {
       turn: 1,
       id: historyBlockId(7),
     })
-    expect(toBlock(hblock(0, { type: 'text', text: 'x', complete: false }))).toMatchObject({ complete: true })
+    expect(toBlock(hblock(0, { type: 'text', text: 'x', complete: false }))).toMatchObject({
+      complete: true,
+    })
     const merged = mergeBlocks([
       [userBlock(2, 'c'), userBlock(0, 'a')],
       [userBlock(1, 'b'), userBlock(2, 'otra vez')],
     ])
     expect(merged.map((x) => x.index)).toEqual([0, 1, 2])
-    expect((merged[2]?.block as { text: string }).text).toBe('c')
+    expect(merged[2]?.block).toMatchObject({ text: 'c' })
     expect(hblock(0, { type: 'user', text: '' }).index).toBe(0)
   })
 })
