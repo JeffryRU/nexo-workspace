@@ -13,6 +13,8 @@ va el modelo normalizado de agentes: bloques, protocolo `agent.*` y `AgentProvid
 (F2.5) y la atención en la barra con notificaciones del sistema y mediciones de rendimiento del agente (F2.6; ver
 [`docs/ROADMAP.md`](docs/ROADMAP.md)).
 
+Empaquetado (F6) completo: instaladores sin firma para Windows y Linux, ver [Instalación](#instalación).
+
 ## Requisitos
 
 - Node.js 24 o superior
@@ -349,8 +351,14 @@ ln -s "$PWD/apps/desktop/src-tauri/resources/nexo/bin/nexo" ~/.local/bin/nexo  #
 ```
 
 En Windows, añade la carpeta `bin` del paquete al PATH si quieres `nexo` en cualquier terminal. El Claude Code que trae el SDK pesa unos 380 MB y no va en el paquete
-salvo con `--with-claude`; si no, define `NEXO_CLAUDE_EXECUTABLE`. Los instaladores (NSIS, AppImage, .deb) son F6.2. Detalles en
+salvo con `--with-claude`: Nexo usa el `claude` de tu `PATH` (tu propia instalación y tu propia sesión) o `NEXO_CLAUDE_EXECUTABLE`. Detalles en
 [Arquitectura](docs/ARCHITECTURE.md#empaquetado-f61).
+
+## Instalación
+
+Instaladores sin firma para Windows (NSIS y MSI) y Linux (`.deb` y AppImage), con su propio Node y el daemon: no hace falta instalar nada más.
+Los construye el workflow `Release` y se publican con `SHA256SUMS`. Cómo instalar, actualizar, desinstalar, verificar las sumas, el aviso de
+SmartScreen, dónde quedan tus datos (desinstalar no los borra) y cómo migrar desde desarrollo: [`docs/instalacion.md`](docs/instalacion.md).
 
 ## Estructura
 
@@ -365,11 +373,14 @@ apps/daemon          raíz de composición (esqueleto)
 apps/web             interfaz SolidJS + Vite (terminales y panel de agente)
 apps/cli            CLI `nexo`
 apps/mcp            servidor MCP por stdio (cliente más del daemon)
-examples/companions  mascotas de ejemplo para copiar (Robi)
+examples/companions  mascotas de ejemplo para copiar (Robi; también viaja en el paquete)
+tools/package        paquete de ejecución, smoke del paquete y de los instaladores
+tools/version        versión única (script de sincronización)
 ```
 
 ## Documentación
 
+- [Instalación](docs/instalacion.md) (instaladores, sumas, datos del usuario, proveedores)
 - [Arquitectura](docs/ARCHITECTURE.md) (el contrato del proyecto)
 - [Roadmap](docs/ROADMAP.md)
 - [Decisiones de arquitectura (ADR)](docs/adr/)

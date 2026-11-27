@@ -1,5 +1,5 @@
 import process from 'node:process'
-import { bundledClaudeExecutable } from './bundle.ts'
+import { bundledClaudeExecutable, findClaudeOnPath, isBundled } from './bundle.ts'
 import { parseEnv } from './config.ts'
 import { DaemonAlreadyRunningError, startDaemon } from './daemon.ts'
 
@@ -11,8 +11,12 @@ async function main(): Promise<number> {
     console.error(`nexo-daemon: ${(error as Error).message}`)
     return 1
   }
-  // Sin NEXO_CLAUDE_EXECUTABLE, el paquete puede traer el suyo en vendor/ (build con --with-claude).
-  const claudeExecutable = env.claudeExecutable ?? bundledClaudeExecutable(import.meta.url)
+  // Orden: NEXO_CLAUDE_EXECUTABLE, vendor/claude del paquete (build con --with-claude) y, en el paquete, el
+  // `claude` que el usuario ya tiene instalado (PATH). En el repositorio manda el ejecutable que trae el SDK.
+  const claudeExecutable =
+    env.claudeExecutable ??
+    bundledClaudeExecutable(import.meta.url) ??
+    (isBundled(import.meta.url) ? findClaudeOnPath() : undefined)
   let running: Awaited<ReturnType<typeof startDaemon>> | undefined
   const shutdown = (signal: string) => {
     running?.logger.info('apagando', { signal })

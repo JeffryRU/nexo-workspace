@@ -4,7 +4,7 @@
 // (Node empaquetado), arranca el daemon, consulta /health, abre una terminal real, abre un agente falso
 // y detiene el daemon. Si algo falla, muestra daemon.log y no deja procesos vivos.
 import { spawn } from 'node:child_process'
-import { appendFile, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { appendFile, cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
@@ -88,6 +88,9 @@ async function main() {
   console.log(
     `[smoke] paquete verificado (node ${manifest.nodeVersion}, ${manifest.platform}-${manifest.arch})`,
   )
+
+  // La mascota de ejemplo viaja en el paquete, pero no se instala sola (F6.2).
+  await stat(join(bundle, 'companions', 'robi', 'companion.json'))
 
   const env = {
     ...process.env,

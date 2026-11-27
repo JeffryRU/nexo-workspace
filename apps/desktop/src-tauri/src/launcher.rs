@@ -746,4 +746,39 @@ mod bundled {
         // Node va como recurso (no como externalBin): un externalBin acabaría en /usr/bin/node al instalar el .deb.
         assert!(json["bundle"].get("externalBin").is_none());
     }
+
+    #[test]
+    fn los_instaladores_estan_activos_y_sus_archivos_existen() {
+        let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let text = fs::read_to_string(manifest.join("tauri.bundle.conf.json")).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&text).unwrap();
+        let bundle = &json["bundle"];
+        assert_eq!(bundle["active"], true);
+        for field in [
+            "category",
+            "publisher",
+            "shortDescription",
+            "longDescription",
+        ] {
+            assert!(
+                bundle[field].as_str().is_some_and(|v| !v.is_empty()),
+                "falta bundle.{field}"
+            );
+        }
+        // Los iconos y el gancho de NSIS que declara la configuración deben existir.
+        for icon in bundle["icon"].as_array().unwrap() {
+            let path = manifest.join(icon.as_str().unwrap());
+            assert!(path.is_file(), "falta el icono {}", path.display());
+        }
+        let hooks = bundle["windows"]["nsis"]["installerHooks"]
+            .as_str()
+            .unwrap();
+        let hooks_text = fs::read_to_string(manifest.join(hooks)).unwrap();
+        // El gancho detiene el daemon con la CLI empaquetada y nunca borra el estado del usuario.
+        assert!(hooks_text.contains("daemon stop"));
+        assert!(!hooks_text.to_lowercase().contains("rmdir"));
+        assert!(!hooks_text.to_lowercase().contains("delete"));
+        // Instalación por usuario: sin elevación y con el estado en %LOCALAPPDATA%\Nexo, aparte del programa.
+        assert_eq!(bundle["windows"]["nsis"]["installMode"], "currentUser");
+    }
 }
