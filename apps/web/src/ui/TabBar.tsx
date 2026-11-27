@@ -1,4 +1,4 @@
-import { createEffect, For, Show } from 'solid-js'
+import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js'
 import { useModel } from '../app/model.tsx'
 import { es } from '../i18n/es.ts'
 import { findWorkspace } from '../state/store.ts'
@@ -33,6 +33,36 @@ export function TabBar() {
         ?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
     })
   })
+
+  // Fundidos en los bordes: avisan de que hay pestañas ocultas a ese lado.
+  let list: HTMLDivElement | undefined
+  const [more, setMore] = createSignal('')
+  const measure = () => {
+    if (list === undefined) return
+    const hidden = list.scrollWidth - list.clientWidth
+    const sides = []
+    if (hidden > 1 && list.scrollLeft > 1) sides.push('start')
+    if (hidden > 1 && list.scrollLeft < hidden - 1) sides.push('end')
+    setMore(sides.join(' '))
+  }
+  onMount(() => {
+    measure()
+    if (list === undefined || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(list)
+    onCleanup(() => observer.disconnect())
+  })
+  createEffect(() => {
+    workspace()?.tabs.map((t) => t.title)
+    queueMicrotask(measure)
+  })
+  // La rueda vertical desplaza la lista en horizontal (solo si desborda).
+  const onWheel = (e: WheelEvent) => {
+    if (list === undefined || list.scrollWidth <= list.clientWidth) return
+    if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return
+    e.preventDefault()
+    list.scrollLeft += e.deltaY
+  }
 
   const sidebarOpen = () => (ui.narrow() ? ui.drawerOpen() : !settings.sidebarCollapsed())
   const toggleSidebar = () => {
@@ -72,64 +102,75 @@ export function TabBar() {
       >
         <Icon name="panel-left" />
       </button>
-      <div class="tablist" role="tablist" aria-label={es.tabs.label}>
-        <Show when={workspace()}>
-          {(w) => (
-            <For each={w().tabs}>
-              {(t, i) => {
-                const selected = () => selectedId() === t.id
-                return (
-                  <div
-                    class="tab-wrap"
-                    classList={{ selected: selected() }}
-                    data-attention={attention.tabAttention(t)}
-                  >
-                    <InlineEdit
-                      value={t.title}
-                      editing={ui.editing() === `tab:${t.id}`}
-                      label={es.tabs.label}
-                      onCommit={(v) => {
-                        ui.setEditing(undefined)
-                        void actions.renameTab(t.id, v)
-                      }}
-                      onCancel={() => ui.setEditing(undefined)}
+      <div class="tablist-frame" data-more={more()}>
+        <div
+          class="tablist"
+          role="tablist"
+          aria-label={es.tabs.label}
+          ref={list}
+          onScroll={measure}
+          onWheel={onWheel}
+        >
+          <Show when={workspace()}>
+            {(w) => (
+              <For each={w().tabs}>
+                {(t, i) => {
+                  const selected = () => selectedId() === t.id
+                  return (
+                    <div
+                      class="tab-wrap"
+                      classList={{ selected: selected() }}
+                      data-attention={attention.tabAttention(t)}
                     >
+                      <InlineEdit
+                        value={t.title}
+                        editing={ui.editing() === `tab:${t.id}`}
+                        label={es.tabs.label}
+                        onCommit={(v) => {
+                          ui.setEditing(undefined)
+                          void actions.renameTab(t.id, v)
+                        }}
+                        onCancel={() => ui.setEditing(undefined)}
+                      >
+                        <button
+                          type="button"
+                          role="tab"
+                          id={tabDomId(t.id)}
+                          class="tab"
+                          title={t.title === '' ? es.tabs.untitled : t.title}
+                          aria-selected={selected()}
+                          aria-controls={panelDomId(t.id)}
+                          tabIndex={selected() ? 0 : -1}
+                          onClick={() => void actions.selectTab(w().id, t.id)}
+                          onDblClick={() => ui.setEditing(`tab:${t.id}`)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'F2') ui.setEditing(`tab:${t.id}`)
+                            else move(e, i())
+                          }}
+                        >
+                          <AttentionDot attention={attention.tabAttention(t)} />
+                          <span class="ellipsis">
+                            {t.title === '' ? es.tabs.untitled : t.title}
+                          </span>
+                          <AttentionCount count={attention.tabPending(t)} />
+                        </button>
+                      </InlineEdit>
                       <button
                         type="button"
-                        role="tab"
-                        id={tabDomId(t.id)}
-                        class="tab"
-                        title={t.title === '' ? es.tabs.untitled : t.title}
-                        aria-selected={selected()}
-                        aria-controls={panelDomId(t.id)}
-                        tabIndex={selected() ? 0 : -1}
-                        onClick={() => void actions.selectTab(w().id, t.id)}
-                        onDblClick={() => ui.setEditing(`tab:${t.id}`)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'F2') ui.setEditing(`tab:${t.id}`)
-                          else move(e, i())
-                        }}
+                        class="icon-button subtle tab-close"
+                        title={es.tabs.closeTab}
+                        aria-label={`${es.tabs.closeTab}: ${t.title}`}
+                        onClick={() => void actions.closeTab(t.id)}
                       >
-                        <AttentionDot attention={attention.tabAttention(t)} />
-                        <span class="ellipsis">{t.title === '' ? es.tabs.untitled : t.title}</span>
-                        <AttentionCount count={attention.tabPending(t)} />
+                        <Icon name="x" size="sm" />
                       </button>
-                    </InlineEdit>
-                    <button
-                      type="button"
-                      class="icon-button subtle tab-close"
-                      title={es.tabs.closeTab}
-                      aria-label={`${es.tabs.closeTab}: ${t.title}`}
-                      onClick={() => void actions.closeTab(t.id)}
-                    >
-                      <Icon name="x" size="sm" />
-                    </button>
-                  </div>
-                )
-              }}
-            </For>
-          )}
-        </Show>
+                    </div>
+                  )
+                }}
+              </For>
+            )}
+          </Show>
+        </div>
       </div>
       <div class="tabbar-actions">
         <button

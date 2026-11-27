@@ -2317,7 +2317,7 @@ Las tablas de costos de la memoria alinean a la derecha las columnas numéricas 
 - **Barra de estado:** dos grupos, el de la izquierda (nombre de la app y límites) y el de la derecha (Historial, Memoria, Mascota, Notificaciones y versión), con altura fija de 28 px, sin
   `margin-left: auto` repartido por los botones (de ahí que «Historial» flotara en medio). Los límites se truncan y su detalle se ancla a la barra, no al botón.
 - **Pestañas:** botones a los lados que no se mueven (barra lateral, `+`, agente) y una lista central con desplazamiento horizontal; la pestaña activa se lleva a la vista entera, con su
-  cerrar. Anchura de cada pestaña `clamp(112px, 24vw, 200px)`; el cerrar es visible en la activa y en pantallas táctiles.
+  cerrar. Anchura de cada pestaña según su título, entre `--tab-min` (96 px) y `--tab-max` (200 px) (ver «Detalles visuales y Robi (F5.5)»); el cerrar es visible en la activa y en pantallas táctiles.
 - **Paneles:** cada panel es un contenedor (`container-type: inline-size`): por debajo de 300 px de ancho se retiran los botones secundarios de su cabecera (dividir con agente, intercambiar), por
   debajo de 190 px también los de dividir; cerrar siempre queda. Un panel mide al menos `--pane-min` (120 px) y, si no caben, el contenedor se desplaza en vez de aplastarlos. Las acciones se ven siempre en el panel con foco
   y, sin «pasar el ratón» (`hover: none`), en todos.
@@ -2330,7 +2330,34 @@ Unitarias de `Icon` (trazos válidos, tamaños, nombres hostiles), `Dialog`/`Dia
 con el cajón abierto). Adversariales (`Icon`, `Dialog`, `layout.adversarial.test.tsx`): etiquetas de 20 000 caracteres, emojis, RTL y marcado, 400 pestañas, cruzar el umbral 300 veces, sin `matchMedia`. E2E
 (`e2e/pulido.spec.ts`): a 360, 768, 1024, 1280 y 1920 px recorre terminal con tres paneles, agente con chips y con permiso, visor, Historial (lista y sesión), Memoria, Mascota, límites, Atajos, cajón y barra colapsada, y exige
 `scrollWidth <= clientWidth` en el documento y en las barras, que nada salga de la ventana y que todo botón de icono mida ≥ 28 px; a 360 px comprueba que los botones clave son visibles y pulsables y que la pestaña activa
-queda entera a la vista. Capturas: `docs/capturas/f5-4-*.png` (`NEXO_CAPTURAS=1 pnpm e2e -g pulido`; `NEXO_CAPTURAS_PREFIX` y `NEXO_CAPTURAS_DIR` cambian el nombre y la carpeta).
+queda entera a la vista. Capturas: `docs/capturas/f5-4-*.png` (`NEXO_CAPTURAS=1 pnpm e2e -g pulido`; `NEXO_CAPTURAS_PREFIX` y `NEXO_CAPTURAS_DIR` cambian el nombre y la carpeta); desde F5.5 muestran a Robi.
+
+## Detalles visuales y Robi (F5.5)
+
+Retoques tras revisar las capturas de la F5.4 (#81). Sin cambios de protocolo ni de contratos.
+
+- **Pestañas** (`ui/TabBar.tsx`, `TabBar.css`): cada una mide lo que pide su título, con `min-width: var(--tab-min)` (96 px) y `max-width: var(--tab-max)` (200 px); el título se corta con puntos suspensivos
+  y el cerrar queda pegado a él. La lista va dentro de un marco (`.tablist-frame`) con dos fundidos (`--tab-fade`) que aparecen según `data-more` (`start`, `end` o ambos), calculado al desplazar, al
+  redimensionar (`ResizeObserver`, si existe) y al cambiar los títulos. La rueda vertical desplaza la lista en horizontal solo si desborda y si el gesto es más vertical que horizontal; el desplazamiento
+  horizontal nativo (táctil, panel táctil) no se toca.
+- **Rutas largas:** una ruta ya no se parte a mitad de palabra. La línea de metadatos de una sesión del Historial separa la parte fija (proveedor y fecha) de la ruta, que se trunca con puntos suspensivos y lleva
+  la ruta entera en `title`; con poco ancho, la información de la sesión baja a su propia fila. El visor (`.viewer-path`), el chip de cwd del compositor y la cabecera de cada proyecto del Historial ya truncaban con
+  `title`. La ruta de un bloque del agente (`PathLink`, también sin carpeta resoluble) lleva `title` y puede partirse en varias líneas (solo ahí): es lo que se aprueba o se rechaza y tiene que verse entera.
+- **Robi** (`examples/companions/robi/`): paquete de ejemplo real, no un doble de pruebas. Seis SVG de 96 × 96 dibujados a mano con formas simples (robot de carcasa clara con pantalla oscura, para el fondo oscuro de la app) y un color
+  de la paleta por estado: `idle` (azul, sonríe), `thinking` (azul, mira hacia arriba con globos de pensamiento), `busy` (azul, ojos en espiral y chispas: varios agentes), `waiting` (ámbar, ojos grandes y «?»),
+  `done` (verde, ojos felices, destello y una marca en el pecho) y `error` (rojo, ojos en cruz y un rayo). Licencia CC0 (`LICENSE` de la carpeta y `license` del manifiesto). Sin hoja de sprites: un SVG no se
+  puede pausar con `prefers-reduced-motion`, así que Robi no se mueve (el dock ya lo hace en `waiting`, y eso sí respeta la preferencia). Cumple las reglas de SVG (sin scripts, manejadores ni referencias externas; solo un
+  degradado local) y cada estado pesa unos 2 KiB, muy por debajo de los 512 KiB. Se verifica con el cargador real (`companion-fs`).
+- **Capturas:** las `f5-4-*`, `f5-estado-*` y `f5-selector` se regeneraron con Robi (el E2E lo instala copiando la carpeta `examples/companions/robi`); las `f5-ancho-*` (interfaz anterior a la F5.4, que `f5-4-*` ya
+  cubre a 360, 768 y 1280 px) y su prueba de capturas se eliminaron. En las capturas, la ruta de trabajo de la prueba se sustituye por `~/tienda-web`.
+
+### Pruebas (F5.5)
+
+Unitarias: `ui/TabBar.test.tsx` (rueda, fundidos por lado con medidas simuladas) y `packages/adapters/companion-fs/test/robi.test.ts` (Robi pasa `list`, `get` y `readAsset` del cargador real: seis estados con
+dibujos distintos, todo SVG, licencia, y un archivo no declarado no se sirve). Adversarial: desplazamientos de rueda enormes (`1e12`, `Number.MAX_VALUE`) y sin desborde. E2E (`e2e/pulido.spec.ts`, `e2e/companion.spec.ts`):
+anchos de pestaña entre 96 y 200 px, fundido y rueda con ocho pestañas más, una ruta del Historial en una sola línea a 360 px, y Robi decodificado con una imagen distinta en reposo, pensando, terminado y esperando.
+
+**Qué queda fuera.** Que el instalador de F6 incluya Robi (encaja de forma natural: es una carpeta que se copia a `companions/`), una hoja de sprites de `thinking`, y partir con criterio una ruta en el bloque del agente.
 
 ## Seguridad
 

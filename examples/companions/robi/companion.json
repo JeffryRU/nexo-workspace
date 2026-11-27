@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "id": "robi",
+  "name": "Robi",
+  "version": "1.0.0",
+  "description": "Un robot pequeño con pantalla en la cara: cada estado tiene su propia expresión.",
+  "author": { "name": "Nexo Workspace", "url": "https://github.com/JeffryRU/nexo-workspace" },
+  "license": "CC0-1.0",
+  "states": {
+    "idle": { "src": "idle.svg" },
+    "thinking": { "src": "thinking.svg" },
+    "busy": { "src": "busy.svg" },
+    "waiting": { "src": "waiting.svg" },
+    "done": { "src": "done.svg" },
+    "error": { "src": "error.svg" }
+  }
+}

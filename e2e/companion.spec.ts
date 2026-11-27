@@ -3,6 +3,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Page } from '@playwright/test'
 import { tinyCompanion } from '../packages/testkit/src/companion-package.ts'
+import { robiPackage } from './robi.ts'
 import { ECHO_SCRIPT, expect, type Stack, test } from './stack.ts'
 
 /**
@@ -125,6 +126,37 @@ test.describe('mascota en la interfaz', () => {
     await expect(dock(app)).toHaveAttribute('data-requested-state', 'idle', { timeout: 20_000 })
   })
 
+  test('Robi, el paquete de ejemplo, se dibuja con una expresión distinta en cada estado', async ({
+    stack,
+    app,
+  }) => {
+    install(stack, 'robi', robiPackage())
+    await stack.nexo(['companion', 'select', 'robi'])
+    await openAgentTab(stack, app)
+    await expect(dock(app)).toHaveAttribute('data-state', 'idle')
+    const seen = new Map<string, string | null>()
+    const look = async (state: string) => {
+      await expect(dock(app)).toHaveAttribute('data-requested-state', state)
+      await expect(dock(app).locator('img')).toHaveAttribute('alt', /^Robi: /)
+      expect(await decoded(app)).toBe(true)
+      seen.set(state, await dock(app).locator('img').getAttribute('src'))
+    }
+    seen.set('idle', await dock(app).locator('img').getAttribute('src'))
+    await say(app, 'lento 60')
+    await look('thinking')
+    await expect(dock(app)).toHaveAttribute('data-requested-state', 'done', { timeout: 30_000 })
+    await look('done')
+    await say(app, 'permiso')
+    await look('waiting')
+    // Cada estado usa su propio dibujo (el origen es una URL de objeto distinta por imagen).
+    expect(new Set(seen.values()).size).toBe(seen.size)
+    await app
+      .getByRole('button', { name: /Permitir/ })
+      .first()
+      .click()
+    await expect(app.locator('.perm-result')).toContainText('Permitido')
+  })
+
   test('no tapa la barra de estado, las pestañas ni el compositor', async ({ stack, app }) => {
     install(stack, 'tiny', tinyCompanion())
     await stack.nexo(['companion', 'select', 'tiny'])
@@ -203,70 +235,23 @@ test.describe('mascota en la interfaz', () => {
 // Capturas de la documentación: `NEXO_CAPTURAS=1 pnpm e2e -g capturas` las regenera en docs/capturas.
 const OUT = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'capturas')
 
-/** Una carita en SVG (solo formas): el paquete de demostración de las capturas. */
-const face = (bg: string, eyes: string, mouth: string, extra = '') =>
-  `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><rect x="6" y="10" width="52" height="46" rx="14" fill="${bg}"/><path d="M32 4v8" stroke="${bg}" stroke-width="4" stroke-linecap="round"/><circle cx="32" cy="4" r="3.5" fill="#e5c07b"/>${eyes}${mouth}${extra}</svg>`
-const eyes = (fill = '#15181d') =>
-  `<circle cx="22" cy="30" r="5" fill="${fill}"/><circle cx="42" cy="30" r="5" fill="${fill}"/>`
-const DEMO: Record<string, string> = {
-  'idle.svg': face(
-    '#61afef',
-    eyes(),
-    '<path d="M23 43q9 6 18 0" stroke="#15181d" stroke-width="3" fill="none" stroke-linecap="round"/>',
-  ),
-  'thinking.svg': face(
-    '#c678dd',
-    eyes(),
-    '<circle cx="32" cy="45" r="3" fill="#15181d"/>',
-    '<circle cx="52" cy="12" r="2.5" fill="#d7dae0"/><circle cx="57" cy="6" r="3.5" fill="#d7dae0"/>',
-  ),
-  'waiting.svg': face(
-    '#e5c07b',
-    eyes(),
-    '<path d="M24 45h16" stroke="#15181d" stroke-width="3" stroke-linecap="round"/>',
-    '<text x="50" y="14" font-size="16" font-weight="700" fill="#15181d" font-family="sans-serif">?</text>',
-  ),
-  'busy.svg': face(
-    '#d19a66',
-    eyes(),
-    '<path d="M23 44h18" stroke="#15181d" stroke-width="3" stroke-linecap="round"/>',
-  ),
-  'done.svg': face(
-    '#98c379',
-    '<path d="M17 31q5-7 10 0M37 31q5-7 10 0" stroke="#15181d" stroke-width="3" fill="none" stroke-linecap="round"/>',
-    '<path d="M22 41q10 12 20 0z" fill="#15181d"/>',
-  ),
-  'error.svg': face(
-    '#e06c75',
-    '<path d="M17 26l10 8M27 26l-10 8M37 26l10 8M47 26l-10 8" stroke="#15181d" stroke-width="3" stroke-linecap="round"/>',
-    '<path d="M23 47q9-7 18 0" stroke="#15181d" stroke-width="3" fill="none" stroke-linecap="round"/>',
-  ),
-}
-const DEMO_MANIFEST = {
-  format: 1,
-  id: 'robi',
-  name: 'Robi',
-  version: '1.0.0',
-  description: 'Un robot sencillo de demostración, dibujado con formas SVG.',
-  author: { name: 'Nexo' },
-  license: 'CC0-1.0',
-  states: Object.fromEntries(
-    ['idle', 'thinking', 'waiting', 'busy', 'done', 'error'].map((s) => [s, { src: `${s}.svg` }]),
-  ),
-}
-
 test.describe('capturas F5.3', () => {
   test.skip(process.env.NEXO_CAPTURAS === undefined, 'solo con NEXO_CAPTURAS=1')
   const shot = async (app: Page, name: string) => {
     // Deja terminar el fundido de entrada de la imagen (180 ms) antes de la captura.
     await app.waitForTimeout(450)
+    // La ruta de trabajo de la prueba no es la de nadie: se sustituye por una de ejemplo.
+    await app.evaluate(() => {
+      for (const el of document.querySelectorAll('.chip.fixed.ellipsis'))
+        el.textContent = '~/tienda-web'
+    })
     mkdirSync(OUT, { recursive: true })
     await app.screenshot({ path: join(OUT, `f5-${name}.png`) })
   }
 
   test('capturas del selector y de la mascota en varios estados', async ({ stack, app }) => {
     await app.setViewportSize({ width: 1280, height: 800 })
-    install(stack, 'robi', { ...DEMO, 'companion.json': JSON.stringify(DEMO_MANIFEST) })
+    install(stack, 'robi', robiPackage())
     install(stack, 'tiny', tinyCompanion())
     install(stack, 'roto', { 'companion.json': '{ no es json' })
     await openAgentTab(stack, app)
@@ -296,34 +281,5 @@ test.describe('capturas F5.3', () => {
       .first()
       .click()
     await expect(app.locator('.perm-result')).toContainText('Permitido')
-  })
-})
-
-test.describe('capturas F5.3 en anchos estrechos', () => {
-  test.skip(process.env.NEXO_CAPTURAS === undefined, 'solo con NEXO_CAPTURAS=1')
-
-  test('selector y mascota en 360, 768 y 1280 de ancho', async ({ stack, app }) => {
-    install(stack, 'robi', { ...DEMO, 'companion.json': JSON.stringify(DEMO_MANIFEST) })
-    install(stack, 'tiny', tinyCompanion())
-    await stack.nexo(['companion', 'select', 'robi'])
-    await openAgentTab(stack, app)
-    mkdirSync(OUT, { recursive: true })
-    const sizes = [
-      { w: 360, h: 640, name: '360' },
-      { w: 768, h: 700, name: '768' },
-      { w: 1280, h: 600, name: '1280-bajo' },
-    ]
-    for (const { w, h, name } of sizes) {
-      await app.setViewportSize({ width: w, height: h })
-      await expect(dock(app)).toBeVisible()
-      await app.waitForTimeout(450)
-      await app.screenshot({ path: join(OUT, `f5-ancho-${name}-mascota.png`) })
-      await app.getByRole('button', { name: 'Mascota', exact: true }).click()
-      await expect(selector(app)).toBeVisible()
-      await app.waitForTimeout(200)
-      await app.screenshot({ path: join(OUT, `f5-ancho-${name}-selector.png`) })
-      await app.keyboard.press('Escape')
-      await expect(selector(app)).toHaveCount(0)
-    }
   })
 })

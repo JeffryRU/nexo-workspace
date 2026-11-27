@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Locator, Page } from '@playwright/test'
-import { tinyCompanion } from '../packages/testkit/src/companion-package.ts'
 import { FAKE_CODEX } from './providers.ts'
+import { robiPackage } from './robi.ts'
 import { ECHO_SCRIPT, expect, Stack, test } from './stack.ts'
 
 /**
@@ -117,9 +117,9 @@ async function buildScene(): Promise<Scene> {
     NEXO_MEMORY_OBSERVER_TOKENS: '500',
     NEXO_MEMORY_REFLECTOR_TOKENS: '100000',
   })
-  // Mascota de prueba instalada antes de abrir la interfaz.
-  for (const [rel, data] of Object.entries(tinyCompanion())) {
-    const file = join(stack.dir, 'companions', 'tiny', ...rel.split('/'))
+  // Robi (el paquete de ejemplo) instalado antes de abrir la interfaz.
+  for (const [rel, data] of Object.entries(robiPackage())) {
+    const file = join(stack.dir, 'companions', 'robi', ...rel.split('/'))
     mkdirSync(dirname(file), { recursive: true })
     writeFileSync(file, data)
   }
@@ -270,7 +270,7 @@ const VIEWS: View[] = [
     enter: async (app) => {
       await app.getByRole('button', { name: 'Mascota', exact: true }).click()
       await expect(dialog(app, 'Mascota')).toBeVisible()
-      await dialog(app, 'Mascota').getByRole('radio', { name: /Tiny/ }).check()
+      await dialog(app, 'Mascota').getByRole('radio', { name: /Robi/ }).check()
       await expect(dialog(app, 'Mascota').locator('.companion-choice').nth(1)).toBeVisible()
     },
     leave: (app) => closeDialog(app, 'Mascota'),
@@ -420,6 +420,55 @@ test.describe('pulido visual (F5.4)', () => {
       expect(problems).toEqual([])
     })
   }
+
+  test('las pestañas miden según su título; con desborde hay fundido y la rueda las desplaza', async ({
+    app,
+  }) => {
+    if (scene === undefined) throw new Error('sin escena')
+    await app.setViewportSize({ width: 1280, height: 800 })
+    await app.goto(scene.stack.url())
+    await expect(tab(app, 'base')).toBeVisible()
+    const widths = async () =>
+      app.locator('.tab-wrap').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().width))
+    for (const w of await widths()) {
+      expect(w).toBeGreaterThanOrEqual(95.5)
+      expect(w).toBeLessThanOrEqual(200.5)
+    }
+    // Un título corto no se estira hasta el máximo.
+    expect(Math.min(...(await widths()))).toBeLessThan(150)
+    const frame = app.locator('.tablist-frame')
+    await expect(frame).not.toHaveAttribute('data-more', /start/)
+    for (let i = 0; i < 8; i++) {
+      await app.getByRole('button', { name: 'Nueva pestaña', exact: true }).click()
+    }
+    const list = app.locator('.tablist')
+    await expect(frame).toHaveAttribute('data-more', /start/)
+    await list.evaluate((el) => {
+      el.scrollLeft = 0
+    })
+    await expect(frame).toHaveAttribute('data-more', 'end')
+    await list.hover()
+    await app.mouse.wheel(0, 240)
+    await expect.poll(() => list.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0)
+    await expect(frame).toHaveAttribute('data-more', /start/)
+    for (let i = 0; i < 8; i++) await app.locator('.tab-wrap.selected .tab-close').click()
+  })
+
+  test('la ruta larga de una sesión del historial va en una línea, con la ruta entera en title', async ({
+    app,
+  }) => {
+    if (scene === undefined) throw new Error('sin escena')
+    await app.setViewportSize({ width: 360, height: 640 })
+    await app.goto(scene.stack.url())
+    await expect(tab(app, 'base')).toBeAttached()
+    await app.getByRole('button', { name: 'Historial' }).click()
+    await dialog(app, 'Historial').getByRole('button', { name: 'Ver', exact: true }).first().click()
+    const cwd = dialog(app, 'Historial').locator('.history-meta-cwd')
+    await expect(cwd).toBeVisible()
+    expect(await cwd.getAttribute('title')).toContain('tienda-web')
+    const box = await dialog(app, 'Historial').locator('.history-session-info-meta').boundingBox()
+    expect(box?.height ?? 999).toBeLessThan(24)
+  })
 
   test('a 360 px las acciones clave están visibles y se pueden pulsar', async ({ app }) => {
     if (scene === undefined) throw new Error('sin escena')

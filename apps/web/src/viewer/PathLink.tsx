@@ -11,7 +11,14 @@ export function PathLink(props: { path: string; class?: string }): JSX.Element {
   const env = useContext(MarkdownEnvContext)
   const resolved = () => (env === undefined ? undefined : resolveLocalPath(env.baseDir, props.path))
   return (
-    <Show when={resolved()} fallback={<span class={props.class}>{props.path}</span>}>
+    <Show
+      when={resolved()}
+      fallback={
+        <span class={props.class} title={props.path}>
+          {props.path}
+        </span>
+      }
+    >
       {(abs) => (
         <button
           type="button"

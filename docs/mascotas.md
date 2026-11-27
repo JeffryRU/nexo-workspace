@@ -32,10 +32,38 @@ La mascota muestra uno de seis estados, que salen de la atención de todos los a
 `idle` es **obligatorio**. Los demás son opcionales: un estado que no declaras (o cuya imagen falla) se dibuja con
 la imagen de `idle`. Si falla incluso `idle`, Nexo no dibuja nada (nunca una imagen rota).
 
-### Ejemplo completo
+### Ejemplo listo para copiar: Robi
+
+[`examples/companions/robi/`](../examples/companions/robi) es un paquete real (SVG dibujados a mano, licencia CC0) con una expresión distinta para cada estado:
+
+<p>
+  <img src="../examples/companions/robi/idle.svg" alt="Robi: idle" title="idle" width="96" height="96">
+  <img src="../examples/companions/robi/thinking.svg" alt="Robi: thinking" title="thinking" width="96" height="96">
+  <img src="../examples/companions/robi/busy.svg" alt="Robi: busy" title="busy" width="96" height="96">
+  <img src="../examples/companions/robi/waiting.svg" alt="Robi: waiting" title="waiting" width="96" height="96">
+  <img src="../examples/companions/robi/done.svg" alt="Robi: done" title="done" width="96" height="96">
+  <img src="../examples/companions/robi/error.svg" alt="Robi: error" title="error" width="96" height="96">
+</p>
+
+Para usarla, copia la carpeta entera a la de compañeros (ver [Dónde copiarlo](#dónde-copiarlo)) y elígela:
 
 ```
-robi/
+# Linux / macOS
+cp -r examples/companions/robi "<directorio de estado de Nexo>/companions/"
+# Windows (PowerShell)
+Copy-Item -Recurse examples\companions\robi "$env:LOCALAPPDATA\Nexo\companions\"
+
+nexo companion select robi
+```
+
+Para hacer la tuya, copia `robi/` con otro nombre de carpeta, cambia `id`, `name` y `author` en `companion.json` (el `id` tiene que ser el nombre de la carpeta) y sustituye los SVG (o PNG, WebP o GIF). Un
+estado que no dibujes usa la imagen de `idle`. Robi no incluye hoja de sprites: para animar un estado, mira [Hojas de sprites](#hojas-de-sprites-sheet). Una prueba
+(`packages/adapters/companion-fs/test/robi.test.ts`) la carga con el cargador real, así que el ejemplo no se desactualiza.
+
+### Ejemplo completo con todos los formatos
+
+```
+mixta/
   companion.json
   idle.png
   pensando.gif
@@ -49,10 +77,10 @@ robi/
 ```json
 {
   "format": 1,
-  "id": "robi",
-  "name": "Robi",
+  "id": "mixta",
+  "name": "Mixta",
   "version": "1.0.0",
-  "description": "Un robot sencillo.",
+  "description": "Mezcla PNG, GIF, hoja de sprites, WebP y SVG.",
   "author": { "name": "Tu nombre", "url": "https://ejemplo.org" },
   "license": "CC0-1.0",
   "states": {

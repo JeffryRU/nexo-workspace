@@ -67,6 +67,7 @@
   align-items: baseline;
 }
 .history-cwd {
+  flex: 0 1 auto;
   font-weight: normal;
   font-size: var(--text-xs);
   min-width: 0;
@@ -133,7 +134,19 @@
 .history-session-info {
   display: grid;
   min-width: 0;
-  flex: 1;
+  /* Con poco ancho baja a su propia fila: así el título y la ruta no quedan en un hilo. */
+  flex: 1 1 calc(var(--pane-min) * 2);
+}
+.history-session-info-meta {
+  display: flex;
+  min-width: 0;
+  white-space: pre;
+}
+.history-meta-fixed {
+  flex: none;
+}
+.history-meta-cwd {
+  flex: 0 1 auto;
 }
 .history-transcript {
   display: grid;

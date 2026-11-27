@@ -136,7 +136,10 @@ Antigravity y de Ollama, una consulta propia de los límites de Claude (solo inf
   icono y foco atrapado, barra de estado en dos grupos, compositor y chips alineados, pestañas con desplazamiento y activa siempre visible, barra lateral colapsable (carril con la mascota) y cajón superpuesto
   por debajo de 760 px, paneles con tamaño mínimo y cabecera adaptable, tablas numéricas a la derecha, variables de diseño únicas y ventana mínima de 480 × 360. Pruebas unitarias, adversariales y E2E a cinco anchos
   con comprobación de desbordes; capturas `f5-4-*`. Ver «Pulido visual y responsive (F5.4)».
-- La primera mascota es un proyecto aparte; Nexo funciona al 100 % sin ninguna.
+- **F5.5 Detalles visuales y mascota Robi** (#81, hecho): pestañas que miden según su título (96 a 200 px) con fundido en los bordes y rueda vertical que las desplaza en horizontal, rutas largas en una línea con
+  puntos suspensivos y `title`, la mascota de ejemplo **Robi** (`examples/companions/robi`, SVG propio, CC0, una expresión por estado) con su prueba de carga con el cargador real y capturas regeneradas con ella.
+  Ver «Detalles visuales y Robi (F5.5)».
+- Nexo funciona al 100 % sin mascota; Robi es solo un ejemplo para copiar (ver [docs/mascotas.md](mascotas.md)).
 
 ## F6 — Empaquetado
 
