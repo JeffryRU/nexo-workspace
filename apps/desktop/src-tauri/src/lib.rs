@@ -22,6 +22,10 @@ use tauri::{
 };
 
 const MAIN_WINDOW: &str = "main";
+/// Tamaño inicial y mínimo de la ventana (px lógicos). El mínimo deja trabajar en estrecho: por debajo de 760 px la
+/// barra lateral es un cajón y por debajo de 520 los diálogos ocupan toda la ventana (ver docs/ARCHITECTURE.md).
+const WINDOW_SIZE: (f64, f64) = (1280.0, 860.0);
+const WINDOW_MIN_SIZE: (f64, f64) = (480.0, 360.0);
 
 struct AppState {
     launch: LaunchConfig,
@@ -102,8 +106,8 @@ fn build_window(app: &AppHandle, dev: bool) -> tauri::Result<WebviewWindow> {
     };
     WebviewWindowBuilder::new(app, MAIN_WINDOW, WebviewUrl::App("index.html".into()))
         .title("Nexo Workspace")
-        .inner_size(1280.0, 860.0)
-        .min_inner_size(640.0, 400.0)
+        .inner_size(WINDOW_SIZE.0, WINDOW_SIZE.1)
+        .min_inner_size(WINDOW_MIN_SIZE.0, WINDOW_MIN_SIZE.1)
         .on_navigation(handle_nav)
         .on_new_window(move |url, _features| {
             match navigation::classify(&url, dev) {
