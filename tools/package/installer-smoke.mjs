@@ -505,10 +505,15 @@ async function smokeMsi(file, sandbox) {
     }
   }
   try {
-    if (installDir === undefined)
+    if (installDir === undefined) {
+      const text = await readFile(logFile, 'utf8').catch(() => '')
+      const interesting =
+        /INSTALLDIR|TARGETDIR|APPLICATIONFOLDER|Installation (success|failed)|Product:/i
+      const lines = text.split(/\r?\n/).filter((l) => interesting.test(l))
       throw new Error(
-        `el MSI no instaló nexo/daemon/daemon.mjs (carpetas «nexo» vistas: ${seen.join(', ') || 'ninguna'})`,
+        `el MSI no instaló nexo/daemon/daemon.mjs (carpetas «nexo» vistas: ${seen.join(', ') || 'ninguna'})\n${lines.slice(0, 40).join('\n')}`,
       )
+    }
     log(`msi: instalado en ${installDir}`)
     await exerciseWindowsInstall(installDir, stateDir, { keepDaemonAlive: false })
   } catch (error) {
