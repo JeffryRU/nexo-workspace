@@ -68,6 +68,7 @@ describe('ventana de memoria: texto hostil (es dato, no marcado ni órdenes)', (
         'memory.status',
         'memory.list',
         'limits.status',
+        'companion.state',
         'terminal.read',
         'events.subscribe',
       ]).toContain(m)

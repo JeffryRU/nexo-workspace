@@ -2064,7 +2064,7 @@ agentes, `prompts` MCP, y un recurso para el contenido de las terminales (la sal
 ## Compañeros (F5.2)
 
 Nexo funciona al 100 % sin mascota. Una mascota es un **paquete intercambiable de datos** (ADR 0006): sin código ejecutable, solo un manifiesto
-y unas imágenes. La F5.2 es el dominio, el formato, el cargador, los métodos del daemon y la CLI; **dibujar** la mascota es la F5.3.
+y unas imágenes. La F5.2 es el dominio, el formato, el cargador, los métodos del daemon y la CLI; **dibujar** la mascota es la F5.3 (ver «Interfaz de la mascota (F5.3)»).
 
 ### Estados y traducción (`CompanionService`, core)
 
@@ -2193,6 +2193,87 @@ objetivo y subida inmediata). El paquete de prueba (`tinyCompanion`) se genera e
 **Qué queda fuera.** Dibujar la mascota y el selector en la configuración (F5.3, #72), instalar/descargar paquetes (se copian a mano a la carpeta),
 JPEG y otros formatos, animaciones por reglas o código, y la primera mascota real (proyecto aparte).
 
+## Interfaz de la mascota (F5.3)
+
+Cierra la F5: la web dibuja lo que el daemon ya sabía (`companion.*` de la F5.2). Todo vive en `apps/web/src/companion/`, con textos en `i18n/es.ts`.
+No hay métodos nuevos en el protocolo. Guía para quien crea o conecta una mascota: [`docs/mascotas.md`](mascotas.md).
+
+### Modelo y estado (`createCompanionModel`)
+
+Una instancia por ventana (la crea `Workbench` y la reparte por contexto). Sigue `companion.state` con una consulta al conectar y el evento
+`companion.state`. Qué hace con lo que llega:
+
+- **Eventos repetidos o fuera de orden** (`mergeState`, pura): uno idéntico al actual conserva la misma referencia (no repinta); uno del mismo
+  compañero con un `since` anterior al actual se descarta; un compañero distinto siempre se acepta (elegir no cambia `since`). Un valor que no pasa
+  `sanitizeView` se ignora. La consulta inicial vale solo si todavía no llegó ningún evento.
+- **Carreras al cambiar de mascota.** Cada cambio de compañero (o recarga) incrementa una generación: lo que se dibujaba **deja de dibujarse al
+  instante** y una carga que termina tarde con una generación vieja se ignora. Además el modelo solo dibuja si `loaded.id === selected`. Así nunca se ve
+  la imagen de la mascota anterior.
+- **Reconexión:** se vacía el caché y se vuelve a pedir todo (el paquete pudo cambiar en disco). Un evento posterior a una carga fallida reintenta.
+
+### Recursos como imagen (`CompanionAssetCache`)
+
+Caché por id de compañero (hasta 3 paquetes; el elegido nunca se expulsa). `companion.get` una vez, `companion.asset` por cada ruta distinta del
+manifiesto (varios estados con la misma imagen se piden una vez), y con los bytes un `Blob` y una **URL de objeto** para un `<img>`. El daemon no sirve
+HTTP de recursos: todo pasa por el token del protocolo y la CSP ya permite `img-src blob:` (F4.2).
+
+- **Validación en el cliente:** base64 estricto (`decodeBase64`: alfabeto, relleno, tope), tamaño decodificado igual al declarado, tipo en la lista
+  de cuatro, recurso no vacío y manifiesto del mismo `id` que se pidió. Un recurso que no cumple cuenta como fallido, no rompe el resto.
+- **Sin fugas de URL:** las URL se crean **sincrónicamente al final** de la carga y solo si el paquete sigue vigente; si se descartó mientras se
+  cargaba (`forget`, expulsión, `disposeAll`) no llega a crearse ninguna. Toda URL se revoca al expulsar, olvidar, reconectar o desmontar
+  (`liveUrls` las cuenta; las pruebas comprueban que creadas = revocadas).
+- **Versión:** al abrir el selector, `companion.list` anuncia la versión de cada paquete; uno que cambió se olvida y se recarga (`invalidateStale`).
+
+### Fallos
+
+Un recurso que falla en la red, que no es una imagen de las cuatro, cuyo base64 está corrupto o cuyo tamaño no cuadra se omite; el estado que lo usaba se
+dibuja con `idle` (`resolveAsset`). Si el navegador no puede decodificar la imagen (`onerror` del `<img>`) se marca ese estado como roto y se usa
+`idle`; si `idle` también está roto, o si no se pudo traer ninguna imagen, o `companion.get` falla (paquete borrado en disco), **no se dibuja nada** (ni
+un `<img>` roto) y el selector avisa «No se pudieron leer las imágenes de la mascota elegida». La interfaz sigue igual.
+
+### Dibujo (`CompanionDock`)
+
+- **Sitio:** columna izquierda de la ventana, **debajo** de la lista de espacios (`.side-column`: barra lateral + mascota). No es una capa flotante:
+  ocupa su propio espacio, así que no puede tapar pestañas, paneles, compositor ni barra de estado, y el puntero no se queda en ella
+  (`pointer-events: none` en el dibujo). En ventanas de menos de 520 px de alto no se muestra.
+- **Anchos estrechos (360-1280 px):** la barra lateral pasa a `clamp(132px, 34vw, 232px)` (a 360 px la mascota, de 96 px, sigue centrada en ella), la barra de estado
+  puede pasar a dos filas y oculta el nombre de la app por debajo de 640 px, y el selector se centra respecto de la ventana (`position: fixed`,
+  `min(520px, 100vw - 24px)`). La `×` de ocultar es siempre visible (tenue; sin «pasar el ratón» en pantallas táctiles) y usa el mismo `icon-button` que el resto.
+  Capturas: `docs/capturas/f5-ancho-*.png`.
+- **Siempre `<img>`.** Un estado sin hoja es un `<img>` de 96 px (`object-fit: contain`, `image-rendering: pixelated`); nunca SVG incrustado, `<object>`
+  ni `<iframe>`. Cada imagen nueva entra con un fundido de 180 ms (`keyed` recrea el elemento; no hay dos a la vez).
+- **Hojas de sprites** (`sheet`): un visor del tamaño de un cuadro (ampliado en enteros) con el `<img>` de la hoja desplazado (`frameOffset`,
+  `frameScale`); un temporizador avanza un cuadro cada `1000 / fps` ms (`nextFrame`; sin `loop`, se queda en el último).
+- **`prefers-reduced-motion`:** sin fundido ni balanceo (CSS) y la hoja queda **fija en el primer cuadro** (el temporizador no se crea); la
+  preferencia se sigue en vivo. Un GIF o WebP animado lo anima el navegador y no se puede pausar: para respetar la preferencia, usa una hoja.
+- **Accesibilidad:** el `<img>` lleva `alt` «Robi: pensando»; el contenedor es un `aside` con nombre «Mascota»; un `span` con `role="status"` y `aria-live="polite"`
+  (`aria-atomic`) anuncia «La mascota Robi está: pensando» solo cuando cambia el estado (el estado ya viene suavizado por los tiempos mínimos del
+  daemon, así que no habla de más).
+
+### Selector y ocultar (`CompanionDialog`)
+
+Botón **Mascota** en la barra de estado → ventana modal (`role="dialog"`, foco al abrir, Escape cierra) con un grupo de radios: **«Sin mascota»
+primero** (y marcado por omisión), luego los paquetes válidos (nombre, versión, autor, licencia, descripción) y, aparte, los no válidos con su motivo.
+Elegir llama a `companion.select` (lo guarda el daemon); si lo rechaza (`NOT_FOUND`) se dice y no cambia nada; no hay dos elecciones a la vez. Los
+nombres, autores y motivos son texto ajeno: se pintan como texto plano.
+
+**Decisión: ocultar es una preferencia de la ventana, no del daemon.** El interruptor «Mostrar la mascota en la ventana» y el `×` de la mascota
+escriben `companionHidden` en los ajustes de la interfaz que ya existen (`state/settings.ts`, `localStorage`, junto a las notificaciones). Alternativa
+descartada: un campo `hidden` en `companion-settings.json`. Habría que ampliar `companion.state`/`companion.select`, el contrato y la CLI para algo
+que es del puesto de trabajo (una pantalla pequeña, una sesión de grabación), no de la instalación; y dos ventanas conectadas al mismo daemon no
+tendrían por qué ocultarla a la vez. Lo que sí es del daemon (qué mascota hay elegida) sigue allí. Ocultar no pierde la elegida.
+
+### Pruebas
+
+Unitarias y adversariales de los componentes (`Companion*.test.tsx`: dibujo por estado con `idle` de respaldo, recurso que falla, imagen que no decodifica,
+todo fallido, paquete borrado, hoja de sprites y `prefers-reduced-motion` con temporizadores falsos, selector, ocultar y persistir, reconexión; carreras de
+cambios rápidos de mascota con la carga vieja terminando tarde, eventos fuera de orden, repetidos y basura, una avalancha de 500 cambios, texto hostil),
+del caché (`cache*.test.ts`: base64 corrupto, mime raro, tamaño que no cuadra, manifiesto de otro id, expulsión, descarte a mitad de la carga) y de
+propiedades (fast-check: `decodeBase64`, `mergeState`, `resolveAsset`, geometría de las hojas, y que tras cualquier secuencia de cargas, olvidos y
+expulsiones no queda ninguna URL viva). E2E con el daemon real y el paquete de prueba del testkit (`e2e/companion.spec.ts`): sin mascota por omisión,
+elegir y que sobreviva a recargar, estados reales del agente (`lento`, `permiso`), que no tape nada, ocultar, paquete borrado y paquete no válido.
+Capturas: `docs/capturas/f5-*.png` (`NEXO_CAPTURAS=1 pnpm e2e -g capturas`); la app solo tiene tema oscuro, así que no hay variante clara.
+
 ## Seguridad
 
 - Solo `127.0.0.1`; token aleatorio de 32 bytes; `Origin` permitido: `tauri://localhost`,
@@ -2207,7 +2288,7 @@ JPEG y otros formatos, animaciones por reglas o código, y la primera mascota re
 - Servidor MCP (F5.1): solo lectura salvo `NEXO_MCP_WRITE=1`; ninguna herramienta lee archivos ni expone credenciales; topes de tamaño y de
   frecuencia; ver «Servidor MCP (F5.1)».
 - Compañeros (F5.2): paquetes de datos sin código; solo se leen los recursos del manifiesto, con topes, rutas validadas, sin enlaces simbólicos ni duros,
-  bytes mágicos de imagen y SVG validado (rechazado si lleva scripts o referencias externas) que el cliente dibuja solo como `<img>`; ver «Compañeros (F5.2)».
+  bytes mágicos de imagen y SVG validado (rechazado si lleva scripts o referencias externas) que el cliente dibuja solo como `<img>` (F5.3: `Blob` + URL de objeto revocada, base64 y tipos validados de nuevo, nunca incrustado); ver «Compañeros (F5.2)» e «Interfaz de la mascota (F5.3)».
 - Visor (F4.2): sin HTML crudo ni red remota en el Markdown, SVG solo como `<img>`, PDF sin scripts ni anotaciones, CSP con `blob:` solo para imágenes;
   ver «Visor lateral (F4.2)».
 

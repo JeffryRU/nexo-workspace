@@ -1,0 +1,189 @@
+/* Mascota (F5.3): ocupa su propio sitio bajo la lista de espacios; nunca flota sobre el contenido. */
+.side-column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+.side-column > .sidebar {
+  flex: 1;
+  min-height: 0;
+}
+.companion-dock {
+  position: relative;
+  flex: none;
+  display: flex;
+  justify-content: center;
+  padding: 8px 8px 10px;
+  background: var(--bg-sunken);
+  border-right: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+}
+.companion-art {
+  width: 96px;
+  height: 96px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  /* La mascota es decorativa para el puntero: los clics y el arrastre no se quedan en ella. */
+  pointer-events: none;
+  user-select: none;
+}
+.companion-img {
+  display: block;
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  animation: companion-in 180ms ease-out;
+}
+.companion-sheet {
+  display: block;
+  overflow: hidden;
+  animation: companion-in 180ms ease-out;
+}
+.companion-sheet-img {
+  width: auto;
+  height: auto;
+  max-width: none;
+  object-fit: none;
+  transform-origin: 0 0;
+  animation: none;
+}
+.companion-hide {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  /* Siempre visible (tenue): en pantallas táctiles no hay «pasar el ratón». */
+  opacity: 0.55;
+  transition: opacity 120ms;
+}
+.companion-hide:focus-visible {
+  opacity: 1;
+}
+.companion-dock:hover .companion-hide {
+  opacity: 1;
+}
+.companion-dock[data-state="waiting"] .companion-art {
+  animation: companion-bob 1.6s ease-in-out infinite;
+}
+@keyframes companion-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes companion-bob {
+  50% {
+    transform: translateY(-3px);
+  }
+}
+/* En ventanas bajas la mascota se quita para no comerse la lista de espacios. */
+@media (max-height: 520px) {
+  .companion-dock {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .companion-img,
+  .companion-sheet,
+  .companion-dock[data-state="waiting"] .companion-art {
+    animation: none;
+  }
+  .companion-hide {
+    transition: none;
+  }
+}
+
+.modal.companion-dialog {
+  width: min(520px, calc(100% - 24px));
+  min-width: 0;
+  max-height: calc(100% - 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.companion-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.companion-head h2 {
+  margin: 0;
+}
+.companion-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.companion-choices legend {
+  padding: 0;
+  margin-bottom: 4px;
+  color: var(--fg-muted);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.companion-choice {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.companion-choice:hover {
+  background: var(--bg-hover);
+}
+.companion-choice:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--bg-active);
+}
+.companion-choice-main {
+  display: grid;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.companion-choice-name {
+  color: var(--fg-strong);
+}
+.companion-invalid h3 {
+  margin: 4px 0;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+.companion-invalid ul {
+  margin: 0;
+  padding-left: 18px;
+  overflow-wrap: anywhere;
+}
+.companion-error {
+  margin: 0;
+  color: var(--danger);
+}
+.companion-show {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 4px;
+}
+.companion-hint {
+  margin: 0;
+}
+/* Centrado respecto de la ventana (no de la rejilla, que en anchos muy estrechos puede desbordarse). */
+.modal-backdrop.companion-backdrop {
+  position: fixed;
+}
+.modal.companion-dialog {
+  width: min(520px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+}

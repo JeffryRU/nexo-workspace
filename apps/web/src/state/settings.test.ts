@@ -21,8 +21,8 @@ function memory(initial?: string): SettingsStorage & { data: Map<string, string>
 
 describe('settings', () => {
   it('por omisión las notificaciones están desactivadas', () => {
-    expect(readSettings(undefined)).toEqual({ notifications: false })
-    expect(readSettings(memory())).toEqual({ notifications: false })
+    expect(readSettings(undefined)).toEqual({ notifications: false, companionHidden: false })
+    expect(readSettings(memory())).toEqual({ notifications: false, companionHidden: false })
   })
 
   it('guarda y recupera el ajuste', () =>
@@ -30,7 +30,10 @@ describe('settings', () => {
       const storage = memory()
       const a = createSettings(storage)
       a.setNotifications(true)
-      expect(JSON.parse(storage.data.get(SETTINGS_KEY) as string)).toEqual({ notifications: true })
+      expect(JSON.parse(storage.data.get(SETTINGS_KEY) as string)).toEqual({
+        notifications: true,
+        companionHidden: false,
+      })
       expect(createSettings(storage).notifications()).toBe(true)
       a.setNotifications(false)
       expect(createSettings(storage).notifications()).toBe(false)
@@ -72,6 +75,28 @@ describe('settings', () => {
   })
 })
 
+describe('settings: mascota oculta', () => {
+  it('se guarda sin pisar las notificaciones y sobrevive a recargar', () =>
+    createRoot((dispose) => {
+      const storage = memory()
+      const a = createSettings(storage)
+      a.setNotifications(true)
+      a.setCompanionHidden(true)
+      const b = createSettings(storage)
+      expect(b.companionHidden()).toBe(true)
+      expect(b.notifications()).toBe(true)
+      b.setCompanionHidden(false)
+      expect(createSettings(storage).companionHidden()).toBe(false)
+      expect(createSettings(storage).notifications()).toBe(true)
+      dispose()
+    }))
+
+  it('un valor que no es booleano vuelve a «visible»', () => {
+    expect(readSettings(memory('{"companionHidden":"si"}')).companionHidden).toBe(false)
+    expect(readSettings(memory('{"companionHidden":1}')).companionHidden).toBe(false)
+  })
+})
+
 describe('settings (adversarial y propiedades)', () => {
   it('basura guardada cae a los valores por omisión', () => {
     for (const raw of [
@@ -84,13 +109,14 @@ describe('settings (adversarial y propiedades)', () => {
       '{"notifications":"yes"}',
       '{"notifications":1}',
     ]) {
-      expect(readSettings(memory(raw))).toEqual({ notifications: false })
+      expect(readSettings(memory(raw))).toEqual({ notifications: false, companionHidden: false })
     }
   })
 
   it('ignora campos desconocidos y prototipos hostiles', () => {
     expect(readSettings(memory('{"notifications":true,"__proto__":{"x":1},"otro":1}'))).toEqual({
       notifications: true,
+      companionHidden: false,
     })
   })
 
