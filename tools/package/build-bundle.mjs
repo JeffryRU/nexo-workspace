@@ -1,5 +1,5 @@
 // Construye el paquete de ejecución de Nexo (F6.1): daemon, pty host, CLI y MCP como bundles JS (esbuild),
-// node-pty aparte con su binario nativo, la web, los lanzadores y el Node oficial como sidecar.
+// node-pty aparte con su binario nativo, la web, los lanzadores, la mascota de ejemplo y el Node oficial como sidecar.
 //
 //   node tools/package/build-bundle.mjs [--out <carpeta>] [--no-web] [--with-claude] [--cache <carpeta>]
 //
@@ -152,6 +152,18 @@ export async function copyClaude(root, outDir, platform, arch) {
   throw new Error(`el SDK no trae el ejecutable de Claude Code para ${platform}-${arch}`)
 }
 
+/**
+ * Mascotas de ejemplo (F6.2): Robi viaja en `companions/robi` dentro del paquete. NO se instala sola en la carpeta
+ * del usuario: «sin mascota» sigue siendo lo predeterminado y copiarla es un paso explícito (docs/instalacion.md).
+ */
+export async function copyCompanions(root, outDir) {
+  const source = join(root, 'examples/companions/robi')
+  if (!(await exists(join(source, 'companion.json')))) {
+    throw new Error('falta examples/companions/robi/companion.json')
+  }
+  await cp(source, join(outDir, 'companions/robi'), { recursive: true })
+}
+
 export async function buildBundle({
   root = ROOT,
   outDir,
@@ -177,6 +189,7 @@ export async function buildBundle({
   }
   if (withClaude) await copyClaude(root, outDir, platform, arch)
   await writeLaunchers(outDir)
+  await copyCompanions(root, outDir)
   const node = await provisionNode({
     platform,
     arch,
