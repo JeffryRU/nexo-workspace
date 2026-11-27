@@ -506,7 +506,17 @@ async function smokeMsi(file, sandbox) {
   }
   try {
     if (installDir === undefined) {
-      const text = await readFile(logFile, 'utf8').catch(() => '')
+      // El registro de msiexec puede ser UTF-16.
+      const raw = await readFile(logFile).catch(() => Buffer.alloc(0))
+      const text =
+        raw[0] === 0xff && raw[1] === 0xfe ? raw.toString('utf16le') : raw.toString('utf8')
+      const search = run('powershell.exe', [
+        '-NoProfile',
+        '-Command',
+        'Get-ChildItem -Path $env:ProgramFiles, $env:LOCALAPPDATA, $env:ProgramData -Recurse -Depth 5 -Filter daemon.mjs -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName',
+      ])
+      console.error(`[installers] daemon.mjs encontrados:
+${search.stdout}`)
       const interesting =
         /INSTALLDIR|TARGETDIR|APPLICATIONFOLDER|Installation (success|failed)|Product:/i
       const lines = text.split(/\r?\n/).filter((l) => interesting.test(l))
