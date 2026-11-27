@@ -1,0 +1,69 @@
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--dialog-margin);
+  background: rgb(0 0 0 / 0.5);
+  z-index: var(--z-dialog);
+}
+.modal {
+  display: flex;
+  flex-direction: column;
+  width: min(520px, 100%);
+  max-height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+}
+/* La caja recibe el foco por código (no es un control): sin anillo; los controles de dentro sí lo llevan. */
+.modal:focus-visible {
+  outline: none;
+}
+.dialog-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: none;
+  min-height: var(--bar-h);
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-5);
+  border-bottom: 1px solid var(--border);
+}
+.dialog-title {
+  flex: 1;
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: var(--hit);
+  color: var(--fg-strong);
+}
+.dialog-close:hover {
+  background: var(--bg-hover);
+  color: var(--fg-strong);
+}
+.dialog-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5) var(--space-5);
+}
+/* En ventanas estrechas o bajas el diálogo ocupa toda la ventana. */
+@media (max-width: 520px), (max-height: 480px) {
+  .modal-backdrop {
+    padding: 0;
+  }
+  .modal {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+  }
+}

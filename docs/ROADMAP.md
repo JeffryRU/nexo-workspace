@@ -132,6 +132,10 @@ Antigravity y de Ollama, una consulta propia de los límites de Claude (solo inf
   (recursos como `<img>` desde un caché por id sin fugas de URL, `idle` de respaldo, hojas de sprites, `prefers-reduced-motion`, ocultable, `aria-live` discreto),
   guía [`docs/mascotas.md`](mascotas.md) (crear un paquete y conectar una mascota externa por MCP/WebSocket), pruebas unitarias, adversariales, de propiedades y E2E,
   capturas `f5-*`. Ver «Interfaz de la mascota (F5.3)». **F5 completa.**
+- **F5.4 Pulido visual y responsive** (#76, hecho): iconos SVG propios (trazo de 1.75 px, `currentColor`; trazos de Lucide, ISC, ver `NOTICE`) en lugar de glifos Unicode, cabecera de diálogo común con cerrar por
+  icono y foco atrapado, barra de estado en dos grupos, compositor y chips alineados, pestañas con desplazamiento y activa siempre visible, barra lateral colapsable (carril con la mascota) y cajón superpuesto
+  por debajo de 760 px, paneles con tamaño mínimo y cabecera adaptable, tablas numéricas a la derecha, variables de diseño únicas y ventana mínima de 480 × 360. Pruebas unitarias, adversariales y E2E a cinco anchos
+  con comprobación de desbordes; capturas `f5-4-*`. Ver «Pulido visual y responsive (F5.4)».
 - La primera mascota es un proyecto aparte; Nexo funciona al 100 % sin ninguna.
 
 ## F6 — Empaquetado

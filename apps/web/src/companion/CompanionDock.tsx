@@ -1,6 +1,7 @@
 import type { CompanionSheet } from '@nexo/contracts'
 import { createEffect, createSignal, onCleanup, Show } from 'solid-js'
 import { es, format } from '../i18n/es.ts'
+import { Icon } from '../ui/Icon.tsx'
 import { useCompanion } from './model.tsx'
 import { COMPANION_BOX, frameIntervalMs, frameOffset, frameScale, nextFrame } from './view.ts'
 import './companion.css'
@@ -62,7 +63,7 @@ export function CompanionDock() {
             aria-label={es.companion.hide}
             onClick={() => companion.setHidden(true)}
           >
-            ×
+            <Icon name="x" />
           </button>
           {/* Aviso discreto del cambio de estado (educado: no interrumpe lo que se está leyendo). */}
           <span class="sr-only" role="status" aria-live="polite" aria-atomic="true">

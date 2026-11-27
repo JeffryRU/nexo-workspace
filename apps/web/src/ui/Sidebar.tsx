@@ -2,17 +2,18 @@ import { For, Show } from 'solid-js'
 import { useModel } from '../app/model.tsx'
 import { es } from '../i18n/es.ts'
 import { activeTabOf } from '../state/store.ts'
+import { Icon } from './Icon.tsx'
 import { AttentionCount, AttentionDot, InlineEdit, useCurrentWorkspaceId } from './parts.tsx'
 import './Sidebar.css'
 
-export function Sidebar() {
+export function Sidebar(props: { onClose?: () => void }) {
   const { store, ui, actions, attention } = useModel()
   const current = useCurrentWorkspaceId()
 
   return (
     <nav class="sidebar" aria-label={es.sidebar.label}>
       <header class="sidebar-header">
-        <span class="sidebar-title">{es.sidebar.label}</span>
+        <span class="sidebar-title ellipsis">{es.sidebar.label}</span>
         <button
           type="button"
           class="icon-button"
@@ -20,8 +21,21 @@ export function Sidebar() {
           aria-label={es.sidebar.newWorkspace}
           onClick={() => void actions.newWorkspace()}
         >
-          +
+          <Icon name="plus" />
         </button>
+        <Show when={props.onClose}>
+          {(close) => (
+            <button
+              type="button"
+              class="icon-button"
+              title={es.sidebar.closeMenu}
+              aria-label={es.sidebar.closeMenu}
+              onClick={() => close()()}
+            >
+              <Icon name="x" />
+            </button>
+          )}
+        </Show>
       </header>
       <Show
         when={store.state.workspaces.length > 0}
@@ -72,7 +86,7 @@ export function Sidebar() {
                     aria-label={`${es.sidebar.closeWorkspace}: ${w.name}`}
                     onClick={() => void actions.closeWorkspace(w.id)}
                   >
-                    ×
+                    <Icon name="x" />
                   </button>
                 </div>
                 <ul class="tab-list">

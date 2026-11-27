@@ -7,6 +7,7 @@ import { es } from '../i18n/es.ts'
 import { findPaneTab } from '../state/store.ts'
 import { paneTitle } from '../terminal/title.ts'
 import { ViewerPane } from '../viewer/ViewerPane.tsx'
+import { Icon } from './Icon.tsx'
 import { AttentionDot } from './parts.tsx'
 import { TerminalView } from './TerminalView.tsx'
 import './PaneView.css'
@@ -61,40 +62,44 @@ export function PaneView(props: { paneId: PaneId }) {
               <button
                 type="button"
                 class="icon-button subtle"
+                data-tertiary="true"
                 title={es.pane.splitRight}
                 aria-label={es.pane.splitRight}
                 onClick={() => void actions.splitPane(props.paneId, 'row')}
               >
-                ▯▯
+                <Icon name="split-right" />
               </button>
               <button
                 type="button"
                 class="icon-button subtle"
+                data-secondary="true"
                 title={es.agent.splitWithAgent}
                 aria-label={es.agent.splitWithAgent}
                 onClick={() => void actions.splitAgent(props.paneId, 'row')}
               >
-                ✦
+                <Icon name="sparkle" />
               </button>
               <button
                 type="button"
                 class="icon-button subtle"
+                data-tertiary="true"
                 title={es.pane.splitDown}
                 aria-label={es.pane.splitDown}
                 onClick={() => void actions.splitPane(props.paneId, 'column')}
               >
-                ▭
+                <Icon name="split-down" />
               </button>
               <button
                 type="button"
                 class="icon-button subtle"
+                data-secondary="true"
                 classList={{ active: swapping() }}
                 title={swapping() ? es.pane.swapPending : es.pane.swap}
                 aria-label={es.pane.swap}
                 aria-pressed={ui.swapSource() === props.paneId}
                 onClick={swap}
               >
-                ⇄
+                <Icon name="swap" />
               </button>
               <button
                 type="button"
@@ -103,7 +108,7 @@ export function PaneView(props: { paneId: PaneId }) {
                 aria-label={es.pane.close}
                 onClick={() => void actions.closePane(props.paneId)}
               >
-                ×
+                <Icon name="x" />
               </button>
             </span>
           </header>

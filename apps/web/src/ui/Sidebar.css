@@ -10,14 +10,21 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 8px 4px 12px;
+  gap: var(--space-2);
+  flex: none;
+  min-height: var(--bar-h);
+  padding: 0 var(--space-2) 0 var(--space-4);
+  border-bottom: 1px solid var(--border);
   color: var(--fg-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
+.sidebar-title {
+  flex: 1;
+}
 .sidebar-empty {
-  padding: 12px;
+  padding: var(--space-4);
   color: var(--fg-muted);
 }
 .ws-list,
@@ -26,27 +33,31 @@
   margin: 0;
   padding: 0;
 }
+.ws-list {
+  padding: var(--space-2) 0;
+}
 .ws-item {
-  padding: 2px 6px;
+  padding: var(--space-1) var(--space-2);
 }
 .ws-row {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-1);
 }
 .ws-name,
 .tab-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-3);
   flex: 1;
   min-width: 0;
+  min-height: var(--hit);
   border: 0;
   border-radius: var(--radius);
   background: transparent;
   text-align: left;
   cursor: pointer;
-  padding: 4px 8px;
+  padding: 0 var(--space-3);
 }
 .ws-name {
   color: var(--fg-strong);
@@ -54,7 +65,7 @@
 }
 .tab-row {
   width: 100%;
-  padding-left: 22px;
+  padding-left: var(--space-6);
   color: var(--fg);
 }
 .ws-name:hover,
@@ -74,4 +85,9 @@
 .ws-row:hover .icon-button,
 .ws-row:focus-within .icon-button {
   visibility: visible;
+}
+@media (hover: none) {
+  .ws-row .icon-button {
+    visibility: visible;
+  }
 }

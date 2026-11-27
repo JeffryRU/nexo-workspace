@@ -249,6 +249,10 @@ describe('historial: sesión antigua de solo lectura', () => {
     expect(historyDialog(h)).toBeNull()
     const call = h.client.callsOf('viewer.open').at(-1) ?? h.client.callsOf('pane.split').at(-1)
     expect(JSON.stringify(call?.params)).toContain('/work/app/src/a.ts')
+    // Al volver a abrir el historial se ve la lista, no la sesión que se estaba leyendo.
+    await openHistory(h)
+    expect(all(historyDialog(h), '.history-session').length).toBeGreaterThan(0)
+    expect(q(historyDialog(h), '.history-session-head')).toBeNull()
   })
 
   it('reanudar desde la sesión y volver con el botón o con Escape', async () => {

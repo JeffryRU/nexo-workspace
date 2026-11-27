@@ -3,6 +3,8 @@ import { useModel } from '../app/model.tsx'
 import type { InfoFailure } from '../daemon/info.ts'
 import { es } from '../i18n/es.ts'
 import type { ShortcutAction } from '../shortcuts/keymap.ts'
+import { Dialog } from './Dialog.tsx'
+import { Icon } from './Icon.tsx'
 import { useCurrentTab } from './parts.tsx'
 import './Overlays.css'
 
@@ -114,47 +116,28 @@ const HELP_ORDER = [
 
 export function HelpDialog() {
   const { ui } = useModel()
-  let dialog!: HTMLDivElement
-  createEffect(() => {
-    if (ui.helpOpen()) dialog?.focus()
-  })
+  const close = () => ui.setHelpOpen(false)
   return (
     <Show when={ui.helpOpen()}>
-      <div class="modal-backdrop">
-        <div
-          ref={dialog}
-          class="modal"
-          role="dialog"
-          aria-modal="true"
-          aria-label={es.help.title}
-          tabIndex={-1}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') ui.setHelpOpen(false)
-          }}
-        >
-          <h2>{es.help.title}</h2>
-          <dl class="shortcut-list">
-            <For each={HELP_ORDER}>
-              {(action) => (
-                <>
-                  <dt>{es.shortcuts[action]}</dt>
-                  <dd>
-                    <For each={ui.keymap[action]}>{(combo) => <kbd>{combo}</kbd>}</For>
-                  </dd>
-                </>
-              )}
-            </For>
-            <dt>{es.shortcuts['tab.goto']}</dt>
-            <dd>
-              <kbd>{ui.keymap['tab.goto-1'][0] ?? 'Alt+1'}</kbd>
-            </dd>
-          </dl>
-          <p class="muted">{es.help.hint}</p>
-          <button type="button" class="text-button" onClick={() => ui.setHelpOpen(false)}>
-            {es.help.close}
-          </button>
-        </div>
-      </div>
+      <Dialog label={es.help.title} closeLabel={es.help.close} onClose={close} class="help-dialog">
+        <dl class="shortcut-list">
+          <For each={HELP_ORDER}>
+            {(action) => (
+              <>
+                <dt>{es.shortcuts[action]}</dt>
+                <dd>
+                  <For each={ui.keymap[action]}>{(combo) => <kbd>{combo}</kbd>}</For>
+                </dd>
+              </>
+            )}
+          </For>
+          <dt>{es.shortcuts['tab.goto']}</dt>
+          <dd>
+            <kbd>{ui.keymap['tab.goto-1'][0] ?? 'Alt+1'}</kbd>
+          </dd>
+        </dl>
+        <p class="muted">{es.help.hint}</p>
+      </Dialog>
     </Show>
   )
 }
@@ -199,7 +182,7 @@ export function SearchBar() {
           title={es.search.previous}
           onClick={() => session()?.find(input.value, 'prev')}
         >
-          ↑
+          <Icon name="arrow-up" />
         </button>
         <button
           type="button"
@@ -208,7 +191,7 @@ export function SearchBar() {
           title={es.search.next}
           onClick={() => session()?.find(input.value, 'next')}
         >
-          ↓
+          <Icon name="arrow-down" />
         </button>
         <button
           type="button"
@@ -217,7 +200,7 @@ export function SearchBar() {
           title={es.search.close}
           onClick={close}
         >
-          ×
+          <Icon name="x" />
         </button>
       </search>
     </Show>

@@ -55,7 +55,7 @@ describe('mascota: dibujo', () => {
       'La mascota Tiny está: en reposo',
     )
     // Nunca se incrusta: ni <svg>, ni <object>, ni <iframe>, ni <embed>.
-    expect(h.dock()?.querySelector('svg, object, iframe, embed')).toBeNull()
+    expect(h.dock()?.querySelector('svg:not([data-icon]), object, iframe, embed')).toBeNull()
   })
 
   it('pide el manifiesto una vez y un recurso por cada imagen distinta', async () => {
@@ -173,7 +173,7 @@ describe('mascota: hoja de sprites y reduced-motion', () => {
   it('el SVG también va en un <img>', async () => {
     const h = await mountCompanion({ state: 'error' })
     expect(h.img()?.getAttribute('src')).toMatch(/^blob:/)
-    expect(h.dock()?.querySelector('svg')).toBeNull()
+    expect(h.dock()?.querySelector('svg:not([data-icon])')).toBeNull()
   })
 })
 

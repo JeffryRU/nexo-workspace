@@ -1,0 +1,49 @@
+.side-column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  background: var(--bg-sunken);
+  border-right: 1px solid var(--border);
+}
+.side-column > .sidebar {
+  flex: 1;
+  min-height: 0;
+  border-right: 0;
+}
+/* Carril: colapsada la barra, la mascota se queda en una columna estrecha (más pequeña), sin tapar nada. */
+.side-column.rail {
+  align-items: center;
+  justify-content: flex-end;
+}
+/* Cajón (< 760 px): superpuesto a la izquierda, sobre un fondo que lo cierra al pulsarlo. */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.5);
+  z-index: var(--z-drawer);
+}
+.side-column.drawer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--drawer-width);
+  z-index: calc(var(--z-drawer) + 1);
+  box-shadow: var(--shadow-pop);
+  animation: drawer-in var(--duration) ease-out;
+}
+.side-column.drawer:focus-visible {
+  outline-offset: -2px;
+}
+@keyframes drawer-in {
+  from {
+    transform: translateX(-12px);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .side-column.drawer {
+    animation: none;
+  }
+}

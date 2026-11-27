@@ -3,6 +3,7 @@ import { createMemo, type JSX, onMount, Show } from 'solid-js'
 import { useModel } from '../app/model.tsx'
 import { es, format } from '../i18n/es.ts'
 import { activeTabOf } from '../state/store.ts'
+import { Icon } from './Icon.tsx'
 import './parts.css'
 
 export function AttentionDot(props: { attention: Attention }) {
@@ -45,7 +46,8 @@ export function NotificationToggle() {
       title={es.notifications.toggleHint}
       onClick={() => void notifications.toggle()}
     >
-      {es.notifications[notifications.state()]}
+      <Icon name={notifications.state() === 'on' ? 'bell' : 'bell-off'} />
+      <span class="status-label">{es.notifications[notifications.state()]}</span>
     </button>
   )
 }

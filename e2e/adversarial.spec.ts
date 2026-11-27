@@ -30,8 +30,12 @@ test.describe('adversarial', () => {
     ])
 
     expect(await pwned(app)).toBeUndefined()
-    await expect(app.locator('.tablist img, .tablist svg, .tablist script')).toHaveCount(0)
-    await expect(app.locator('.sidebar img, .sidebar svg, .sidebar script')).toHaveCount(0)
+    await expect(
+      app.locator('.tablist img, .tablist svg:not([data-icon]), .tablist script'),
+    ).toHaveCount(0)
+    await expect(
+      app.locator('.sidebar img, .sidebar svg:not([data-icon]), .sidebar script'),
+    ).toHaveCount(0)
     const tabsText = (await app.getByRole('tablist').textContent()) ?? ''
     expect(tabsText).not.toContain('\u001b')
     await expect(app.locator(`[data-pane-id="${created.paneId}"]`)).toBeVisible()

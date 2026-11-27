@@ -21,8 +21,16 @@ function memory(initial?: string): SettingsStorage & { data: Map<string, string>
 
 describe('settings', () => {
   it('por omisión las notificaciones están desactivadas', () => {
-    expect(readSettings(undefined)).toEqual({ notifications: false, companionHidden: false })
-    expect(readSettings(memory())).toEqual({ notifications: false, companionHidden: false })
+    expect(readSettings(undefined)).toEqual({
+      notifications: false,
+      companionHidden: false,
+      sidebarCollapsed: false,
+    })
+    expect(readSettings(memory())).toEqual({
+      notifications: false,
+      companionHidden: false,
+      sidebarCollapsed: false,
+    })
   })
 
   it('guarda y recupera el ajuste', () =>
@@ -33,6 +41,7 @@ describe('settings', () => {
       expect(JSON.parse(storage.data.get(SETTINGS_KEY) as string)).toEqual({
         notifications: true,
         companionHidden: false,
+        sidebarCollapsed: false,
       })
       expect(createSettings(storage).notifications()).toBe(true)
       a.setNotifications(false)
@@ -109,7 +118,11 @@ describe('settings (adversarial y propiedades)', () => {
       '{"notifications":"yes"}',
       '{"notifications":1}',
     ]) {
-      expect(readSettings(memory(raw))).toEqual({ notifications: false, companionHidden: false })
+      expect(readSettings(memory(raw))).toEqual({
+        notifications: false,
+        companionHidden: false,
+        sidebarCollapsed: false,
+      })
     }
   })
 
@@ -117,8 +130,23 @@ describe('settings (adversarial y propiedades)', () => {
     expect(readSettings(memory('{"notifications":true,"__proto__":{"x":1},"otro":1}'))).toEqual({
       notifications: true,
       companionHidden: false,
+      sidebarCollapsed: false,
     })
   })
+
+  it('la barra lateral colapsada se guarda, se recupera y tolera basura', () =>
+    createRoot((dispose) => {
+      const storage = memory()
+      const a = createSettings(storage)
+      expect(a.sidebarCollapsed()).toBe(false)
+      a.setSidebarCollapsed(true)
+      expect(createSettings(storage).sidebarCollapsed()).toBe(true)
+      expect(readSettings(memory('{"sidebarCollapsed":"si"}')).sidebarCollapsed).toBe(false)
+      expect(readSettings(memory('{"sidebarCollapsed":1}')).sidebarCollapsed).toBe(false)
+      a.setSidebarCollapsed(false)
+      expect(createSettings(storage).sidebarCollapsed()).toBe(false)
+      dispose()
+    }))
 
   it('propiedad: cualquier cadena produce un booleano y nunca lanza', () => {
     fc.assert(

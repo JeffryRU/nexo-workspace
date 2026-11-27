@@ -101,7 +101,7 @@ describe('panel viewer en la web', () => {
       app.container.querySelector<HTMLImageElement>('[data-testid="viewer-image"]'),
     )
     expect(img.tagName).toBe('IMG')
-    expect(app.container.querySelector('svg, script, foreignObject')).toBeNull()
+    expect(app.container.querySelector('svg:not([data-icon]), script, foreignObject')).toBeNull()
     expect(blobs.blobs.get(img.getAttribute('src') as string)?.type).toBe('image/svg+xml')
   })
 

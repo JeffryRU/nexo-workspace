@@ -28,6 +28,10 @@ export const es = {
     renameHint: 'Doble clic para renombrar',
     empty: 'Aún no hay espacios.',
     createFirst: 'Crear el primero',
+    show: 'Mostrar espacios',
+    hide: 'Ocultar espacios',
+    closeMenu: 'Cerrar el menú de espacios',
+    drawerLabel: 'Menú de espacios',
   },
   tabs: {
     label: 'Pestañas',

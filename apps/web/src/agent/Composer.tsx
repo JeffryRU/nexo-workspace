@@ -1,6 +1,7 @@
 import type { PermissionMode, ProviderInfo } from '@nexo/contracts'
 import { createMemo, For, Show } from 'solid-js'
 import { es, format } from '../i18n/es.ts'
+import { Icon } from '../ui/Icon.tsx'
 import type { AgentPaneModel } from './pane-model.ts'
 
 export type ProvidersState = {
@@ -307,7 +308,7 @@ export function Composer(props: {
             aria-label={es.agent.interrupt}
             onClick={() => void m.interrupt()}
           >
-            ■
+            <Icon name="stop" />
           </button>
         </Show>
         <button
@@ -317,7 +318,7 @@ export function Composer(props: {
           aria-label={es.agent.send}
           disabled={!readyToSend()}
         >
-          ↑
+          <Icon name="arrow-up" />
         </button>
       </div>
     </form>

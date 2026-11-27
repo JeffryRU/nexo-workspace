@@ -1,40 +1,32 @@
-.history-dialog {
-  width: min(860px, 94vw);
-  height: min(680px, 85vh);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+.modal.history-dialog {
+  width: min(860px, 100%);
+  height: min(680px, 100%);
 }
-.history-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.history-head h2 {
-  margin: 0;
+.history-dialog .dialog-body {
+  overflow: hidden;
 }
 .history-body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-3);
   min-height: 0;
   flex: 1;
   overflow: auto;
 }
 .history-toolbar {
   display: flex;
-  gap: 10px;
+  gap: var(--space-3) var(--space-4);
   align-items: center;
   flex-wrap: wrap;
 }
 .history-field {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-3);
 }
 .history-search {
-  flex: 1;
-  min-width: 180px;
+  flex: 1 1 160px;
+  min-width: 0;
 }
 .history-field select,
 .history-field input {
@@ -43,7 +35,9 @@
   background: var(--bg-sunken);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 3px 8px;
+  height: var(--hit);
+  padding: 0 var(--space-3);
+  min-width: 0;
 }
 .history-search input {
   flex: 1;
@@ -62,35 +56,37 @@
 }
 .history-projects {
   display: grid;
-  gap: 10px;
+  gap: var(--space-4);
 }
 .history-project h3 {
-  margin: 0 0 4px;
-  font-size: 13px;
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-md);
   color: var(--fg-strong);
   display: flex;
-  gap: 8px;
+  gap: var(--space-3);
   align-items: baseline;
 }
 .history-cwd {
   font-weight: normal;
-  font-size: 11px;
+  font-size: var(--text-xs);
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .history-sessions {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 2px;
+  gap: var(--space-1);
 }
 .history-session {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 4px 8px;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius);
 }
 .history-session:hover {
@@ -104,18 +100,23 @@
   color: var(--fg-strong);
 }
 .history-session-meta {
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 .history-session-actions {
   display: flex;
-  gap: 4px;
+  gap: var(--space-2);
   flex-shrink: 0;
+}
+@media (max-width: 520px) {
+  .history-session {
+    flex-wrap: wrap;
+  }
 }
 .history-tag {
   border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 0 7px;
-  font-size: 11px;
+  border-radius: var(--radius-pill);
+  padding: 0 var(--space-3);
+  font-size: var(--text-xs);
 }
 .history-readonly {
   color: var(--warn);
@@ -126,7 +127,7 @@
 .history-session-head {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-4);
   flex-wrap: wrap;
 }
 .history-session-info {
@@ -136,7 +137,7 @@
 }
 .history-transcript {
   display: grid;
-  gap: 10px;
+  gap: var(--space-4);
   flex: none;
-  padding: 4px 2px;
+  padding: var(--space-2) var(--space-1);
 }

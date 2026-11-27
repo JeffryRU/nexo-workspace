@@ -1,25 +1,43 @@
 .tabbar {
   display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0 6px;
+  align-items: stretch;
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+  min-width: 0;
   background: var(--bg-sunken);
   border-bottom: 1px solid var(--border);
-  min-height: 32px;
+  height: var(--bar-h);
 }
+.sidebar-toggle,
+.tabbar-actions {
+  align-self: center;
+}
+.tabbar-actions {
+  display: flex;
+  flex: none;
+  gap: var(--space-1);
+  padding-left: var(--space-2);
+  border-left: 1px solid var(--border);
+}
+/* Con muchas pestañas la barra se desplaza en horizontal; los botones de los lados no se mueven. */
 .tablist {
   display: flex;
   min-width: 0;
   flex: 1;
   overflow-x: auto;
+  overflow-y: hidden;
   scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.tablist::-webkit-scrollbar {
+  display: none;
 }
 .tab-wrap {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
-  gap: 2px;
-  max-width: 220px;
-  padding-right: 2px;
+  width: clamp(112px, 24vw, 200px);
+  padding-right: var(--space-1);
   border-radius: var(--radius) var(--radius) 0 0;
   border-bottom: 2px solid transparent;
 }
@@ -29,18 +47,24 @@
 }
 .tab {
   display: flex;
+  flex: 1;
   align-items: center;
-  gap: 8px;
+  align-self: stretch;
+  gap: var(--space-3);
   min-width: 0;
   border: 0;
   background: transparent;
-  padding: 6px 8px 6px 10px;
+  padding: 0 var(--space-2) 0 var(--space-4);
   cursor: pointer;
   color: var(--fg-muted);
+  text-align: left;
 }
 .tab:hover,
 .tab-wrap.selected .tab {
   color: var(--fg-strong);
+}
+.tab-wrap.selected .tab {
+  font-weight: 600;
 }
 .tab-close {
   visibility: hidden;
@@ -49,4 +73,9 @@
 .tab-wrap.selected .tab-close,
 .tab-wrap:focus-within .tab-close {
   visibility: visible;
+}
+@media (hover: none) {
+  .tab-close {
+    visibility: visible;
+  }
 }
