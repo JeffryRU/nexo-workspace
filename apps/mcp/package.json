@@ -7,10 +7,16 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "start": "node src/main.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@nexo/client": "workspace:*",
     "@nexo/contracts": "workspace:*",
-    "@nexo/client": "workspace:*"
+    "zod": "^4.6.7"
+  },
+  "bin": {
+    "nexo-mcp": "./src/main.ts"
   }
 }
