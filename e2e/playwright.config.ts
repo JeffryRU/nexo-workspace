@@ -30,6 +30,7 @@ export default defineConfig({
         'history.spec.ts',
         'viewer.spec.ts',
         'companion.spec.ts',
+        'pulido.spec.ts',
       ],
       use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } },
     },
