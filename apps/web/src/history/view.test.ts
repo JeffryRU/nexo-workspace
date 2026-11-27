@@ -101,6 +101,7 @@ describe('formato y bloques', () => {
       turn: 1,
       id: historyBlockId(7),
     })
+    expect(toBlock(hblock(0, { type: 'text', text: 'x', complete: false }))).toMatchObject({ complete: true })
     const merged = mergeBlocks([
       [userBlock(2, 'c'), userBlock(0, 'a')],
       [userBlock(1, 'b'), userBlock(2, 'otra vez')],

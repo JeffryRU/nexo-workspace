@@ -54,6 +54,8 @@ export function HistoryDialog() {
   let dialog!: HTMLDivElement
   const [picked, setPicked] = createSignal<Picked | undefined>()
   createEffect(() => {
+    // Al cambiar de vista el botón pulsado desaparece: el foco vuelve a la ventana para que Escape siga funcionando.
+    picked()
     if (app.ui.historyOpen()) dialog?.focus()
     else setPicked(undefined)
   })

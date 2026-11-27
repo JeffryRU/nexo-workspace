@@ -256,6 +256,7 @@ describe('historial: sesión antigua de solo lectura', () => {
     await openHistory(h)
     fireEvent.click(button(historyDialog(h), 'Ver'))
     await settle(10)
+    expect(document.activeElement).toBe(historyDialog(h))
     fireEvent.keyDown(historyDialog(h), { key: 'Escape' })
     expect(historyDialog(h)).not.toBeNull()
     expect(all(historyDialog(h), '.history-session').length).toBeGreaterThan(0)

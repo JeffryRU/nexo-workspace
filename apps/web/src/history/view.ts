@@ -114,10 +114,15 @@ export function historyBlockId(index: number): string {
   return `hist-${String(index).padStart(8, '0')}`
 }
 
-/** Bloque del historial como bloque de panel: mismo contenido, con la identidad que pide el render. */
+/**
+ * Bloque del historial como bloque de panel: mismo contenido, con la identidad que pide el render. Una sesión antigua ya no
+ * está en curso: los textos se dan por completos (sin cursor parpadeante).
+ */
 export function toBlock(h: HistoryBlock): Block {
+  const done = h.block.type === 'text' || h.block.type === 'reasoning' ? { complete: true } : {}
   return {
     ...h.block,
+    ...done,
     id: historyBlockId(h.index),
     index: h.index,
     turn: h.turn,
