@@ -123,8 +123,12 @@ Antigravity y de Ollama, una consulta propia de los límites de Claude (solo inf
   `NEXO_MCP_WRITE=1` (con topes de tamaño y de frecuencia; responder permisos aparte con `NEXO_MCP_ALLOW_PERMISSIONS=1`) y recursos suscribibles
   (`nexo://attention`, `nexo://agents/<id>/status`, `nexo://limits`...) con avisos de cambio a partir de los eventos del daemon. Pruebas
   unitarias, adversariales, de propiedades y de integración con un cliente MCP real. Ver «Servidor MCP (F5.1)».
-- Sistema de compañeros (mascotas) intercambiables, ver ADR 0006: puerto `CompanionPort`, formato de
-  paquete de mascota (manifiesto zod + recursos), selector en la configuración y la opción «sin mascota».
+- **F5.2 Compañeros: dominio, paquetes y daemon** (hecho): `CompanionService` + `CompanionStateMachine` (atención de los agentes a estados de mascota con las
+  prioridades de `nexo://attention`, tiempos mínimos y reloj inyectable), formato `companion.json` con zod (PNG/WebP/GIF/SVG, hojas de sprites), puerto
+  `CompanionPort` con `companion-fs` (topes, rutas validadas, sin enlaces, bytes mágicos, SVG validado y servido solo como imagen), métodos
+  `companion.list|get|select|asset|state` y evento `companion.state`, «sin mascota» por omisión y persistido, `companionApi`, `nexo companion`,
+  paquete de prueba, falso y suite de conformidad en el testkit. Ver «Compañeros (F5.2)».
+- **F5.3 Interfaz de la mascota** (#72, pendiente): dibujar el estado con los recursos del compañero elegido y el selector en la configuración.
 - La primera mascota es un proyecto aparte; Nexo funciona al 100 % sin ninguna.
 
 ## F6 — Empaquetado

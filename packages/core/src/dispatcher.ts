@@ -7,6 +7,7 @@ import {
   type MethodParams,
   type MethodResult,
 } from '@nexo/contracts'
+import type { CompanionHandlers } from './companion-service.ts'
 import { DomainError } from './errors.ts'
 import type { FileHandlers } from './file-service.ts'
 import type { HistoryHandlers } from './history-service.ts'
@@ -45,6 +46,8 @@ export type DispatcherServices = {
   history?: HistoryHandlers
   /** Sin él, `limits.*` responde `PROVIDER_UNAVAILABLE`. */
   limits?: UsageLimitsHandlers
+  /** Sin él, `companion.*` responde `PROVIDER_UNAVAILABLE`. */
+  companions?: CompanionHandlers
   /** Pide el apagado del daemon; debe volver enseguida (el apagado ocurre después de responder). */
   shutdown: () => void
 }
@@ -93,6 +96,12 @@ export function createHandlers(s: DispatcherServices): Handlers {
       throw new DomainError('PROVIDER_UNAVAILABLE', 'los límites de uso no están disponibles')
     }
     return s.limits
+  }
+  const companions = (): CompanionHandlers => {
+    if (s.companions === undefined) {
+      throw new DomainError('PROVIDER_UNAVAILABLE', 'los compañeros no están disponibles')
+    }
+    return s.companions
   }
   return {
     // La autenticación la resuelve quien despacha (daemon) antes de llegar aquí; ya autenticado es un no-op.
@@ -143,6 +152,11 @@ export function createHandlers(s: DispatcherServices): Handlers {
     'history.list': (p) => history()['history.list'](p),
     'history.read': (p) => history()['history.read'](p),
     'limits.status': (p) => limits()['limits.status'](p),
+    'companion.list': () => companions()['companion.list'](),
+    'companion.get': (p) => companions()['companion.get'](p),
+    'companion.select': (p) => companions()['companion.select'](p),
+    'companion.asset': (p) => companions()['companion.asset'](p),
+    'companion.state': () => companions()['companion.state'](),
   }
 }
 

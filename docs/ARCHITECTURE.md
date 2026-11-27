@@ -2061,19 +2061,137 @@ interrupción, recursos y avisos, daemon que cae y vuelve).
 **Qué queda fuera.** Arrancar el daemon desde el MCP (la CLI lo hace; aquí se pide abrir Nexo), transporte HTTP, responder preguntas de los
 agentes, `prompts` MCP, y un recurso para el contenido de las terminales (la salida se lee con `terminal_read`).
 
-## Compañeros (mascotas)
+## Compañeros (F5.2)
 
-Nexo funciona al 100 % sin mascota. Una mascota es un **paquete intercambiable** (ver ADR 0006):
+Nexo funciona al 100 % sin mascota. Una mascota es un **paquete intercambiable de datos** (ADR 0006): sin código ejecutable, solo un manifiesto
+y unas imágenes. La F5.2 es el dominio, el formato, el cargador, los métodos del daemon y la CLI; **dibujar** la mascota es la F5.3.
 
-- Un manifiesto validado con zod (`companion.json`: id, nombre, versión, autor, licencia) y un mapa de
-  **estados** a recursos: `idle`, `thinking`, `working`, `needs-input`, `done`, `error`, `dizzy`, …
-  Cada estado apunta a imágenes, sprites animados o una animación; los estados que falten caen a `idle`.
-- El núcleo **no** sabe de mascotas: publica eventos (`pane.attention`, estados de agente) y un
-  `CompanionPort` los traduce a estados de mascota. Se puede escribir otro traductor sin tocar el núcleo.
-- Las mascotas se instalan en el directorio de datos (`companions/<id>/`) y se eligen en la
-  configuración; una mascota externa también puede conectarse como cliente por MCP o WebSocket.
-- Los paquetes de mascota son datos, no código: no ejecutan scripts. Rutas y tamaños se validan al
-  cargarlos (sin recorridos de ruta, límites de tamaño por recurso y por paquete).
+### Estados y traducción (`CompanionService`, core)
+
+El núcleo no sabe de mascotas: publica `agent.status` y `agent.session`, y `CompanionService` los traduce a un estado de mascota. La atención de
+todas las sesiones se agrega con la **misma prioridad que `nexo://attention`** (needs-input > error > working > done > idle; `companionTarget`):
+
+| Estado     | Cuándo                                         | Prioridad | Tiempo mínimo visible                  |
+| ---------- | ---------------------------------------------- | --------- | -------------------------------------- |
+| `waiting`  | alguna sesión espera permiso o respuesta       | 5         | 2000 ms                                |
+| `error`    | alguna sesión falló (y ninguna espera)         | 4         | 2500 ms                                |
+| `busy`     | dos o más sesiones trabajando                  | 3         | 1000 ms                                |
+| `thinking` | una sesión trabajando                          | 2         | 1000 ms                                |
+| `done`     | un turno terminó (y nada más reclama atención) | 1         | 2500 ms; vuelve a `idle` a los 6000 ms |
+| `idle`     | nada que mostrar                               | 0         | 0                                      |
+
+`CompanionStateMachine` (pura, con el reloj inyectado) decide qué se **muestra**: un estado de **mayor** prioridad aparece al instante; uno de igual
+o menor espera a que el actual haya estado visible su tiempo mínimo, así que un objetivo que parpadea (`thinking`, `idle`, `thinking`) no hace
+parpadear a la mascota. `done` es una celebración: decae a `idle` aunque la atención siga en «terminado», y otro turno que termina la repite.
+Cada cambio publica el evento `companion.state` (`{ state, since, selected }`); también al elegir otro compañero.
+
+> Diferencia con el texto original del ADR: el **`CompanionPort`** de core es el puerto de **paquetes** (como `FileSystemPort`: `list`, `get`,
+> `readAsset`); la traducción de eventos a estados es el servicio `CompanionService` con su máquina de estados. Ver ADR 0006.
+
+### Formato del paquete (`companion.json`)
+
+Carpeta `<estado>/companions/<id>/` (en Windows `%LOCALAPPDATA%\Nexo\companions\<id>\`; `NEXO_STATE_DIR` la cambia). El `id` es el nombre de la
+carpeta (`[a-z0-9][a-z0-9_-]{0,47}`, nunca un nombre reservado de Windows). Esquema zod **estricto** (`CompanionManifest`, en `packages/contracts`):
+
+```json
+{
+  "format": 1,
+  "id": "tiny",
+  "name": "Tiny",
+  "version": "1.0.0",
+  "description": "opcional",
+  "author": { "name": "Nexo", "url": "https://opcional.example" },
+  "license": "CC0-1.0",
+  "states": {
+    "idle": { "src": "idle.png" },
+    "thinking": { "src": "img/think.gif" },
+    "waiting": {
+      "src": "sheet.png",
+      "sheet": {
+        "frameWidth": 32,
+        "frameHeight": 32,
+        "frames": 4,
+        "columns": 4,
+        "fps": 6,
+        "loop": true
+      }
+    },
+    "done": { "src": "done.webp" },
+    "error": { "src": "error.svg" }
+  }
+}
+```
+
+- `idle` es obligatorio; los estados que falten (`thinking`, `waiting`, `busy`, `done`, `error`) se dibujan con `idle` (lo resuelve quien dibuja).
+- Un recurso es una imagen **PNG, WebP, GIF o SVG**. `sheet` (opcional) declara una hoja de sprites: cuadros del mismo tamaño en filas de
+  `columns`; la hoja tiene que caber en la imagen (cuando el encabezado dice sus dimensiones).
+- `src` es una ruta relativa con `/`: hasta 4 segmentos de `[A-Za-z0-9._-]` (sin empezar ni terminar en punto), extensión de imagen, 128 caracteres.
+  Quedan fuera por esquema `..`, rutas absolutas, UNC, `C:`, barras invertidas, espacios, flujos alternos (`a.png:x`) y, en `core`, los nombres de
+  dispositivo de Windows (`CON`, `NUL`, `COM1`…).
+- Versión `x.y.z` (con `-pre` opcional), licencia como id SPDX, URL del autor solo `https`. Ningún campo extra.
+
+### Cargador (`packages/adapters/companion-fs`)
+
+`CompanionLoader` (core) concentra **toda** la validación sobre un `CompanionFileSource` mínimo; el adaptador real (`FsCompanionSource`) y el falso del
+testkit solo ponen el acceso a archivos, así que el falso no miente. Qué se comprueba y dónde:
+
+- **Solo se lee lo que declara el manifiesto** (más `companion.json`); nada se ejecuta ni se interpreta. El resto de archivos de la carpeta se ignora.
+- **Topes**: manifiesto 64 KiB, cada recurso 512 KiB, paquete 8 MiB, 64 paquetes listados, imagen de 4096 px por lado como mucho (leído del
+  encabezado de PNG, GIF y WebP; una bomba de descompresión no llega a un decodificador).
+- **Rutas**: esquema + nombres de Windows; luego `lstat` de **cada tramo** (carpeta del paquete y subcarpetas), que debe ser carpeta y no enlace.
+- **Enlaces simbólicos, uniones y enlaces duros se rechazan** (un paquete que es un enlace sale como no válido y no se sirve). La carpeta
+  `companions` en sí puede ser un enlace: la eligió el usuario. Se abre con `O_NOFOLLOW`/`O_NONBLOCK`, se comprueba `fstat` (archivo regular,
+  mismo `dev`/`ino`), que `realpath` siga coincidiendo y que el archivo no cambie ni crezca mientras se lee.
+- **El recurso ES una imagen**: se mira por los bytes mágicos, no por el nombre, y la extensión debe coincidir con el tipo real (un `.png` que es un
+  GIF, HTML o texto no vale).
+- `list` es barato (manifiesto + tamaños, sin leer los recursos); `get`, `select` y `asset` validan los bytes.
+
+### SVG: se acepta, validado y servido solo como imagen
+
+SVG es útil (mascotas vectoriales pequeñas) pero es el único formato que puede llevar código. Decisión, en dos capas:
+
+1. **Se rechaza, no se sanea** (`checkSvgSafety`, core): UTF-8 inválido o bytes nulos; `<script>`, `<foreignObject>`, `<iframe>`, `<embed>`, `<object>`,
+   `<audio>`, `<video>`, `<link>`, `<meta>`; manejadores `on*=`; `javascript:`/`vbscript:`/`data:text`/`data:image/svg`; `<!ENTITY`, DOCTYPE con
+   subconjunto interno y cualquier referencia de carácter o entidad que no sea `&amp; &lt; &gt; &quot; &apos;`; `@import`, `expression(`; animaciones de
+   `href`; `href`/`xlink:href` que no sean un fragmento local (`#id`) o una imagen `data:` de mapa de bits; `url()` que no apunte a un fragmento.
+2. **El cliente lo dibuja siempre como imagen** (obligación de la F5.3): `<img>` con un `Blob` o un `data:`, nunca incrustado en el DOM ni en
+   `<object>`/`<iframe>`. Dentro de un `<img>` el navegador no ejecuta scripts ni carga recursos externos, igual que el visor de archivos (F4.2).
+
+### Métodos y eventos
+
+| Método             | Parámetros       | Resultado                                                                                                             |
+| ------------------ | ---------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `companion.list`   | —                | `{ companions[], invalid[{ id, reason }], selected }`                                                                 |
+| `companion.get`    | `{ id }`         | `{ companion: { manifest, assets[{ path, mime, bytes }], totalBytes } }` (valida el paquete entero)                   |
+| `companion.select` | `{ id \| null }` | `{ selected }`; `null` = sin mascota. Se guarda en `<estado>/companion-settings.json`; `NOT_FOUND` / `INVALID_PARAMS` |
+| `companion.asset`  | `{ id, path }`   | `{ mime, bytes, data }`: el recurso en base64 (hasta 512 KiB, una sola respuesta), ya validado                        |
+| `companion.state`  | —                | `{ state, since, selected }`                                                                                          |
+
+Evento `companion.state` (mismo `data` que el método). **Cómo pide los recursos la F5.3**: `companion.get` una vez al elegir (o al arrancar, con
+`selected` de `companion.state`), `companion.asset` por cada `src` de `manifest.states` (cada recurso cabe en un mensaje; no hay trozos), y con los
+bytes crea `new Blob([bytes], { type: mime })` y `URL.createObjectURL` para un `<img>`. El daemon no sirve HTTP de recursos: así no hay una ruta nueva
+que proteger y todo pasa por el token del protocolo. `@nexo/client` trae `companionApi`.
+
+«Sin mascota» es el valor por omisión y se **persiste**: un `companion-settings.json` ausente, ilegible o de otra versión vuelve a «sin mascota»; si el
+compañero guardado ya no existe o no es válido, se arranca sin mascota **sin reescribir** el archivo. Los `select` se serializan (gana el último; lo
+guardado coincide siempre con lo mostrado) y uno que falla no cambia nada.
+
+### CLI
+
+`nexo companion list | get <id> | select <id> | none | state` (todas con `--json`, salida estable validada con los esquemas de `companion.*`).
+
+### Pruebas
+
+Unitarias (reglas, máquina de estados con reloj falso, servicio, cliente, CLI); suite de conformidad de `CompanionPort` (`runCompanionConformance`)
+que corre el falso del testkit y `companion-fs`; adversariales (manifiestos malformados, enormes, binarios o con claves extra, rutas hostiles
+`..`/absolutas/UNC/`C:`/nombres reservados/flujos, recursos enormes o que no son imágenes, encabezados con dimensiones absurdas, SVG con script,
+manejadores, entidades y referencias externas, enlaces simbólicos y duros, carpeta reemplazada por otra, `select` concurrentes y lentos, 2000
+eventos de agentes); propiedades con fast-check (el parser del manifiesto nunca lanza y no admite rutas que salgan del paquete; la inspección de imágenes
+y de SVG no lanza con bytes arbitrarios; la agregación de prioridades; la máquina de estados: ninguna bajada antes de su tiempo mínimo, convergencia al
+objetivo y subida inmediata). El paquete de prueba (`tinyCompanion`) se genera en el testkit: PNG, GIF y WebP de 1x1 y un SVG mínimo, sin material de terceros.
+
+**Qué queda fuera.** Dibujar la mascota y el selector en la configuración (F5.3, #72), instalar/descargar paquetes (se copian a mano a la carpeta),
+JPEG y otros formatos, animaciones por reglas o código, y la primera mascota real (proyecto aparte).
 
 ## Seguridad
 
@@ -2088,6 +2206,8 @@ Nexo funciona al 100 % sin mascota. Una mascota es un **paquete intercambiable**
   borde con esquemas zod que no los declaran; ver «Límites de uso de los proveedores (F4.4)».
 - Servidor MCP (F5.1): solo lectura salvo `NEXO_MCP_WRITE=1`; ninguna herramienta lee archivos ni expone credenciales; topes de tamaño y de
   frecuencia; ver «Servidor MCP (F5.1)».
+- Compañeros (F5.2): paquetes de datos sin código; solo se leen los recursos del manifiesto, con topes, rutas validadas, sin enlaces simbólicos ni duros,
+  bytes mágicos de imagen y SVG validado (rechazado si lleva scripts o referencias externas) que el cliente dibuja solo como `<img>`; ver «Compañeros (F5.2)».
 - Visor (F4.2): sin HTML crudo ni red remota en el Markdown, SVG solo como `<img>`, PDF sin scripts ni anotaciones, CSP con `blob:` solo para imágenes;
   ver «Visor lateral (F4.2)».
 

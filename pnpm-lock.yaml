@@ -205,6 +205,9 @@ importers:
 
   apps/daemon:
     dependencies:
+      '@nexo/adapter-companion-fs':
+        specifier: workspace:*
+        version: link:../../packages/adapters/companion-fs
       '@nexo/adapter-fs-sandbox':
         specifier: workspace:*
         version: link:../../packages/adapters/fs-sandbox
@@ -336,6 +339,19 @@ importers:
       '@playwright/test':
         specifier: ^1.65.1
         version: 1.65.1
+
+  packages/adapters/companion-fs:
+    dependencies:
+      '@nexo/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@nexo/core':
+        specifier: workspace:*
+        version: link:../../core
+    devDependencies:
+      '@nexo/testkit':
+        specifier: workspace:*
+        version: link:../../testkit
 
   packages/adapters/fs-sandbox:
     dependencies:

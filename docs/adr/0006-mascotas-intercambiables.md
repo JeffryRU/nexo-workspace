@@ -18,6 +18,14 @@ de mascota, o hacer una nueva, sin tocar el código de Nexo.
 - «Sin mascota» es una opción de primera clase y el valor por defecto hasta que exista la primera.
 - Una mascota más compleja (con su propia app o IA) se conecta como cliente externo por MCP/WebSocket.
 
+## Concreción (F5.2)
+
+- `CompanionPort` (core) es el puerto de **paquetes** (`list`, `get`, `readAsset`), como `FileSystemPort`; la traducción de eventos neutros a estados es
+  `CompanionService` con una máquina de estados (prioridades de `nexo://attention`, tiempos mínimos, reloj inyectable). El núcleo sigue sin conocer mascotas.
+- SVG se admite pero se **rechaza** si lleva scripts, manejadores, entidades o referencias externas, y el cliente lo dibuja solo como `<img>`.
+- Los recursos viajan por el protocolo (`companion.asset`, base64, tope de 512 KiB por recurso): el daemon no abre una ruta HTTP nueva.
+- Detalle en `docs/ARCHITECTURE.md`, «Compañeros (F5.2)».
+
 ## Consecuencias
 
 - Cualquiera puede crear una mascota con solo imágenes y un JSON.

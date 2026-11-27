@@ -1,4 +1,8 @@
 export * from './agent-service.ts'
+export * from './companion-loader.ts'
+export * from './companion-rules.ts'
+export * from './companion-service.ts'
+export * from './companion-state.ts'
 export * from './dispatcher.ts'
 export * from './errors.ts'
 export * from './file-read.ts'
@@ -25,6 +29,12 @@ export type {
   AgentResponse,
 } from './ports/agent.ts'
 export { AgentProviderError } from './ports/agent.ts'
+export type {
+  CompanionErrorCode,
+  CompanionPort,
+  CompanionSelectionStore,
+} from './ports/companion.ts'
+export { CompanionError } from './ports/companion.ts'
 export type { FileSystemErrorCode, FileSystemPort } from './ports/file-system.ts'
 export { FileSystemError } from './ports/file-system.ts'
 export type {

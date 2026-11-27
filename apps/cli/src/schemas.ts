@@ -3,6 +3,7 @@ import {
   Attention,
   Block,
   BlockRange,
+  companionMethods,
   FileType,
   FsEncoding,
   fsMethods,
@@ -210,3 +211,10 @@ export const HistoryListOutput = z.strictObject({
   projects: z.array(HistoryProject.extend({ sessions: z.array(HistorySession).min(1) })),
 })
 export const HistoryReadOutput = historyMethods['history.read'].result
+
+// ---- compañeros (F5.2): la salida es la de los métodos `companion.*` ----
+
+export const CompanionListOutput = companionMethods['companion.list'].result
+export const CompanionGetOutput = companionMethods['companion.get'].result
+export const CompanionSelectOutput = companionMethods['companion.select'].result
+export const CompanionStateOutput = companionMethods['companion.state'].result

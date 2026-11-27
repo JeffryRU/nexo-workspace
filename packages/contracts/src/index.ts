@@ -1,6 +1,7 @@
 export * from './agent.ts'
 export * from './agent-blocks.ts'
 export * from './agent-provider.ts'
+export * from './companion.ts'
 export * from './domain.ts'
 export * from './envelope.ts'
 export * from './errors.ts'

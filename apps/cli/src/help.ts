@@ -13,6 +13,7 @@ export const COMMANDS = [
   'fs',
   'history',
   'limits',
+  'companion',
   'open',
   'daemon',
 ] as const
@@ -43,6 +44,7 @@ Comandos:
   fs <sub>                   archivos de los espacios de trabajo (stat, cat)
   history <sub>              historial de los proveedores por carpeta (ls, show)
   limits                     límites de uso de Claude y Codex (--provider, --refresh)
+  companion <sub>            mascota (compañero): list, get, select, none, state
   open <ruta>                muestra un archivo en el visor (Markdown, imagen, PDF, texto)
   daemon status|stop|log     controla el daemon
 
@@ -175,6 +177,16 @@ Límites de uso de los proveedores (F4.4): por ventana, el porcentaje usado, cu�
 y su frescura. Codex se consulta con su app-server; Claude solo informa durante una sesión (el SDK emite los avisos),
 así que sin sesiones sale «desconocido». Con --refresh se vuelve a consultar a Codex aunque haya caché. No muestra
 ni guarda datos de la cuenta. Con --json emite el resultado de limits.status.
+`,
+  companion: `Uso: nexo companion list | get <id> | select <id> | none | state
+
+Compañeros (F5.2, ADR 0006): la mascota es un paquete de datos (companion.json + imágenes) en
+<estado>/companions/<id>/. Por omisión no hay mascota.
+  list          paquetes válidos, los no válidos (con el motivo) y el elegido
+  get <id>      manifiesto y recursos de un paquete (lo valida entero)
+  select <id>   elige el compañero (se guarda); none: sin mascota
+  state         estado actual de la mascota (idle, thinking, waiting, busy, done, error)
+Con --json cada subcomando emite su resultado (companion.list / get / select / state).
 `,
   open: `Uso: nexo open <ruta> [--pane <panel>]
 
