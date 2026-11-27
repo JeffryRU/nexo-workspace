@@ -50,6 +50,10 @@
   --statusbar-h: 28px;
   --pane-header-h: 30px;
   --pane-min: 120px;
+  /* Pestañas: miden según su título, entre estos dos anchos. */
+  --tab-min: 96px;
+  --tab-max: 200px;
+  --tab-fade: var(--space-6);
   /* Barra lateral: ancho amplio, carril cuando está colapsada con mascota y ancho del cajón (<760 px). */
   --sidebar-width: 232px;
   --rail-width: 72px;

@@ -19,6 +19,37 @@
   padding-left: var(--space-2);
   border-left: 1px solid var(--border);
 }
+/* Marco de la lista: lleva los fundidos de los bordes que avisan de que hay más pestañas. */
+.tablist-frame {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+.tablist-frame::before,
+.tablist-frame::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: var(--tab-fade);
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--duration);
+}
+.tablist-frame::before {
+  left: 0;
+  background: linear-gradient(to right, var(--bg-sunken), transparent);
+}
+.tablist-frame::after {
+  right: 0;
+  background: linear-gradient(to left, var(--bg-sunken), transparent);
+}
+.tablist-frame[data-more~="start"]::before,
+.tablist-frame[data-more~="end"]::after {
+  opacity: 1;
+}
 /* Con muchas pestañas la barra se desplaza en horizontal; los botones de los lados no se mueven. */
 .tablist {
   display: flex;
@@ -36,7 +67,8 @@
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  width: clamp(112px, 24vw, 200px);
+  min-width: var(--tab-min);
+  max-width: var(--tab-max);
   padding-right: var(--space-1);
   border-radius: var(--radius) var(--radius) 0 0;
   border-bottom: 2px solid transparent;
@@ -77,5 +109,11 @@
 @media (hover: none) {
   .tab-close {
     visibility: visible;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tablist-frame::before,
+  .tablist-frame::after {
+    transition: none;
   }
 }
