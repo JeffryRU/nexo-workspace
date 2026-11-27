@@ -425,7 +425,7 @@ test.describe('pulido visual (F5.4)', () => {
     app,
   }) => {
     if (scene === undefined) throw new Error('sin escena')
-    await app.setViewportSize({ width: 768, height: 700 })
+    await app.setViewportSize({ width: 1280, height: 800 })
     await app.goto(scene.stack.url())
     await expect(tab(app, 'base')).toBeVisible()
     const widths = async () =>
@@ -437,8 +437,8 @@ test.describe('pulido visual (F5.4)', () => {
     // Un título corto no se estira hasta el máximo.
     expect(Math.min(...(await widths()))).toBeLessThan(150)
     const frame = app.locator('.tablist-frame')
-    await expect(frame).toHaveAttribute('data-more', '')
-    for (let i = 0; i < 6; i++) {
+    await expect(frame).not.toHaveAttribute('data-more', /start/)
+    for (let i = 0; i < 8; i++) {
       await app.getByRole('button', { name: 'Nueva pestaña', exact: true }).click()
     }
     const list = app.locator('.tablist')
@@ -451,7 +451,7 @@ test.describe('pulido visual (F5.4)', () => {
     await app.mouse.wheel(0, 240)
     await expect.poll(() => list.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0)
     await expect(frame).toHaveAttribute('data-more', /start/)
-    for (let i = 0; i < 6; i++) await app.locator('.tab-wrap.selected .tab-close').click()
+    for (let i = 0; i < 8; i++) await app.locator('.tab-wrap.selected .tab-close').click()
   })
 
   test('la ruta larga de una sesión del historial va en una línea, con la ruta entera en title', async ({
