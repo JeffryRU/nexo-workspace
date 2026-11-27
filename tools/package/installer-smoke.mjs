@@ -7,7 +7,7 @@
 //          vivo (el gancho NSIS lo detiene) y MSI (instalación y desinstalación en silencio).
 // En todos: el estado del usuario (NEXO_STATE_DIR) NO se borra al desinstalar. Pensado para el CI; instala de verdad.
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { mkdir, mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
@@ -129,7 +129,7 @@ function killTree(child) {
 
 function processPath(pid) {
   if (WINDOWS) {
-    const r = run('powershell.exe', ['-NoProfile', '-Command', `(Get-Process -Id ${pid}).Path`])
+    const r = run('powershell.exe', ['-NoProfile', '-Command', `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; (Get-Process -Id ${pid}).Path`])
     return r.stdout.trim()
   }
   try {
@@ -163,8 +163,16 @@ async function health(info) {
   return response.ok && response.headers.get('x-nexo-daemon') === '1'
 }
 
+/** Compara rutas ya resueltas (en Windows, `RUNNER~1` y el nombre largo son la misma carpeta). */
 function sameFile(a, b) {
-  const norm = (p) => resolve(p).replaceAll('\\', '/').toLowerCase()
+  const real = (p) => {
+    try {
+      return realpathSync.native(p)
+    } catch {
+      return resolve(p)
+    }
+  }
+  const norm = (p) => real(p).replaceAll('\\', '/').toLowerCase()
   return norm(a) === norm(b)
 }
 
