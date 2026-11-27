@@ -298,3 +298,32 @@ test.describe('capturas F5.3', () => {
     await expect(app.locator('.perm-result')).toContainText('Permitido')
   })
 })
+
+test.describe('capturas F5.3 en anchos estrechos', () => {
+  test.skip(process.env.NEXO_CAPTURAS === undefined, 'solo con NEXO_CAPTURAS=1')
+
+  test('selector y mascota en 360, 768 y 1280 de ancho', async ({ stack, app }) => {
+    install(stack, 'robi', { ...DEMO, 'companion.json': JSON.stringify(DEMO_MANIFEST) })
+    install(stack, 'tiny', tinyCompanion())
+    await stack.nexo(['companion', 'select', 'robi'])
+    await openAgentTab(stack, app)
+    mkdirSync(OUT, { recursive: true })
+    const sizes = [
+      { w: 360, h: 640, name: '360' },
+      { w: 768, h: 700, name: '768' },
+      { w: 1280, h: 600, name: '1280-bajo' },
+    ]
+    for (const { w, h, name } of sizes) {
+      await app.setViewportSize({ width: w, height: h })
+      await expect(dock(app)).toBeVisible()
+      await app.waitForTimeout(450)
+      await app.screenshot({ path: join(OUT, `f5-ancho-${name}-mascota.png`) })
+      await app.getByRole('button', { name: 'Mascota', exact: true }).click()
+      await expect(selector(app)).toBeVisible()
+      await app.waitForTimeout(200)
+      await app.screenshot({ path: join(OUT, `f5-ancho-${name}-selector.png`) })
+      await app.keyboard.press('Escape')
+      await expect(selector(app)).toHaveCount(0)
+    }
+  })
+})
