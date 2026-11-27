@@ -78,6 +78,14 @@ export interface ClaudeTransport {
   start(options: TransportStartOptions): Promise<ClaudeTransportSession>
   /** Opcional: arranca un proceso en `cwd` para que el siguiente `start` lo reutilice. */
   warmUp?(options: { cwd: string }): Promise<void>
+  /** Opcional (F4.3): sesiones guardadas, con la API del SDK (`listSessions`). Devuelve los `SDKSessionInfo` sin validar. */
+  listSessions?(options: { cwd?: string; limit: number }): Promise<unknown[]>
+  /** Opcional (F4.3): mensajes de una sesión (`getSessionMessages`); `exists: false` si el SDK no la conoce. */
+  readSession?(options: {
+    sessionId: string
+    cwd?: string
+    maxMessages: number
+  }): Promise<{ exists: boolean; messages: unknown[] }>
   /** Opcional: modelos que expone el SDK (puede arrancar un proceso). */
   listModels?(options: { cwd: string }): Promise<TransportModel[]>
 }

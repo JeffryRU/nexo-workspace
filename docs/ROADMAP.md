@@ -98,7 +98,12 @@ notificación del sistema si la ventana no tiene el foco, y las mediciones de re
   `fs.read`, enlaces a archivos que abren en el visor), imágenes y SVG como `<img>`, PDF local con pdf.js (worker empaquetado, sin scripts), texto
   plano, recarga con `expectMtimeMs`; se abre desde las rutas de los bloques del agente y con `nexo open <ruta>`; CSP con `blob:` para imágenes.
   Ver «Visor lateral (F4.2)».
-- Historial de los proveedores agrupado por proyecto; límites de uso (Claude, Codex).
+- **F4.3 Historial de los proveedores por proyecto** (hecho): `HistoryPort` (capacidad opcional de `AgentProviderPort`) con la API de cada proveedor
+  (Claude: `listSessions`/`getSessionMessages` del SDK; Codex: `thread/list`/`thread/read`; ACP: `session/list` si el agente lo anuncia; Antigravity y
+  Ollama no tienen), métodos `history.list` (agrupado por carpeta, paginado con cursor) y `history.read` (bloques normalizados con topes), caché,
+  plazos y cancelación, `historyApi`, `nexo history ls|show`, `nexo agent new --resume` y suites de conformidad. Sin ADR 0008: ningún proveedor
+  obligó a leer sus archivos. Ver «Historial de los proveedores (F4.3)».
+- Límites de uso (Claude, Codex).
 
 ## F5 — MCP y mascota
 

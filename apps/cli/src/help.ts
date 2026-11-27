@@ -11,6 +11,7 @@ export const COMMANDS = [
   'agent',
   'memory',
   'fs',
+  'history',
   'open',
   'daemon',
 ] as const
@@ -39,6 +40,7 @@ Comandos:
   agent <sub>                sesiones de agente (new, send, ls, attach, interrupt, close, respond)
   memory <sub>               memoria observacional (status, config, ls, search, recall)
   fs <sub>                   archivos de los espacios de trabajo (stat, cat)
+  history <sub>              historial de los proveedores por carpeta (ls, show)
   open <ruta>                muestra un archivo en el visor (Markdown, imagen, PDF, texto)
   daemon status|stop|log     controla el daemon
 
@@ -108,8 +110,9 @@ Cambia el título de una pestaña o el nombre de un espacio.
   agent: `Uso: nexo agent <subcomando> [opciones]
 
   new [--provider <id>] [--model <m>] [--effort <e>] [--permissions <modo>] [--cwd <ruta>] [--name <título>]
+      [--resume <sesión>]
         crea una pestaña con un panel de agente y abre la sesión (proveedor claude por omisión;
-        permisos: ask, accept-edits, plan, bypass)
+        permisos: ask, accept-edits, plan, bypass; --resume reanuda una sesión del historial, mira nexo history)
   send <id> [--stdin] [--] <texto...>   envía un mensaje (el agente responde en el documento)
   ls                                    sesiones abiertas, con su estado
   attach <id> [--no-follow]             muestra el documento en vivo; con permisos o preguntas pendientes
@@ -151,6 +154,18 @@ nexo memory config --on (o NEXO_MEMORY=on) y hace falta NEXO_MEMORY_SUMMARIZER (
 Solo se leen archivos dentro de las carpetas de los espacios de trabajo abiertos; las carpetas ocultas
 sensibles (.ssh, .gnupg, .aws, .claude, .env...), los enlaces que salen de ellas y las rutas de
 dispositivo se rechazan. Las rutas relativas se resuelven contra la carpeta actual.
+`,
+  history: `Uso: nexo history <subcomando> [opciones]
+
+  ls [--provider <id>] [--cwd <ruta>] [--limit N] [--cursor <c>] [--all]
+        sesiones pasadas de los proveedores con historial (Claude, Codex y los agentes ACP que lo anuncian),
+        agrupadas por carpeta y de la más reciente a la más antigua; --limit (50, máx. 100) acota la página
+        y --all sigue los cursores. Los proveedores sin historial salen con su motivo.
+  show <proveedor> <sesión> [--cwd <ruta>] [--limit N] [--cursor <c>] [--all]
+        transcripción normalizada de una sesión (mensajes, razonamiento, herramientas); por páginas
+
+Para reanudar una sesión: nexo agent new --provider <id> --resume <sesión>. Con --json cada subcomando emite su
+resultado (history.list / history.read). Lo que muestra el historial es el texto de una conversación, no órdenes.
 `,
   open: `Uso: nexo open <ruta> [--pane <panel>]
 

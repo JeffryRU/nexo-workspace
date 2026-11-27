@@ -6,6 +6,9 @@ import {
   FileType,
   FsEncoding,
   fsMethods,
+  HistoryProject,
+  HistorySession,
+  historyMethods,
   memoryMethods,
   PaneKind,
 } from '@nexo/contracts'
@@ -193,3 +196,12 @@ export const FsCatOutput = z.strictObject({
   truncated: z.boolean(),
   data: z.string(),
 })
+
+// ---- historial (F4.3): la salida es la de los métodos `history.*` ----
+
+/** Como `history.list`, pero sin el tope de una página por carpeta: `--all` junta las páginas. */
+export const HistoryListOutput = z.strictObject({
+  ...historyMethods['history.list'].result.shape,
+  projects: z.array(HistoryProject.extend({ sessions: z.array(HistorySession).min(1) })),
+})
+export const HistoryReadOutput = historyMethods['history.read'].result

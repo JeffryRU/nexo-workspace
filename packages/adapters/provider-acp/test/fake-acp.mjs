@@ -14,7 +14,7 @@
 //   FAKE_ACP_HANG=init       no responde a `initialize`
 //   FAKE_ACP_HANG_ON_CANCEL=1  no responde a `session/prompt` tras `session/cancel`
 //   FAKE_ACP_BIG=N           bytes de la línea enorme del mensaje «grande»
-import { appendFileSync } from 'node:fs'
+import { appendFileSync, readFileSync } from 'node:fs'
 import { createInterface } from 'node:readline'
 
 const LOG = process.env.FAKE_ACP_LOG
@@ -392,6 +392,7 @@ function onRequest(msg) {
         protocolVersion: version,
         agentCapabilities: {
           loadSession: process.env.FAKE_ACP_NO_LOAD !== '1',
+          ...(process.env.FAKE_ACP_LIST === '1' ? { sessionCapabilities: { list: {} } } : {}),
           promptCapabilities: { image: false, audio: false, embeddedContext: false },
         },
         authMethods:
@@ -408,6 +409,26 @@ function onRequest(msg) {
       sessionCwd = String(params?.cwd ?? '').replace(/[\\/]+$/, '')
       note({ sessionNew: params })
       return respond(id, { sessionId, ...sessionPayload(sessionId) })
+    }
+    case 'session/list': {
+      // Historial (F4.3): sesiones sembradas en FAKE_ACP_SESSIONS_FILE; FAKE_ACP_LIST_RAW fuerza la respuesta.
+      if (process.env.FAKE_ACP_HISTORY_HANG === '1') return
+      if (process.env.FAKE_ACP_LIST_FAIL === '1') return fail(id, -32603, 'fallo interno')
+      if (process.env.FAKE_ACP_LIST_RAW)
+        return respond(id, JSON.parse(process.env.FAKE_ACP_LIST_RAW))
+      let all = []
+      try {
+        all = JSON.parse(readFileSync(process.env.FAKE_ACP_SESSIONS_FILE ?? '', 'utf8'))
+      } catch {}
+      if (params?.cwd) all = all.filter((x) => x.cwd === params.cwd)
+      all.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+      const from = Number(params?.cursor ?? 0)
+      const size = Number(process.env.FAKE_ACP_PAGE ?? 1000)
+      note({ sessionList: params ?? null })
+      return respond(id, {
+        sessions: all.slice(from, from + size),
+        nextCursor: from + size < all.length ? String(from + size) : null,
+      })
     }
     case 'session/load': {
       note({ sessionLoad: params })

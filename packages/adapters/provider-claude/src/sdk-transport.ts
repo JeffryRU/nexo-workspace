@@ -23,7 +23,8 @@ import {
 type SdkModule = typeof import('@anthropic-ai/claude-agent-sdk')
 
 /** Lo que el transporte necesita del SDK; las pruebas lo sustituyen. */
-export type SdkApi = Pick<SdkModule, 'query' | 'startup' | 'getSessionInfo'>
+export type SdkApi = Pick<SdkModule, 'query' | 'startup' | 'getSessionInfo'> &
+  Partial<Pick<SdkModule, 'listSessions' | 'getSessionMessages'>>
 
 export type SdkTransportOptions = {
   env: Readonly<Record<string, string | undefined>>
@@ -172,6 +173,34 @@ class SdkTransport implements ClaudeTransport {
         ? {}
         : { pathToClaudeCodeExecutable: this.#o.pathToClaudeCodeExecutable }),
     }
+  }
+
+  async listSessions(o: { cwd?: string; limit: number }): Promise<unknown[]> {
+    const sdk = await this.#load()
+    if (sdk.listSessions === undefined) {
+      throw new TransportError('UNAVAILABLE', 'este SDK de Claude no lista sesiones')
+    }
+    return sdk.listSessions({
+      ...(o.cwd === undefined ? {} : { dir: o.cwd }),
+      limit: o.limit,
+      includeWorktrees: false,
+    })
+  }
+
+  async readSession(o: {
+    sessionId: string
+    cwd?: string
+    maxMessages: number
+  }): Promise<{ exists: boolean; messages: unknown[] }> {
+    const sdk = await this.#load()
+    if (sdk.getSessionMessages === undefined) {
+      throw new TransportError('UNAVAILABLE', 'este SDK de Claude no lee sesiones')
+    }
+    const dir = o.cwd === undefined ? {} : { dir: o.cwd }
+    const info = await sdk.getSessionInfo(o.sessionId, dir)
+    if (info === undefined) return { exists: false, messages: [] }
+    const messages = await sdk.getSessionMessages(o.sessionId, { ...dir, limit: o.maxMessages })
+    return { exists: true, messages }
   }
 
   async start(o: TransportStartOptions): Promise<ClaudeTransportSession> {

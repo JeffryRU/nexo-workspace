@@ -5,6 +5,7 @@ import type {
   QuestionAnswer,
   Token,
 } from '@nexo/contracts'
+import type { HistoryPort } from './history.ts'
 import type { MemoryInjectionPort } from './memory-injection.ts'
 import type { Unsubscribe } from './pty.ts'
 
@@ -96,6 +97,8 @@ export interface AgentProviderPort {
   warmUp?(options: Pick<AgentOpenOptions, 'cwd'>): Promise<void>
   /** Opcional: cómo recibe la memoria del proyecto (ADR 0007). Sin él, el proveedor no recibe memoria. */
   readonly memoryInjection?: MemoryInjectionPort
+  /** Opcional (F4.3): historial de sesiones con la API del propio proveedor. Sin él, el proveedor no tiene historial. */
+  readonly history?: HistoryPort
   /** Opcional: por qué `isAvailable()` dio `false` (la interfaz lo muestra); `undefined` si lo está o no se sabe. */
   unavailableReason?(): string | undefined
 }

@@ -12,6 +12,7 @@ import {
   type AgentProviderSession,
   checkPreparedMemory,
 } from '@nexo/core'
+import { ClaudeHistory } from './history.ts'
 import { ClaudeMemoryInjection } from './memory-injection.ts'
 import { createSecretRedactor, type SecretRedactor } from './redact.ts'
 import { createSdkTransport } from './sdk-transport.ts'
@@ -76,6 +77,7 @@ class ClaudeProvider implements AgentProviderPort {
   readonly id = 'claude'
   readonly displayName = 'Claude Code'
   readonly memoryInjection = new ClaudeMemoryInjection()
+  readonly history: ClaudeHistory
   readonly warmUp?: (options: { cwd: string }) => Promise<void>
   readonly #transport: ClaudeTransport
   readonly #options: ClaudeProviderOptions
@@ -95,6 +97,11 @@ class ClaudeProvider implements AgentProviderPort {
           ? {}
           : { pathToClaudeCodeExecutable: options.pathToClaudeCodeExecutable }),
       })
+    this.history = new ClaudeHistory({
+      transport: this.#transport,
+      scrub: this.#redactor.scrub,
+      redact: this.#redactor.redact,
+    })
     const warm = this.#transport.warmUp?.bind(this.#transport)
     if (warm !== undefined) {
       this.warmUp = async ({ cwd }) => {

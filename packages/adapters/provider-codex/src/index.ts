@@ -1,4 +1,5 @@
 export type { LogEntry } from './client.ts'
+export { CODEX_THREAD_ID, CodexHistory, HISTORY_SOURCE_KINDS } from './history.ts'
 export { CodexMemoryInjection } from './memory-injection.ts'
 export type { CodexLauncher, CodexProcess, ExitInfo, LaunchOptions } from './process.ts'
 export { CODEX_PROTOCOL_VERSION } from './protocol.ts'

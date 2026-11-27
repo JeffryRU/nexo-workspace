@@ -25,6 +25,7 @@ import {
 } from './domain.ts'
 import { EventNameSchema } from './events.ts'
 import { fsMethods } from './files.ts'
+import { historyMethods } from './history.ts'
 import { LIMITS } from './limits.ts'
 import { memoryMethods } from './memory.ts'
 import { bodyText, boundedBytes, DisplayText, FORBIDDEN_KEYS } from './text.ts'
@@ -266,6 +267,7 @@ export const methods = {
   },
   ...memoryMethods,
   ...fsMethods,
+  ...historyMethods,
 } as const
 
 export type MethodName = keyof typeof methods

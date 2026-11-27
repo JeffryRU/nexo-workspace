@@ -4,6 +4,9 @@ export * from './errors.ts'
 export * from './file-read.ts'
 export * from './file-rules.ts'
 export * from './file-service.ts'
+export * from './history-assemble.ts'
+export * from './history-paging.ts'
+export * from './history-service.ts'
 export * from './layout.ts'
 export * from './layout-service.ts'
 export * from './memory-inject.ts'
@@ -24,6 +27,16 @@ export type {
 export { AgentProviderError } from './ports/agent.ts'
 export type { FileSystemErrorCode, FileSystemPort } from './ports/file-system.ts'
 export { FileSystemError } from './ports/file-system.ts'
+export type {
+  HistoryErrorCode,
+  HistoryListRequest,
+  HistoryPort,
+  HistoryReadRequest,
+  HistorySessionInfo,
+  HistoryTranscript,
+  HistoryTranscriptBlock,
+} from './ports/history.ts'
+export { HistoryError } from './ports/history.ts'
 export type {
   AbortSignalLike,
   MemoryStoreErrorCode,

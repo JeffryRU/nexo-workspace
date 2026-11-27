@@ -35,7 +35,13 @@ function validItems<S extends z.ZodType>(raw: unknown, schema: S, max: number): 
 
 export const InitializeResult = z.looseObject({
   protocolVersion: z.number().int().min(0).max(65535),
-  agentCapabilities: z.looseObject({ loadSession: z.boolean().optional() }).nullish(),
+  agentCapabilities: z
+    .looseObject({
+      loadSession: z.boolean().optional(),
+      /** Capacidades de sesión del esquema estable de ACP; `list` (objeto vacío) anuncia `session/list`. */
+      sessionCapabilities: z.looseObject({ list: z.unknown().optional() }).nullish(),
+    })
+    .nullish(),
   authMethods: z.array(z.unknown()).nullish(),
 })
 export type InitializeResult = z.infer<typeof InitializeResult>
@@ -263,3 +269,21 @@ export const RequestPermissionParams = z.looseObject({
   options: z.array(z.unknown()),
 })
 export const permissionOptions = (raw: unknown[]) => validItems(raw, PermissionOption, 64)
+
+// ---- historial (`session/list`) ----
+
+export const SessionSummary = z.looseObject({
+  sessionId: z
+    .string()
+    .min(1)
+    .max(256)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:/@+=-]*$/),
+  cwd: z.string().max(4096),
+  title: z.string().nullish(),
+  updatedAt: z.string().nullish(),
+})
+
+export const SessionListResult = z.looseObject({
+  sessions: z.array(z.unknown()),
+  nextCursor: z.string().nullish(),
+})

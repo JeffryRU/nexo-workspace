@@ -16,6 +16,7 @@ import {
 } from '@nexo/core'
 import { RpcError } from '@nexo/jsonrpc'
 import { CodexClient, type LogEntry } from './client.ts'
+import { CodexHistory } from './history.ts'
 import { CodexMemoryInjection } from './memory-injection.ts'
 import { type CodexLauncher, spawnCodexProcess } from './process.ts'
 import { AccountResult, CODEX_PROTOCOL_VERSION, ModelListResult, ThreadResult } from './protocol.ts'
@@ -97,6 +98,7 @@ class CodexProvider implements AgentProviderPort {
   readonly id = 'codex'
   readonly displayName = 'Codex'
   readonly memoryInjection = new CodexMemoryInjection()
+  readonly history: CodexHistory
   readonly #o: CodexProviderOptions
   readonly #log: (entry: LogEntry) => void
   readonly #redactor: ReturnType<typeof createSecretRedactor>
@@ -111,6 +113,18 @@ class CodexProvider implements AgentProviderPort {
     this.#redactor = createSecretRedactor(options.env)
     this.#limits = { ...DEFAULT_LIMITS, ...options.limits }
     this.#launcher = options.launcher ?? spawnCodexProcess
+    this.history = new CodexHistory({
+      command: () =>
+        resolveCodexCommand({
+          executable: options.executable,
+          env: options.env,
+          ...(options.platform === undefined ? {} : { platform: options.platform }),
+          ...(options.resolveFs === undefined ? {} : { fs: options.resolveFs }),
+        }),
+      client: (command, cwd) => this.#client(command, cwd),
+      requestTimeoutMs: this.#limits.requestTimeoutMs,
+      redact: (text) => this.#redactor.redact(text),
+    })
   }
 
   async isAvailable(): Promise<boolean> {

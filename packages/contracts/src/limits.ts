@@ -75,4 +75,18 @@ export const LIMITS = {
   maxFsImageBytes: 32 * 1024 * 1024,
   maxFsPdfBytes: 64 * 1024 * 1024,
   maxFsBinaryBytes: 16 * 1024 * 1024,
+  // Historial de los proveedores (F4.3, `history.*`).
+  /** Sesiones por página de `history.list`. */
+  maxHistoryPage: 100,
+  /** Sesiones que se piden como máximo a cada proveedor por listado (lo demás se ignora). */
+  maxHistorySessionsPerProvider: 500,
+  /** Bloques por página de `history.read` (además del tope de bytes de la página). */
+  maxHistoryBlocksPage: 100,
+  /** Bloques que se leen como máximo de una transcripción; lo demás se descarta. */
+  maxHistoryBlocks: 10_000,
+  /** Bytes de JSON de los bloques de una página de `history.read`: se corta antes de pasarlo (salvo un bloque solo). */
+  maxHistoryPageBytes: 128 * 1024,
+  /** Un bloque cuyo JSON pasa de esto se sustituye por un aviso (con escapes cabe en un mensaje). */
+  maxHistoryBlockJsonBytes: 600 * 1024,
+  maxHistoryCursorLength: 1024,
 } as const

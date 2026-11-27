@@ -9,6 +9,7 @@ import {
 } from '@nexo/contracts'
 import { DomainError } from './errors.ts'
 import type { FileHandlers } from './file-service.ts'
+import type { HistoryHandlers } from './history-service.ts'
 import type { SnapshotService } from './snapshot-service.ts'
 import type { TerminalService } from './terminal-service.ts'
 import type { WorkspaceService } from './workspace-service.ts'
@@ -39,6 +40,8 @@ export type DispatcherServices = {
   memory?: MemoryHandlers
   /** Sin él, `fs.*` responde `PROVIDER_UNAVAILABLE`. */
   files?: FileHandlers
+  /** Sin él, `history.*` responde `PROVIDER_UNAVAILABLE`. */
+  history?: HistoryHandlers
   /** Pide el apagado del daemon; debe volver enseguida (el apagado ocurre después de responder). */
   shutdown: () => void
 }
@@ -75,6 +78,12 @@ export function createHandlers(s: DispatcherServices): Handlers {
       throw new DomainError('PROVIDER_UNAVAILABLE', 'el acceso a archivos no está disponible')
     }
     return s.files
+  }
+  const history = (): HistoryHandlers => {
+    if (s.history === undefined) {
+      throw new DomainError('PROVIDER_UNAVAILABLE', 'el historial no está disponible')
+    }
+    return s.history
   }
   return {
     // La autenticación la resuelve quien despacha (daemon) antes de llegar aquí; ya autenticado es un no-op.
@@ -122,6 +131,8 @@ export function createHandlers(s: DispatcherServices): Handlers {
     'memory.configure': (p) => memory()['memory.configure'](p),
     'fs.stat': (p) => files()['fs.stat'](p),
     'fs.read': (p) => files()['fs.read'](p),
+    'history.list': (p) => history()['history.list'](p),
+    'history.read': (p) => history()['history.read'](p),
   }
 }
 
