@@ -20,14 +20,14 @@ solo lee el JSON y las imágenes que nombra, y el resto de archivos de la carpet
 La mascota muestra uno de seis estados, que salen de la atención de todos los agentes (la misma prioridad que
 `nexo://attention`):
 
-| Estado     | Cuándo                                         | Se queda al menos |
-| ---------- | ---------------------------------------------- | ----------------- |
-| `waiting`  | algún agente espera un permiso o una respuesta | 2 s               |
-| `error`    | algún agente falló (y ninguno espera)          | 2,5 s             |
-| `busy`     | dos o más agentes trabajando                   | 1 s               |
-| `thinking` | un agente trabajando                           | 1 s               |
+| Estado     | Cuándo                                         | Se queda al menos                |
+| ---------- | ---------------------------------------------- | -------------------------------- |
+| `waiting`  | algún agente espera un permiso o una respuesta | 2 s                              |
+| `error`    | algún agente falló (y ninguno espera)          | 2,5 s                            |
+| `busy`     | dos o más agentes trabajando                   | 1 s                              |
+| `thinking` | un agente trabajando                           | 1 s                              |
 | `done`     | terminó un turno (y nada más pide atención)    | 2,5 s; a los 6 s vuelve a `idle` |
-| `idle`     | no hay nada que mostrar                        | -                 |
+| `idle`     | no hay nada que mostrar                        | -                                |
 
 `idle` es **obligatorio**. Los demás son opcionales: un estado que no declaras (o cuya imagen falla) se dibuja con
 la imagen de `idle`. Si falla incluso `idle`, Nexo no dibuja nada (nunca una imagen rota).
@@ -60,7 +60,14 @@ robi/
     "thinking": { "src": "pensando.gif" },
     "waiting": {
       "src": "hoja-espera.png",
-      "sheet": { "frameWidth": 32, "frameHeight": 32, "frames": 4, "columns": 4, "fps": 6, "loop": true }
+      "sheet": {
+        "frameWidth": 32,
+        "frameHeight": 32,
+        "frames": 4,
+        "columns": 4,
+        "fps": 6,
+        "loop": true
+      }
     },
     "busy": { "src": "idle.png" },
     "done": { "src": "img/hecho.webp" },
@@ -82,14 +89,14 @@ Reglas del manifiesto (el esquema es estricto: un campo que no existe es un erro
 
 ### Formatos y topes
 
-| Qué                       | Tope                                            |
-| ------------------------- | ----------------------------------------------- |
-| Formatos                  | PNG, WebP, GIF y SVG                            |
-| `companion.json`          | 64 KiB                                          |
-| Cada imagen               | 512 KiB                                         |
-| Todo el paquete           | 8 MiB                                           |
-| Tamaño de la imagen       | 4096 px por lado (se lee del encabezado)        |
-| Paquetes listados         | 64                                              |
+| Qué                 | Tope                                     |
+| ------------------- | ---------------------------------------- |
+| Formatos            | PNG, WebP, GIF y SVG                     |
+| `companion.json`    | 64 KiB                                   |
+| Cada imagen         | 512 KiB                                  |
+| Todo el paquete     | 8 MiB                                    |
+| Tamaño de la imagen | 4096 px por lado (se lee del encabezado) |
+| Paquetes listados   | 64                                       |
 
 El tipo se comprueba por los **bytes**, no por el nombre: un `.png` que en realidad es un GIF, HTML o texto se
 rechaza. Los enlaces simbólicos, las uniones y los enlaces duros dentro del paquete también se rechazan.
@@ -126,9 +133,9 @@ SVG autocontenido: formas, degradados y texto; nada de fuentes ni imágenes exte
 En la carpeta `companions` del directorio de datos de Nexo, una subcarpeta por mascota (el nombre de la
 subcarpeta es el `id`):
 
-| Sistema | Ruta                                          |
-| ------- | --------------------------------------------- |
-| Windows | `%LOCALAPPDATA%\Nexo\companions\<id>\`        |
+| Sistema | Ruta                                              |
+| ------- | ------------------------------------------------- |
+| Windows | `%LOCALAPPDATA%\Nexo\companions\<id>\`            |
 | Linux   | `<directorio de estado de Nexo>/companions/<id>/` |
 
 `NEXO_STATE_DIR` cambia el directorio de datos. No hace falta reiniciar: el daemon vuelve a leer la carpeta al listar.
@@ -169,10 +176,10 @@ conecta a Nexo como **cliente de solo lectura** y decide ella cómo dibujarse. H
 
 El servidor MCP de Nexo (`apps/mcp`, por stdio) expone recursos suscribibles. Para una mascota bastan dos:
 
-| Recurso                     | Qué es                                                            |
-| --------------------------- | ----------------------------------------------------------------- |
+| Recurso                     | Qué es                                                                                         |
+| --------------------------- | ---------------------------------------------------------------------------------------------- |
 | `nexo://attention`          | atención agregada de todas las sesiones: `needs-input` > `error` > `working` > `done` > `idle` |
-| `nexo://agents/<id>/status` | estado de una sesión de agente concreta                           |
+| `nexo://agents/<id>/status` | estado de una sesión de agente concreta                                                        |
 
 Léelos con `resources/read` y suscríbete con `resources/subscribe`: el servidor avisa con
 `notifications/resources/updated` cada vez que cambian. Son de **solo lectura**: no hace falta activar ninguna
@@ -191,7 +198,7 @@ const client = new NexoClient(/* transporte y token, como en apps/cli */)
 await client.connect()
 const companion = companionApi(client)
 
-const { state, selected } = await companion.state()   // estado actual
+const { state, selected } = await companion.state() // estado actual
 const off = companion.onState((view) => {
   // view = { state: 'idle'|'thinking'|'waiting'|'busy'|'done'|'error', since: <ms Unix>, selected: <id>|null }
   dibujar(view.state)
