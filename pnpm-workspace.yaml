@@ -20,3 +20,4 @@ ignoreWorkspaceCycles: true
 
 allowBuilds:
   node-pty: true
+  esbuild: false
