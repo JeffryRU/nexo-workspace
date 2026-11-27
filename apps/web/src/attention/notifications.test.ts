@@ -30,7 +30,10 @@ describe('createNotifications', () => {
       expect(notifier.requests).toBe(1)
       expect(n.state()).toBe('on')
       expect(n.enabled()).toBe(true)
-      expect(JSON.parse(data.get(SETTINGS_KEY) as string)).toEqual({ notifications: true })
+      expect(JSON.parse(data.get(SETTINGS_KEY) as string)).toEqual({
+        notifications: true,
+        companionHidden: false,
+      })
       await n.toggle()
       expect(n.state()).toBe('off')
       expect(n.enabled()).toBe(false)

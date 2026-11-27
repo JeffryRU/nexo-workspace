@@ -2,6 +2,9 @@ import { useQuery } from '@tanstack/solid-query'
 import { createEffect, createMemo, Match, onCleanup, onMount, Show, Switch } from 'solid-js'
 import { type AppModel, ModelProvider } from './app/model.tsx'
 import { useAttentionEffects } from './attention/effects.ts'
+import { CompanionDialog, CompanionToggle } from './companion/CompanionDialog.tsx'
+import { CompanionDock } from './companion/CompanionDock.tsx'
+import { CompanionProvider, createCompanionModel } from './companion/model.tsx'
 import type { InfoFailure } from './daemon/info.ts'
 import { HistoryDialog, HistoryToggle } from './history/HistoryDialog.tsx'
 import { es } from './i18n/es.ts'
@@ -57,6 +60,7 @@ function Workbench(props: { model: AppModel }) {
 
   useAttentionEffects(props.model)
   useMemoryEvents()
+  const companion = createCompanionModel(props.model)
   onMount(() => {
     const stop = installShortcuts(props.model)
     onCleanup(stop)
@@ -85,27 +89,34 @@ function Workbench(props: { model: AppModel }) {
 
   return (
     <Show when={everOpened()} fallback={<ConnectionScreen />}>
-      <div class="workbench">
-        <Sidebar />
-        <div class="main">
-          <TabBar />
-          <Stage />
-          <SearchBar />
-          <footer class="statusbar">
-            <span>{es.appName}</span>
-            <LimitsIndicator />
-            <HistoryToggle />
-            <MemoryToggle />
-            <NotificationToggle />
-            <Show when={info.data}>{(d) => <span class="muted">v{d().version}</span>}</Show>
-          </footer>
+      <CompanionProvider value={companion}>
+        <div class="workbench">
+          <div class="side-column">
+            <Sidebar />
+            <CompanionDock />
+          </div>
+          <div class="main">
+            <TabBar />
+            <Stage />
+            <SearchBar />
+            <footer class="statusbar">
+              <span>{es.appName}</span>
+              <LimitsIndicator />
+              <HistoryToggle />
+              <MemoryToggle />
+              <CompanionToggle />
+              <NotificationToggle />
+              <Show when={info.data}>{(d) => <span class="muted">v{d().version}</span>}</Show>
+            </footer>
+          </div>
+          <ReconnectBanner />
+          <HelpDialog />
+          <MemoryDialog />
+          <HistoryDialog />
+          <CompanionDialog />
+          <Toast />
         </div>
-        <ReconnectBanner />
-        <HelpDialog />
-        <MemoryDialog />
-        <HistoryDialog />
-        <Toast />
-      </div>
+      </CompanionProvider>
     </Show>
   )
 }

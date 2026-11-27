@@ -8,9 +8,9 @@ export type SettingsStorage = {
 export const SETTINGS_KEY = 'nexo.settings'
 
 /** Lo que se guarda (versionado por campos: lo desconocido o de otro tipo se ignora). */
-export type StoredSettings = { notifications: boolean }
+export type StoredSettings = { notifications: boolean; companionHidden: boolean }
 
-const DEFAULTS: StoredSettings = { notifications: false }
+const DEFAULTS: StoredSettings = { notifications: false, companionHidden: false }
 
 /** Lee los ajustes guardados; cualquier basura (JSON roto, tipos distintos) cae a los valores por omisión. */
 export function readSettings(storage: SettingsStorage | undefined): StoredSettings {
@@ -22,8 +22,14 @@ export function readSettings(storage: SettingsStorage | undefined): StoredSettin
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
       return { ...DEFAULTS }
     }
-    const { notifications } = parsed as { notifications?: unknown }
-    return { notifications: typeof notifications === 'boolean' ? notifications : false }
+    const { notifications, companionHidden } = parsed as {
+      notifications?: unknown
+      companionHidden?: unknown
+    }
+    return {
+      notifications: typeof notifications === 'boolean' ? notifications : false,
+      companionHidden: typeof companionHidden === 'boolean' ? companionHidden : false,
+    }
   } catch {
     return { ...DEFAULTS }
   }
@@ -34,16 +40,31 @@ export function readSettings(storage: SettingsStorage | undefined): StoredSettin
  * WebView (no hay todavía ajustes del lado del daemon). Si el almacenamiento falla, solo se pierde la memoria.
  */
 export function createSettings(storage?: SettingsStorage) {
-  const [notifications, setNotificationsSignal] = createSignal(readSettings(storage).notifications)
+  const initial = readSettings(storage)
+  const [notifications, setNotificationsSignal] = createSignal(initial.notifications)
+  const [companionHidden, setCompanionHiddenSignal] = createSignal(initial.companionHidden)
+  const save = (): void => {
+    try {
+      const value: StoredSettings = {
+        notifications: notifications(),
+        companionHidden: companionHidden(),
+      }
+      storage?.setItem(SETTINGS_KEY, JSON.stringify(value))
+    } catch {
+      // cuota o acceso bloqueado
+    }
+  }
   return {
     notifications,
     setNotifications(value: boolean): void {
       setNotificationsSignal(value)
-      try {
-        storage?.setItem(SETTINGS_KEY, JSON.stringify({ notifications: value }))
-      } catch {
-        // cuota o acceso bloqueado
-      }
+      save()
+    },
+    /** La mascota se oculta (F5.3): es una preferencia de esta ventana, como las notificaciones. */
+    companionHidden,
+    setCompanionHidden(value: boolean): void {
+      setCompanionHiddenSignal(value)
+      save()
     },
   }
 }
