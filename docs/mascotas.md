@@ -158,7 +158,7 @@ una tarea larga (`thinking`) o que necesite permiso (`waiting`).
 
 - **Dónde:** en la esquina inferior izquierda, debajo de la lista de espacios. Ocupa su propio sitio, así que no tapa
   pestañas, paneles, compositor ni barra de estado. En ventanas muy bajas (menos de 520 px de alto) se quita.
-- **Ocultar:** el botón `×` de la mascota (aparece al pasar el ratón o con el teclado) o el interruptor «Mostrar la mascota
+- **Ocultar:** el botón de cerrar (icono x) de la mascota (siempre visible, tenue) o el interruptor «Mostrar la mascota
   en la ventana» del selector. Solo oculta el dibujo en esa ventana; la mascota elegida se conserva en el daemon. La
   preferencia se guarda con los demás ajustes de la interfaz (almacenamiento local de la ventana).
 - **Sin mascota** es el valor por omisión y una opción más del selector, no una ausencia.

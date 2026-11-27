@@ -1831,8 +1831,8 @@ Implementación de la F1.6 (`apps/web/src`):
 ### Panel de agente (F2.5)
 
 Un panel con `kind: 'agent'` pinta `AgentPanel` (`apps/web/src/agent/`) en lugar de una terminal. Se crea desde la
-interfaz con ✦ en la barra de pestañas o `Alt+Shift+A` (`tab.create` + `pane.split { kind: 'agent' }` + cerrar el panel
-inicial, igual que la CLI) y con ✦ en la cabecera de un panel o `Alt+Shift+E` (divide el panel con un agente).
+interfaz con el icono de chispa en la barra de pestañas o `Alt+Shift+A` (`tab.create` + `pane.split { kind: 'agent' }` + cerrar el panel
+inicial, igual que la CLI) y con el mismo icono en la cabecera de un panel o `Alt+Shift+E` (divide el panel con un agente).
 
 - **Estado.** `AgentPaneModel` (uno por panel, en `AppModel.agents`, liberado al cerrarse el panel) envuelve a
   `AgentDocument`: abre la sesión de `pane.agentSessionId` con el cliente actual (el documento se recompone solo
@@ -2236,10 +2236,7 @@ un `<img>` roto) y el selector avisa «No se pudieron leer las imágenes de la m
 - **Sitio:** columna izquierda de la ventana, **debajo** de la lista de espacios (`.side-column`: barra lateral + mascota). No es una capa flotante:
   ocupa su propio espacio, así que no puede tapar pestañas, paneles, compositor ni barra de estado, y el puntero no se queda en ella
   (`pointer-events: none` en el dibujo). En ventanas de menos de 520 px de alto no se muestra.
-- **Anchos estrechos (360-1280 px):** la barra lateral pasa a `clamp(132px, 34vw, 232px)` (a 360 px la mascota, de 96 px, sigue centrada en ella), la barra de estado
-  puede pasar a dos filas y oculta el nombre de la app por debajo de 640 px, y el selector se centra respecto de la ventana (`position: fixed`,
-  `min(520px, 100vw - 24px)`). La `×` de ocultar es siempre visible (tenue; sin «pasar el ratón» en pantallas táctiles) y usa el mismo `icon-button` que el resto.
-  Capturas: `docs/capturas/f5-ancho-*.png`.
+- **Anchos estrechos:** ver «Pulido visual y responsive (F5.4)»: con la barra lateral colapsada la mascota se queda en un carril, y por debajo de 760 px vive dentro del cajón de espacios.
 - **Siempre `<img>`.** Un estado sin hoja es un `<img>` de 96 px (`object-fit: contain`, `image-rendering: pixelated`); nunca SVG incrustado, `<object>`
   ni `<iframe>`. Cada imagen nueva entra con un fundido de 180 ms (`keyed` recrea el elemento; no hay dos a la vez).
 - **Hojas de sprites** (`sheet`): un visor del tamaño de un cuadro (ampliado en enteros) con el `<img>` de la hoja desplazado (`frameOffset`,
@@ -2273,6 +2270,67 @@ propiedades (fast-check: `decodeBase64`, `mergeState`, `resolveAsset`, geometrí
 expulsiones no queda ninguna URL viva). E2E con el daemon real y el paquete de prueba del testkit (`e2e/companion.spec.ts`): sin mascota por omisión,
 elegir y que sobreviva a recargar, estados reales del agente (`lento`, `permiso`), que no tape nada, ocultar, paquete borrado y paquete no válido.
 Capturas: `docs/capturas/f5-*.png` (`NEXO_CAPTURAS=1 pnpm e2e -g capturas`); la app solo tiene tema oscuro, así que no hay variante clara.
+
+## Pulido visual y responsive (F5.4)
+
+Pasada de pulido de toda la interfaz web y de escritorio (#76). Sin cambios de protocolo ni de contratos: solo `apps/web` y el tamaño mínimo de la ventana de `apps/desktop`.
+
+### Variables de diseño
+
+Un único sitio (`apps/web/src/styles/app.css`, `:root`): escala de espaciado de 4 px (`--space-1..6`: 2, 4, 8, 12, 16, 24), radios (`--radius-sm`, `--radius`, `--radius-lg`, `--radius-pill`),
+tamaños de icono (`--icon-sm|md|lg`: 14, 16, 20), zona de clic mínima `--hit` (28 px, WCAG 2.5.8) y alto de campos y botones de formulario `--control-h` (36 px),
+tipografía (`--text-xs|sm|md|lg`: 11, 12, 13, 15), alturas de barras (`--bar-h`, `--statusbar-h`, `--pane-header-h`), tamaño mínimo de un panel (`--pane-min`),
+anchos de la barra lateral (`--sidebar-width`, `--rail-width`, `--drawer-width`), capas (`--z-*`) y sombra. Los CSS de cada módulo ya no llevan píxeles sueltos de
+espaciado, radio ni letra; lo que queda son medidas de dibujo (el punto de atención, el cursor, el tope de altura de un bloque de salida).
+
+### Iconos (`ui/Icon.tsx`)
+
+Un componente `Icon` con SVG en línea: `viewBox` 24, trazo uniforme de 1.75 px, `currentColor`, extremos y uniones redondeados, `aria-hidden` (el nombre accesible lo
+pone el botón). Unos 25 iconos en un solo mapa de trazos, sin dependencias. **Origen y licencia:** casi todos los trazos son de [Lucide](https://lucide.dev) (licencia ISC,
+texto en [`NOTICE`](../NOTICE)); `sparkle` (el icono de agente) y `circle-half` (acción en curso) son dibujos propios. Sustituyen a los glifos Unicode (`+ × ✦ ↑ ■ ▸ ▾ ▯▯ ▭ ⇄ ○ ◐ ✓ ✕ ←`),
+que según la fuente tenían tamaños y líneas base distintos. Todo botón de solo icono lleva `aria-label` y `title` y mide al menos 28 × 28 px (`.icon-button`); un E2E
+lo comprueba en las vistas principales y a cinco anchos. Los botones de la barra de estado llevan icono + etiqueta; la etiqueta pasa a ser solo para lectores de pantalla
+cuando la zona principal mide menos de 760 px (consulta de contenedor), así que el nombre accesible no cambia.
+
+### Diálogos (`ui/Dialog.tsx`)
+
+`Dialog` y `DialogHeader` sustituyen a las cuatro cajas modales sueltas (Atajos, Historial, Memoria, Mascota): cabecera común con el título (se trunca, `title` con el texto
+entero) y un **cerrar por icono alineado en vertical**, separador, cuerpo con desplazamiento interno (`.dialog-body`); la caja nunca se sale de la ventana
+(`max-height: 100%` dentro de un fondo `position: fixed` con margen). Enfoca la caja al abrir, **atrapa Tab** (`ui/focus-trap.ts`), cierra con Esc (o `onEscape`, que el Historial usa
+para volver de una sesión a la lista) y al cerrarse devuelve el foco a quien lo tenía. Por debajo de 520 px de ancho o 480 de alto el diálogo ocupa toda la ventana.
+Las tablas de costos de la memoria alinean a la derecha las columnas numéricas (`.num`, cifras tabulares) y se desplazan en horizontal si no caben.
+
+### Barra lateral, cajón y mascota
+
+- **Ancho (≥ 760 px):** la barra de espacios se colapsa con un botón (`panel-left`, con `aria-expanded` y `aria-controls`) al principio de la barra de pestañas. La preferencia es
+  `sidebarCollapsed` en los ajustes de la interfaz (`state/settings.ts`, `localStorage`, como `notifications` y `companionHidden`); un valor de otro tipo cae a «expandida».
+- **Estrecho (< 760 px, `matchMedia`; mismo valor en `ui/use-narrow.ts`):** la barra es un **cajón superpuesto** (`ui/SideColumn.tsx`): `role="dialog"` modal, abre con el mismo botón,
+  cierra con Esc, con un clic en el fondo, con su botón de cerrar o al elegir una pestaña o un espacio, atrapa el foco y lo devuelve al botón. Siempre arranca cerrado
+  (el estado abierto del cajón no se guarda; `sidebarCollapsed` solo manda en anchos amplios) y se cierra solo si la ventana se ensancha.
+- **Decisión: qué pasa con la mascota.** Con la barra colapsada y una mascota visible queda un **carril** de 72 px solo con la mascota (al 60 %; el dibujo sigue siendo `<img>`, y ocultarla
+  se hace desde el selector); sin mascota, la columna desaparece. En estrecho la mascota vive **dentro del cajón**, bajo la lista, y solo se ve con el cajón abierto: sigue sin
+  ocupar sitio sobre el contenido ni tapar nada. Alternativas descartadas: dejarla flotando en una esquina (tapa el compositor o la barra de estado, justo lo que F5.3 evitó) y
+  llevarla a la barra de estado (no cabe un dibujo de 96 px y las hojas de sprites no escalan bien a 20 px).
+
+### Barras, paneles y compositor
+
+- **Barra de estado:** dos grupos, el de la izquierda (nombre de la app y límites) y el de la derecha (Historial, Memoria, Mascota, Notificaciones y versión), con altura fija de 28 px, sin
+  `margin-left: auto` repartido por los botones (de ahí que «Historial» flotara en medio). Los límites se truncan y su detalle se ancla a la barra, no al botón.
+- **Pestañas:** botones a los lados que no se mueven (barra lateral, `+`, agente) y una lista central con desplazamiento horizontal; la pestaña activa se lleva a la vista entera, con su
+  cerrar. Anchura de cada pestaña `clamp(112px, 24vw, 200px)`; el cerrar es visible en la activa y en pantallas táctiles.
+- **Paneles:** cada panel es un contenedor (`container-type: inline-size`): por debajo de 300 px de ancho se retiran los botones secundarios de su cabecera (dividir con agente, intercambiar), por
+  debajo de 190 px también los de dividir; cerrar siempre queda. Un panel mide al menos `--pane-min` (120 px) y, si no caben, el contenedor se desplaza en vez de aplastarlos. Las acciones se ven siempre en el panel con foco
+  y, sin «pasar el ratón» (`hover: none`), en todos.
+- **Compositor:** el campo y los botones de enviar y detener miden lo mismo (`--control-h`, 36 px), los chips 28 px y se parten en filas (`flex-wrap`, `min-width: 0`) sin recortarse; el marcador del campo se corta con puntos suspensivos.
+- **Ventana de escritorio:** `min_inner_size` pasa de 640 × 400 a **480 × 360** (`WINDOW_MIN_SIZE` en `apps/desktop/src-tauri/src/lib.rs`; la ventana se crea en Rust y `tauri.conf.json` no declara ventanas), coherente con el cajón (760) y los diálogos a pantalla completa (520).
+
+### Pruebas
+
+Unitarias de `Icon` (trazos válidos, tamaños, nombres hostiles), `Dialog`/`DialogHeader`, `focus-trap` y del cajón y la barra colapsable (`SideColumn.test.tsx`: abrir, Esc, clic fuera, foco, persistencia, ensanchar
+con el cajón abierto). Adversariales (`Icon`, `Dialog`, `layout.adversarial.test.tsx`): etiquetas de 20 000 caracteres, emojis, RTL y marcado, 400 pestañas, cruzar el umbral 300 veces, sin `matchMedia`. E2E
+(`e2e/pulido.spec.ts`): a 360, 768, 1024, 1280 y 1920 px recorre terminal con tres paneles, agente con chips y con permiso, visor, Historial (lista y sesión), Memoria, Mascota, límites, Atajos, cajón y barra colapsada, y exige
+`scrollWidth <= clientWidth` en el documento y en las barras, que nada salga de la ventana y que todo botón de icono mida ≥ 28 px; a 360 px comprueba que los botones clave son visibles y pulsables y que la pestaña activa
+queda entera a la vista. Capturas: `docs/capturas/f5-4-*.png` (`NEXO_CAPTURAS=1 pnpm e2e -g pulido`; `NEXO_CAPTURAS_PREFIX` y `NEXO_CAPTURAS_DIR` cambian el nombre y la carpeta).
 
 ## Seguridad
 

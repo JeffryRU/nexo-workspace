@@ -83,7 +83,7 @@ nexo agent send <id> "hola"
 nexo agent attach <id>
 ```
 
-**En la interfaz.** El botón ✦ de la barra de pestañas (o `Alt+Shift+A`) abre una pestaña de agente; `Alt+Shift+E` (o ✦ en la
+**En la interfaz.** El botón de la chispa (icono de agente) de la barra de pestañas (o `Alt+Shift+A`) abre una pestaña de agente; `Alt+Shift+E` (o el icono de chispa en la
 cabecera del panel) divide el panel actual con un agente. El panel muestra la conversación como un documento
 virtualizado (Markdown seguro, razonamiento y acciones plegables con diff y salida, permisos y preguntas en línea,
 plan, errores y uso), y un redactor con chips de proveedor, modelo, esfuerzo, permisos y carpeta (se fijan al enviar el
@@ -319,6 +319,15 @@ args = ["/ruta/a/nexo-workspace/apps/mcp/src/main.ts"]
 En Windows usa la ruta con barras normales (`C:/Users/tu-usuario/.../apps/mcp/src/main.ts`). Si el daemon usa un directorio de estado distinto, pasa
 también `NEXO_STATE_DIR` en el `env` del servidor. Las herramientas llegan al modelo con el prefijo del cliente (`mcp__nexo__terminal_read` en
 Claude Code). Detalle de herramientas, recursos y seguridad: [Arquitectura](docs/ARCHITECTURE.md#servidor-mcp-f51).
+
+## Interfaz
+
+La interfaz es solo de tema oscuro y en español. Iconos propios en SVG (trazos de Lucide, licencia ISC: ver [`NOTICE`](NOTICE)) y variables de diseño únicas en `apps/web/src/styles/app.css`.
+Es responsive hasta una ventana de **480 × 360 px**: por debajo de 760 px la barra de espacios es un cajón (botón del extremo izquierdo de las pestañas; Esc o un clic fuera lo cierra), en anchos
+amplios se puede colapsar (queda un carril con la mascota) y la preferencia se recuerda; los diálogos ocupan toda la ventana por debajo de 520 px y las pestañas se desplazan. Detalle: [Arquitectura](docs/ARCHITECTURE.md#pulido-visual-y-responsive-f54).
+
+![Terminal con tres paneles a 1920 px](docs/capturas/f5-4-terminal-1920.png)
+![Agente con un permiso pendiente a 360 px](docs/capturas/f5-4-agente-permiso-360.png)
 
 ## Estructura
 
