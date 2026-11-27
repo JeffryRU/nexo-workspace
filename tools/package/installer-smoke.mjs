@@ -223,6 +223,18 @@ async function stopDaemonWithCli(pkg, env) {
   if (r.status !== 0) throw new Error(`nexo daemon stop falló: ${r.stdout}${r.stderr}`)
 }
 
+/**
+ * Cierra la app y detiene el daemon con la CLI instalada. Primero la app: mientras viva, la interfaz vuelve a
+ * lanzar el daemon en cuanto este cae (es lo correcto para el usuario, pero impediría comprobar la parada).
+ */
+async function stopWithInstalledCli(pkg, env, stateDir, info, what) {
+  await sleep(1000)
+  const current = (await daemonInfo(stateDir)) ?? info
+  await stopDaemonWithCli(pkg, env)
+  await until('parada del daemon', () => !alive(current.pid), 30_000)
+  log(`${what}: el daemon se detiene con la CLI instalada`)
+}
+
 async function readDaemonLog(stateDir) {
   try {
     return await readFile(join(stateDir, 'daemon.log'), 'utf8')
@@ -313,13 +325,8 @@ async function smokeDeb(file, sandbox) {
       stateDir,
       expectedNode: join(resolve(pkg), 'node', 'node'),
     })
-    try {
-      await stopDaemonWithCli(resolve(pkg), env)
-      await until('parada del daemon', () => !alive(info.pid), 30_000)
-      log('deb: el daemon se detiene con la CLI instalada')
-    } finally {
-      killTree(app)
-    }
+    killTree(app)
+    await stopWithInstalledCli(resolve(pkg), env, stateDir, info, 'deb')
   } catch (error) {
     console.error(`[installers] daemon.log:\n${await readDaemonLog(stateDir)}`)
     throw error
@@ -358,13 +365,8 @@ async function smokeAppImage(file, sandbox) {
       stateDir,
       expectedNode: join(pkg, 'node', 'node'),
     })
-    try {
-      await stopDaemonWithCli(pkg, env)
-      await until('parada del daemon', () => !alive(info.pid), 30_000)
-      log('appimage: el daemon se detiene con la CLI del paquete')
-    } finally {
-      killTree(app)
-    }
+    killTree(app)
+    await stopWithInstalledCli(pkg, env, stateDir, info, 'appimage')
   } catch (error) {
     console.error(`[installers] daemon.log:\n${await readDaemonLog(stateDir)}`)
     throw error
