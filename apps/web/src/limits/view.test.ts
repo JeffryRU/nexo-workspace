@@ -71,6 +71,9 @@ describe('límites: formato', () => {
     expect(formatRemaining(now - 1, now)).toBe('ya pasó')
     expect(formatRemaining(undefined, now)).toBeUndefined()
     expect(formatRemaining(Number.NaN, now)).toBeUndefined()
+    // La resta desborda a Infinity aunque ambos sean finitos.
+    expect(formatRemaining(Number.MAX_VALUE, -Number.MAX_VALUE)).toBeUndefined()
+    expect(formatRemaining(-Number.MAX_VALUE, Number.MAX_VALUE)).toBeUndefined()
   })
 
   it('nombre de ventana: etiqueta del proveedor, nombre conocido o el id', () => {
