@@ -41,7 +41,7 @@ Las sumas solo prueban que el archivo no cambió respecto al que publicó el wor
 ### Windows (NSIS)
 
 Ejecuta `nexo-workspace_<versión>_windows_x64-setup.exe`. Se instala por usuario en
-`%LOCALAPPDATA%\Programs\Nexo Workspace` (sin administrador), crea el acceso directo del menú Inicio y el desinstalador.
+una carpeta de `%LOCALAPPDATA%` (sin administrador; el instalador muestra la ruta y deja cambiarla), crea el acceso directo del menú Inicio y el desinstalador.
 Instalación silenciosa en una carpeta concreta: `setup.exe /S /D=C:\Ruta\Nexo` (`/D` va siempre al final y sin comillas).
 
 **Aviso de SmartScreen.** Como el instalador no está firmado, Windows muestra «Windows protegió su PC». Es lo esperado:
@@ -61,7 +61,7 @@ sudo apt install ./nexo-workspace_<versión>_linux_x64.deb
 ```
 
 Instala el ejecutable en `/usr/bin` y el paquete (Node, daemon, CLI, web) en `/usr/lib/Nexo Workspace/nexo`. Aparece en el
-menú de aplicaciones. Desinstalar: `sudo apt remove nexo-desktop`.
+menú de aplicaciones. Desinstalar: `sudo apt remove nexo-workspace`.
 
 ### Linux (AppImage)
 
@@ -87,9 +87,9 @@ El estado y la configuración se conservan entre versiones.
 
 ## Desinstalar
 
-- **Windows**: Configuración > Aplicaciones > Nexo Workspace, o `"%LOCALAPPDATA%\Programs\Nexo Workspace\uninstall.exe" /S`.
+- **Windows**: Configuración > Aplicaciones > Nexo Workspace, o `"<carpeta de instalación>\uninstall.exe" /S`.
   Si el daemon sigue corriendo, el desinstalador lo detiene primero.
-- **Linux**: `sudo apt remove nexo-desktop`. Borra el archivo de la AppImage para quitarla.
+- **Linux**: `sudo apt remove nexo-workspace`. Borra el archivo de la AppImage para quitarla.
 
 **Desinstalar no borra tus datos** (ver abajo). Si quieres empezar de cero, borra el directorio de estado a mano
 después de desinstalar. Si el daemon seguía vivo al desinstalar el `.deb` o el MSI, termínalo antes con
@@ -142,7 +142,7 @@ mkdir -p ~/.local/state/nexo/companions && cp -r "/usr/lib/Nexo Workspace/nexo/c
 
 ```powershell
 # Windows (NSIS)
-Copy-Item -Recurse "$env:LOCALAPPDATA\Programs\Nexo Workspace\nexo\companions\robi" "$env:LOCALAPPDATA\Nexo\companions\"
+Copy-Item -Recurse "<carpeta de instalación>\nexo\companions\robi" "$env:LOCALAPPDATA\Nexo\companions\"
 ```
 
 ## Migrar desde desarrollo
