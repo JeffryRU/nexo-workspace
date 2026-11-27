@@ -672,3 +672,14 @@ button:disabled {
   color: var(--fg-muted);
   text-decoration: underline dotted;
 }
+.path-link {
+  all: unset;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  font-family: var(--font-mono, monospace);
+  overflow-wrap: anywhere;
+}
+.path-link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}

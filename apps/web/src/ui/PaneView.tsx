@@ -1,13 +1,14 @@
 import type { PaneId } from '@nexo/contracts'
 import { createMemo, Match, Show, Switch } from 'solid-js'
 import { AgentPanel } from '../agent/AgentPanel.tsx'
+import { MarkdownEnvContext } from '../agent/markdown.tsx'
 import { useModel } from '../app/model.tsx'
 import { es } from '../i18n/es.ts'
 import { findPaneTab } from '../state/store.ts'
 import { paneTitle } from '../terminal/title.ts'
+import { ViewerPane } from '../viewer/ViewerPane.tsx'
 import { AttentionDot } from './parts.tsx'
 import { TerminalView } from './TerminalView.tsx'
-import { ViewerPlaceholder } from './ViewerPlaceholder.tsx'
 import './PaneView.css'
 
 export function PaneView(props: { paneId: PaneId }) {
@@ -23,6 +24,11 @@ export function PaneView(props: { paneId: PaneId }) {
     const fallback = isAgent() ? es.agent.paneTitle : isViewer() ? es.viewer.paneTitle : undefined
     return fallback === undefined ? t : { label: fallback, full: fallback }
   }
+  // Los enlaces a archivos del texto del agente se abren en el visor, relativos a la carpeta del espacio.
+  const agentEnv = createMemo(() => ({
+    baseDir: located()?.workspace.cwd,
+    openFile: (path: string) => void actions.openInViewer(props.paneId, path),
+  }))
   const swapping = () => ui.swapSource() !== undefined
 
   const swap = () => {
@@ -116,15 +122,17 @@ export function PaneView(props: { paneId: PaneId }) {
             }
           >
             <Match when={p().kind === 'agent'}>
-              <AgentPanel
-                paneId={props.paneId}
-                sessionId={p().agentSessionId}
-                defaultCwd={located()?.workspace.cwd}
-                focused={focused()}
-              />
+              <MarkdownEnvContext.Provider value={agentEnv()}>
+                <AgentPanel
+                  paneId={props.paneId}
+                  sessionId={p().agentSessionId}
+                  defaultCwd={located()?.workspace.cwd}
+                  focused={focused()}
+                />
+              </MarkdownEnvContext.Provider>
             </Match>
             <Match when={p().kind === 'viewer'}>
-              <ViewerPlaceholder path={p().viewerPath} />
+              <ViewerPane paneId={props.paneId} path={p().viewerPath} />
             </Match>
           </Switch>
         </section>

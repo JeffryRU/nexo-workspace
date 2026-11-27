@@ -1383,8 +1383,47 @@ secuencias de escape; un binario exige `--base64`).
 
 `Pane.kind` admite `viewer` (junto a `terminal` y `agent`) con `viewerPath` opcional: la ruta del archivo que muestra. Se crea con
 `pane.split { kind: 'viewer', path? }` (`path` con otro `kind` es `INVALID_PARAMS`) y se reapunta con `viewer.open`; el título es el
-nombre del archivo. La ruta es un dato del panel: lo único que la valida es `fs.read` cuando alguien la lee. La web pinta por ahora
-un marcador con la ruta (`ViewerPlaceholder`); el visor real es la F4.2.
+nombre del archivo. La ruta es un dato del panel: lo único que la valida es `fs.read` cuando alguien la lee. La web lo pinta con el visor de la F4.2 (ver «Visor lateral (F4.2)»).
+
+### Visor lateral (F4.2)
+
+`apps/web/src/viewer` pinta el panel `viewer`. `ViewerPane` pide el archivo con `loadViewerFile` (`fs.stat` primero: una carpeta, un
+binario o un archivo por encima del tope de su tipo no se descargan; luego `fsApi.readAll`, que fija `expectMtimeMs`, y un `CONFLICT`
+—el archivo cambió a mitad de lectura— se reintenta hasta 3 veces) y lo muestra según su `type`:
+
+| Tipo                                  | Vista                                                                                                               |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `markdown`                            | El mismo analizador seguro que el texto del agente (`marked` solo como `Lexer`; las fichas pasan a nodos de Solid). |
+| `text`                                | `<pre>` sin resaltado (se descartó una librería de colores por el peso; recorta a 1 M de caracteres con aviso).     |
+| `png`, `jpeg`, `gif`, `webp`, `svg`   | `<img>` con una URL `blob:` (el `Blob` lleva un MIME de lista blanca).                                              |
+| `pdf`                                 | `pdfjs-dist` dibujando cada página en un `<canvas>` (hasta 100 páginas, con aviso).                                 |
+| `binary` / demasiado grande / carpeta | Mensaje; no se lee.                                                                                                 |
+
+**Recarga.** Botón «Recargar» y, al volver el foco a la ventana, un `fs.stat` barato: solo se relee si cambiaron `mtimeMs` o `size`.
+
+**Markdown.** Sin HTML crudo (los bloques y los `<...>` en línea salen como texto) y sin recursos remotos: una imagen con `http(s)`, `data:`,
+`//host` o cualquier esquema queda como marcador `[Imagen: texto]`. `classifyHref` (`viewer/paths.ts`, puro) decide cada enlace: `http(s)`/`mailto`
+son externos (`target=_blank rel="noopener noreferrer nofollow"`; en el escritorio `on_navigation`/`on_new_window` de Tauri los entregan al navegador
+del sistema, sin plugin nuevo y solo al pulsarlos), una ruta es un archivo local, `#x` un ancla (texto) y todo lo demás (`javascript:`, `data:`,
+`file:`, UNC, controles, `%00`, `..` que sale de la raíz) se bloquea. Una ruta relativa se resuelve contra la carpeta del archivo (`resolveLocalPath`,
+sin `..`, absoluta, sin controles) y: un enlace la abre en el mismo visor (`viewer.open`); una imagen se lee con `fs.read` (máx. 8 MiB, solo
+tipos de imagen) y se pinta como `blob:`. El daemon revalida cada ruta con `fs-sandbox`, así que esto es comodidad y defensa en profundidad.
+
+**SVG.** Llega como datos y solo se muestra como `<img>`: ahí no corren scripts, `foreignObject` ni cargas externas, y nunca se inserta en el DOM.
+
+**PDF.** `pdf.ts` carga `pdfjs-dist` y su worker (`pdf.worker.min.mjs?url`, empaquetado por Vite y servido desde el mismo origen) con un `import()`
+dinámico, así que no pesa hasta abrir un PDF. `getDocument` va sin `url` (los bytes los trae `fs.read`), `useWasm: false`, `enableXfa: false`,
+`disableFontFace: true` (glifos como trazos, sin `FontFace`) y `maxImageSize` acotado. No se monta capa de anotaciones ni de texto ni el gestor de
+scripts: un PDF con JavaScript, enlaces o formularios se ve como imagen y nada se ejecuta. Sin CMaps ni fuentes estándar externas (no se sirven),
+algunos PDF con fuentes sin incrustar se ven con sustitutas.
+
+**CSP** (daemon `static.ts`, `tauri.conf.json` y `devCsp`): `img-src 'self' data: blob:` y `worker-src 'self'`; `script-src`, `connect-src`, `object-src 'none'` y
+`frame-ancestors` no cambian, así que no se abre red remota (ni `blob:` para scripts, hojas o marcos).
+
+**Abrir desde otros sitios.** `actions.openInViewer(paneId, ruta)`: el propio panel si es un visor, si no el primer visor de la pestaña y, si no hay,
+`pane.split { kind: 'viewer', path }` a la derecha. Lo usan las rutas de los bloques del agente (`PathLink`: acciones, diffs) y los enlaces a
+archivos de su texto (el panel de agente da un `MarkdownEnv` con la carpeta del espacio; allí las imágenes siguen sin cargarse). La CLI:
+`nexo open <ruta> [--pane <panel>]` hace `fs.stat` y luego `viewer.open` o `pane.split` con el mismo criterio.
 
 ### Daemon y pruebas
 
@@ -1702,6 +1741,8 @@ Nexo funciona al 100 % sin mascota. Una mascota es un **paquete intercambiable**
   bloquea carpetas ocultas sensibles, rutas UNC, `\\?\`, nombres de dispositivo de Windows).
 - Límites: tamaño de mensaje, frecuencia de escritura a PTY, número de terminales y agentes por daemon.
 - Los logs pasan por un redactor de secretos (tokens, claves de API).
+- Visor (F4.2): sin HTML crudo ni red remota en el Markdown, SVG solo como `<img>`, PDF sin scripts ni anotaciones, CSP con `blob:` solo para imágenes;
+  ver «Visor lateral (F4.2)».
 
 ## Pruebas
 

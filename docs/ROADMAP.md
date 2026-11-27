@@ -93,9 +93,12 @@ notificación del sistema si la ventana no tiene el foco, y las mediciones de re
   las carpetas de los espacios abiertos, `realpath`, rutas sensibles, UNC, `\\?\`, dispositivos de Windows, comprobación del descriptor), tipo por
   firma y extensión con topes por tipo, métodos `fs.stat` y `fs.read` (trozos UTF-8 o base64), código de error `FORBIDDEN`, panel `viewer` en
   contratos y core (`pane.split { kind: 'viewer', path }`, `viewer.open`), `fsApi` en `@nexo/client`, `nexo fs stat|cat` y marcador mínimo en la
-  web (el visor real es la F4.2). Ver «Archivos y visor (F4.1)».
-- Historial de los proveedores agrupado por proyecto; límites de uso (Claude, Codex); visor lateral
-  (Markdown, imágenes, PDF) con `fs-sandbox`.
+  web. Ver «Archivos y visor (F4.1)».
+- **F4.2 Visor lateral en la interfaz** (hecho): panel `viewer` real con Markdown seguro (sin HTML crudo ni recursos remotos, imágenes relativas por
+  `fs.read`, enlaces a archivos que abren en el visor), imágenes y SVG como `<img>`, PDF local con pdf.js (worker empaquetado, sin scripts), texto
+  plano, recarga con `expectMtimeMs`; se abre desde las rutas de los bloques del agente y con `nexo open <ruta>`; CSP con `blob:` para imágenes.
+  Ver «Visor lateral (F4.2)».
+- Historial de los proveedores agrupado por proyecto; límites de uso (Claude, Codex).
 
 ## F5 — MCP y mascota
 

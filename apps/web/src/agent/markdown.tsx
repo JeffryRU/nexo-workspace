@@ -1,8 +1,34 @@
 import { Lexer, type Token, type Tokens } from 'marked'
-import { createMemo, For, type JSX, Match, Show, Switch } from 'solid-js'
+import {
+  createContext,
+  createMemo,
+  createResource,
+  For,
+  type JSX,
+  Match,
+  Show,
+  Switch,
+  useContext,
+} from 'solid-js'
 import { Dynamic } from 'solid-js/web'
 import { es } from '../i18n/es.ts'
+import { classifyHref } from '../viewer/paths.ts'
 import { safeHref } from './safe-url.ts'
+
+/**
+ * Entorno opcional del Markdown (F4.2): con él, los enlaces a archivos locales se abren en el visor y, si trae
+ * `loadImage`, las imágenes locales se leen por `fs.read` (nunca se pide nada a la red). Sin entorno, solo
+ * se admiten enlaces absolutos `http(s)`/`mailto` y no hay imágenes.
+ */
+export type MarkdownEnv = {
+  /** Carpeta contra la que se resuelven las rutas relativas. */
+  baseDir: string | undefined
+  openFile(path: string): void
+  /** URL local (`blob:`) de la imagen en `path`, o `undefined` si no se puede mostrar. */
+  loadImage?(path: string): Promise<string | undefined>
+}
+
+export const MarkdownEnvContext = createContext<MarkdownEnv | undefined>(undefined)
 
 /**
  * Markdown seguro. `marked` solo se usa como analizador (`Lexer.lex`): las fichas se convierten en nodos de
@@ -86,7 +112,9 @@ export function parseMarkdown(text: string): MarkdownTokens {
   }
 }
 
-export function Markdown(props: { text: string }) {
+export function Markdown(props: { text: string; env?: MarkdownEnv }) {
+  const inherited = useContext(MarkdownEnvContext)
+  const env = () => props.env ?? inherited
   // Los bloques cuyo texto no cambió conservan su ficha (y por tanto su DOM): al llegar texto solo se repinta el final.
   let known = new Map<string, Token>()
   const parsed = createMemo((): MarkdownTokens => {
@@ -103,12 +131,14 @@ export function Markdown(props: { text: string }) {
   })
   return (
     <div class="md">
-      <Show
-        when={!parsed().failed}
-        fallback={<pre class="md-plain">{props.text.slice(0, MAX_MARKDOWN_CHARS)}</pre>}
-      >
-        <Blocks tokens={parsed().tokens} depth={0} />
-      </Show>
+      <MarkdownEnvContext.Provider value={env()}>
+        <Show
+          when={!parsed().failed}
+          fallback={<pre class="md-plain">{props.text.slice(0, MAX_MARKDOWN_CHARS)}</pre>}
+        >
+          <Blocks tokens={parsed().tokens} depth={0} />
+        </Show>
+      </MarkdownEnvContext.Provider>
     </div>
   )
 }
@@ -312,9 +342,7 @@ function Inline(props: { tokens: Token[] | undefined }): JSX.Element {
           </Match>
           <Match when={t.type === 'image'}>
             {/* Nunca se cargan imágenes remotas (rastreo, exfiltración): solo se muestra su texto. */}
-            <span class="md-image" title={es.agent.imageBlocked}>
-              [{es.agent.image}: {(t as Tokens.Image).text || es.agent.untitled}]
-            </span>
+            <ImageView image={t as Tokens.Image} />
           </Match>
           <Match when={t.type === 'html'}>{(t as Tokens.HTML).text}</Match>
           <Match when={t.type === 'checkbox'}>{null}</Match>
@@ -324,8 +352,66 @@ function Inline(props: { tokens: Token[] | undefined }): JSX.Element {
   )
 }
 
+function ImageView(props: { image: Tokens.Image }) {
+  const env = useContext(MarkdownEnvContext)
+  const alt = () => props.image.text || es.agent.untitled
+  const local = createMemo(() => {
+    if (env?.loadImage === undefined) return undefined
+    const target = classifyHref(props.image.href, env.baseDir)
+    return target.kind === 'file' ? target.path : undefined
+  })
+  const [url] = createResource(local, (path) => env?.loadImage?.(path).catch(() => undefined))
+  return (
+    <Show
+      when={url()}
+      fallback={
+        <span class="md-image" title={local() === undefined ? es.agent.imageBlocked : undefined}>
+          [{es.agent.image}: {alt()}]
+        </span>
+      }
+    >
+      {(src) => <img class="md-img" src={src()} alt={props.image.text} loading="lazy" />}
+    </Show>
+  )
+}
+
 function LinkView(props: { link: Tokens.Link }) {
-  const href = createMemo(() => safeHref(props.link.href))
+  const env = useContext(MarkdownEnvContext)
+  const target = createMemo(() => {
+    if (env === undefined) {
+      const url = safeHref(props.link.href)
+      return url === undefined
+        ? ({ kind: 'blocked' } as const)
+        : ({ kind: 'external', url } as const)
+    }
+    return classifyHref(props.link.href, env.baseDir)
+  })
+  const file = createMemo(() => {
+    const t = target()
+    return t.kind === 'file' ? t.path : undefined
+  })
+  const external = createMemo(() => {
+    const t = target()
+    return t.kind === 'external' ? t.url : undefined
+  })
+  return (
+    <Show when={file()} fallback={<ExternalLink link={props.link} href={external()} />}>
+      {(path) => (
+        <button
+          type="button"
+          class="md-file-link"
+          title={path()}
+          onClick={() => env?.openFile(path())}
+        >
+          <Inline tokens={props.link.tokens} />
+        </button>
+      )}
+    </Show>
+  )
+}
+
+function ExternalLink(props: { link: Tokens.Link; href: string | undefined }) {
+  const href = () => props.href
   return (
     <Show
       when={href()}

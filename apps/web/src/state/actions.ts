@@ -200,6 +200,27 @@ export function createActions(deps: {
       )
     },
 
+    /**
+     * Muestra `path` en un visor: el propio panel si es un visor, si no el primer visor de la pestaña y, si no hay
+     * ninguno, divide el panel de origen a la derecha con uno nuevo. El daemon valida la ruta al leerla.
+     */
+    async openInViewer(fromPaneId: PaneId, path: string): Promise<void> {
+      if (path === '' || path.length > LIMITS.maxPathLength) return
+      const found = findPaneTab(store.state, fromPaneId)
+      if (found === undefined) return
+      const own = found.tab.panes.find((p) => p.id === fromPaneId)
+      const target = own?.kind === 'viewer' ? own : found.tab.panes.find((p) => p.kind === 'viewer')
+      if (target !== undefined) {
+        await run((c) => c.call('viewer.open', { paneId: target.id, path }))
+        await actions.focusPane(target.id)
+        return
+      }
+      const split = await run((c) =>
+        c.call('pane.split', { paneId: fromPaneId, direction: 'row', kind: 'viewer', path }),
+      )
+      if (split !== undefined) await actions.focusPane(split.pane.id)
+    },
+
     async swapPanes(paneId: PaneId, otherPaneId: PaneId): Promise<void> {
       if (paneId === otherPaneId) return
       await run((c) => c.call('pane.swap', { paneId, otherPaneId }))

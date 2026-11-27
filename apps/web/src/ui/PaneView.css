@@ -61,14 +61,3 @@
 .xterm-host .xterm .xterm-viewport {
   background-color: transparent;
 }
-.viewer-placeholder {
-  flex: 1;
-  min-height: 0;
-  padding: 16px;
-  overflow: auto;
-  color: var(--muted, inherit);
-}
-.viewer-path {
-  font-family: var(--font-mono, monospace);
-  overflow-wrap: anywhere;
-}

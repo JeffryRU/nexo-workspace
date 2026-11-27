@@ -11,6 +11,7 @@ import {
   useContext,
 } from 'solid-js'
 import { es, format } from '../i18n/es.ts'
+import { PathLink } from '../viewer/PathLink.tsx'
 import { ansiClass, parseAnsi, tailLines } from './ansi.ts'
 import { diffStats, parseDiff } from './diff.ts'
 import { formatDuration, usageParts } from './format.ts'
@@ -187,7 +188,13 @@ function ActionView(props: { block: Of<'action'> }) {
         </>
       }
     >
-      <Show when={b().path}>{(p) => <p class="path">{p()}</p>}</Show>
+      <Show when={b().path}>
+        {(p) => (
+          <p class="path">
+            <PathLink path={p()} />
+          </p>
+        )}
+      </Show>
       <Show when={b().input}>
         {(input) => (
           <>
@@ -238,7 +245,7 @@ export function DiffView(props: { patch: string; path?: string }) {
   return (
     <div class="diff">
       <p class="diff-stats">
-        <Show when={props.path}>{(p) => <span class="path">{p()}</span>}</Show>
+        <Show when={props.path}>{(p) => <PathLink class="path" path={p()} />}</Show>
         <span class="add">+{stats().added}</span> <span class="del">−{stats().removed}</span>
       </p>
       <pre class="diff-body">
