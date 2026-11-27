@@ -17,6 +17,8 @@ const heavyFiles = [
   'apps/daemon/src/daemon.adversarial.test.ts',
   'packages/client/src/node/daemon.integration.test.ts',
   'packages/client/src/node/discovery.adversarial.test.ts',
+  'apps/mcp/src/mcp.integration.test.ts',
+  'apps/mcp/src/main.adversarial.test.ts',
 ]
 
 // Máquinas lentas o compartidas (p. ej. un VPS con otras cargas): NEXO_TEST_TIMEOUT_SCALE=3 triplica los plazos
@@ -75,7 +77,7 @@ export default defineConfig({
       project('client', './packages/client', 30000),
       project('daemon', './apps/daemon', 30000),
       project('cli', './apps/cli', 30000),
-      project('mcp', './apps/mcp'),
+      project('mcp', './apps/mcp', 15000),
       './apps/web',
       project('tools', './tools'),
       heavyProject('heavy', heavyFiles),
@@ -90,6 +92,7 @@ export default defineConfig({
         'packages/adapters/*/src/**/*.ts',
         'packages/client/src/**/*.ts',
         'apps/cli/src/**/*.ts',
+        'apps/mcp/src/**/*.ts',
         'apps/web/src/**/*.{ts,tsx}',
       ],
       // main.ts de la CLI es solo composición: lo ejercitan las pruebas de integración (proceso hijo).
@@ -99,6 +102,9 @@ export default defineConfig({
         '**/ports/**',
         '**/test-helpers.ts',
         'apps/cli/src/main.ts',
+        // Igual que la CLI: composición del proceso (lo ejercitan las pruebas con proceso hijo) y ayudas de integración.
+        'apps/mcp/src/main.ts',
+        'apps/mcp/src/integration-helpers.ts',
         // Composición del proceso pty host (corre en un hijo); su lógica está en host-handler.ts.
         'packages/adapters/pty-host/src/host.ts',
         '**/*.test.tsx',
@@ -112,6 +118,7 @@ export default defineConfig({
         'packages/jsonrpc/src/**': { statements: 90, branches: 85, functions: 90, lines: 90 },
         'packages/client/src/**': { statements: 90, branches: 90, functions: 90, lines: 90 },
         'apps/cli/src/**': { statements: 85, branches: 85, functions: 85, lines: 85 },
+        'apps/mcp/src/**': { statements: 85, branches: 85, functions: 85, lines: 85 },
         'apps/web/src/**': { statements: 80, branches: 80, functions: 80, lines: 80 },
         'packages/adapters/*/src/**': { statements: 80, branches: 80, functions: 80, lines: 80 },
       },

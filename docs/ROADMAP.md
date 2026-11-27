@@ -76,8 +76,8 @@ notificación del sistema si la ventana no tiene el foco, y las mediciones de re
   `memory.configure`, guardados en el estado del daemon; costo del Observador y del Reflector; reflexión y observaciones de la carpeta con
   texto original y salto al bloque de origen, refrescadas con `memory.updated`), indicador en el panel de las sesiones que recibieron
   memoria (`AgentSession.memory`), renovación manual (`agent.renew`, botón y `nexo agent renew`), `nexo memory config`, E2E con dos
-  proveedores falsos y el Observador falso, capturas `f3-5-*` y ADR 0007 «aceptada». `memory.search` y `memory.recall` por MCP quedan
-  para F5 (cuando exista `apps/mcp`).
+  proveedores falsos y el Observador falso, capturas `f3-5-*` y ADR 0007 «aceptada». `memory.search` y `memory.recall` por MCP llegaron
+  con la F5.1 (`apps/mcp`).
 
 **F3.5 completa.**
 
@@ -118,7 +118,11 @@ Antigravity y de Ollama, una consulta propia de los límites de Claude (solo inf
 
 ## F5 — MCP y mascota
 
-- `apps/mcp`: herramientas para listar/leer/escribir paneles y agentes, y suscribirse a estados.
+- **F5.1 Servidor MCP** (hecho): `apps/mcp` por stdio con el SDK oficial, cliente más del daemon por `@nexo/client`. Herramientas de lectura
+  (espacios, salida de terminal limpia, agentes y bloques, `memory_search`/`memory_recall`, historial, límites), herramientas de escritura solo con
+  `NEXO_MCP_WRITE=1` (con topes de tamaño y de frecuencia; responder permisos aparte con `NEXO_MCP_ALLOW_PERMISSIONS=1`) y recursos suscribibles
+  (`nexo://attention`, `nexo://agents/<id>/status`, `nexo://limits`...) con avisos de cambio a partir de los eventos del daemon. Pruebas
+  unitarias, adversariales, de propiedades y de integración con un cliente MCP real. Ver «Servidor MCP (F5.1)».
 - Sistema de compañeros (mascotas) intercambiables, ver ADR 0006: puerto `CompanionPort`, formato de
   paquete de mascota (manifiesto zod + recursos), selector en la configuración y la opción «sin mascota».
 - La primera mascota es un proyecto aparte; Nexo funciona al 100 % sin ninguna.
