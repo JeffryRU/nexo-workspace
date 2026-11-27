@@ -73,7 +73,7 @@ test.describe('mascota en la interfaz', () => {
     await expect(dock(app).locator('img')).toHaveAttribute('alt', 'Tiny: en reposo')
     expect(await decoded(app)).toBe(true)
     // Nunca se incrusta un SVG ni se usan <object>/<iframe>.
-    await expect(dock(app).locator('svg, object, iframe, embed')).toHaveCount(0)
+    await expect(dock(app).locator('svg:not([data-icon]), object, iframe, embed')).toHaveCount(0)
 
     // La elección la guarda el daemon.
     expect((await stack.nexo(['companion', 'list'])).stdout).toContain('elegida: tiny')

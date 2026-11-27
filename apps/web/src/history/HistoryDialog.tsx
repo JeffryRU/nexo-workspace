@@ -1,5 +1,5 @@
 import type { HistoryProject, HistorySession } from '@nexo/contracts'
-import { createMemo, createSignal, For, Show } from 'solid-js'
+import { createEffect, createMemo, createSignal, For, Show } from 'solid-js'
 import { AgentModelContext, BlockView } from '../agent/blocks.tsx'
 import { MarkdownEnvContext } from '../agent/markdown.tsx'
 import { useModel } from '../app/model.tsx'
@@ -55,10 +55,11 @@ export function HistoryToggle() {
 export function HistoryDialog() {
   const app = useModel()
   const [picked, setPicked] = createSignal<Picked | undefined>()
-  const close = () => {
-    setPicked(undefined)
-    app.ui.setHistoryOpen(false)
-  }
+  // La sesión elegida no sobrevive al cierre, lo cierre quien lo cierre (p. ej. un enlace a un archivo).
+  createEffect(() => {
+    if (!app.ui.historyOpen()) setPicked(undefined)
+  })
+  const close = () => app.ui.setHistoryOpen(false)
 
   return (
     <Show when={app.ui.historyOpen()}>
