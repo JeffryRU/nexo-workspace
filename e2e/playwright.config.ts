@@ -27,6 +27,7 @@ export default defineConfig({
         'adversarial.spec.ts',
         'agent.spec.ts',
         'memory.spec.ts',
+        'history.spec.ts',
         'viewer.spec.ts',
       ],
       use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } },
