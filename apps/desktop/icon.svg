@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Nexo Workspace</title>
+  <!-- Icono maestro de la app (propio, sin material de terceros). Paleta de la interfaz: fondo #15181d, acento #61afef.
+       Un indicador de terminal «>» con cursor de bloque, con el trazo redondeado y uniforme de los iconos de la UI. Regenera los PNG/ICO/ICNS
+       con `pnpm tauri icon icon.svg` desde apps/desktop (ver docs/instalacion.md). -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#232832"/>
+      <stop offset="1" stop-color="#12151a"/>
+    </linearGradient>
+  </defs>
+  <rect x="48" y="48" width="928" height="928" rx="216" fill="url(#bg)"/>
+  <rect x="60" y="60" width="904" height="904" rx="204" fill="none" stroke="#abb2bf" stroke-opacity="0.22" stroke-width="12"/>
+  <path d="M286 326 524 512 286 698" fill="none" stroke="#61afef" stroke-width="112" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="624" y="396" width="116" height="232" rx="30" fill="#d7dae0"/>
+</svg>
