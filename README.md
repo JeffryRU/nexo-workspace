@@ -13,6 +13,8 @@ va el modelo normalizado de agentes: bloques, protocolo `agent.*` y `AgentProvid
 (F2.5) y la atención en la barra con notificaciones del sistema y mediciones de rendimiento del agente (F2.6; ver
 [`docs/ROADMAP.md`](docs/ROADMAP.md)).
 
+Empaquetado (F6) completo: instaladores sin firma para Windows y Linux, ver [Instalación](#instalación).
+
 ## Requisitos
 
 - Node.js 24 o superior

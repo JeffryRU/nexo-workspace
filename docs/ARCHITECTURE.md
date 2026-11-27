@@ -1991,7 +1991,7 @@ nexo/
   Node/daemon empaquetado en …; reinstala Nexo Workspace» (o, con override, con el nombre de la variable). Un daemon corrupto lo ve el usuario como tiempo agotado con la
   indicación de `daemon.log`.
 - **Tauri.** `apps/desktop/src-tauri/tauri.bundle.conf.json` declara `bundle.resources: { "resources/nexo/": "nexo/" }` y se mezcla con
-  `tauri build --config src-tauri/tauri.bundle.conf.json` (F6.2 activa los instaladores). No se usa `externalBin` a propósito (acabaría en `/usr/bin/node` en el `.deb`).
+  `tauri build --config src-tauri/tauri.bundle.conf.json` (F6.2 activa los instaladores, ver «Instaladores y release (F6.2)»). No se usa `externalBin` a propósito (acabaría en `/usr/bin/node` en el `.deb`).
 - **Smoke test** (`tools/package/smoke.mjs`, job `package` del CI en Ubuntu y Windows): copia el paquete a una ruta con espacios y no ASCII, lo verifica contra su
   manifiesto y, solo con `bin/nexo[.cmd]`: `--version`; abre una terminal real que ejecuta el Node empaquetado (en Windows, vía pty host; en Linux también con
   `--pty-mode host`); `GET /health` con el puerto y token de `daemon.json`; abre un agente `fake` y espera su eco; `daemon stop` y comprueba que el proceso muere;
@@ -1999,6 +1999,52 @@ nexo/
 - **Pruebas.** `tools/test/package*.test.ts` (hashes, zip hostil, descarga con hash distinto, manifiesto corrupto/ausente/con rutas hostiles, lanzadores),
   `bundle.test.ts`, `entry.test.ts`, el caso de rutas del paquete en `support.test.ts` y, en Rust, `launcher::bundled` (release, dev, overrides, recursos ausentes,
   directorios en vez de archivos, rutas con espacios y no ASCII, `\\?\`, arranque real desde un paquete simulado en Unix y coherencia con `tauri.bundle.conf.json`).
+
+## Instaladores y release (F6.2)
+
+Guía de usuario en [docs/instalacion.md](instalacion.md). Sobre el paquete de F6.1, Tauri genera los instaladores con
+`tauri build --config src-tauri/tauri.bundle.conf.json --bundles <lista>` (antes: `pnpm --filter @nexo/web build` y
+`node tools/package/build-bundle.mjs`).
+
+- **Configuración** (`apps/desktop/src-tauri/tauri.bundle.conf.json`, mezclada con `tauri.conf.json`): `bundle.active`, iconos, categoría
+  (`DeveloperTool`), editor, descripciones, el recurso `resources/nexo/` -> `nexo/`, NSIS por usuario (`installMode: currentUser`, sin
+  administrador, español e inglés) y `.deb` (`section: devel`). `targets: all`; el CI elige con `--bundles` (Linux `deb,appimage`; Windows `nsis,msi`).
+  **No hay campo de licencia**: el repositorio aún no declara una.
+- **Dónde caen los recursos** (comprobado con instaladores reales en el CI): `.deb` `/usr/lib/Nexo Workspace/nexo` con el ejecutable en
+  `/usr/bin`; AppImage `usr/lib/Nexo Workspace/nexo` dentro de la imagen; NSIS `<carpeta>\nexo` junto al `.exe`. En los tres, `resource_dir()` es la carpeta
+  que contiene `nexo/`, que es lo que asume `launcher.rs`. `node` y `bin/nexo` conservan el bit de ejecución en `.deb` y AppImage.
+- **El daemon sobrevive a la app** (por diseño) y usa `node.exe` del paquete, que Windows no deja borrar mientras corre. El gancho
+  `src-tauri/nsis/hooks.nsh` ejecuta `nexo daemon stop` con el Node y la CLI empaquetados antes de instalar, actualizar y desinstalar. Nunca borra el
+  estado. En el `.deb` y el MSI no hay gancho (el daemon es del usuario y no se sabe cuál): lo mantiene vivo hasta `nexo daemon stop`.
+- **Datos del usuario**: el instalador y el desinstalador no tocan el directorio de estado (`%LOCALAPPDATA%\Nexo`, `~/.local/state/nexo`).
+- **Icono**: `apps/desktop/icon.svg` es el maestro (propio): azulejo oscuro de la interfaz con un `>` en el azul de acento y un cursor de bloque, de trazo grueso
+  y redondeado para que se lea a 16 px. `pnpm tauri icon icon.svg` (desde `apps/desktop`) genera `src-tauri/icons/` (PNG, `.ico` y `.icns`).
+- **Mascota de ejemplo**: `build-bundle` copia `examples/companions/robi` a `nexo/companions/robi` (entra en el manifiesto). No se instala sola en el
+  directorio del usuario: «sin mascota» sigue siendo el valor predeterminado y copiarla es un paso explícito (docs/instalacion.md).
+- **Claude Code**: los instaladores no lo traen (~380 MB). `apps/daemon/src/main.ts` resuelve el ejecutable en este orden: `NEXO_CLAUDE_EXECUTABLE`,
+  `vendor/claude` del paquete (build con `--with-claude`) y, solo en el paquete, `findClaudeOnPath` (`apps/daemon/src/bundle.ts`): el `claude` ejecutable
+  del `PATH` del usuario y después `~/.local/bin/claude`. Solo hace `stat`/`access` y luego el SDK lo lanza con `spawn`: nunca lee `~/.claude` ni
+  credenciales. Descarta entradas de `PATH` vacías, relativas, con NUL o enormes (máx. 256), los directorios llamados `claude` y, en Windows, todo lo que no sea
+  `claude.exe`. Si no hay ninguno, el proveedor queda «no disponible» y el mensaje explica cómo instalarlo o apuntar `NEXO_CLAUDE_EXECUTABLE`.
+- **Versión única**: `version` de `package.json` (raíz). `tools/version/sync-version.mjs` (`--write`, `--set <x.y.z>`) la copia a todos los `package.json` del
+  espacio de trabajo, `Cargo.toml`, `Cargo.lock` (solo `nexo-desktop`), `tauri.conf.json` y las constantes `DAEMON_VERSION` y `CLI_VERSION`; la prueba
+  `tools/test/version.test.ts` (parte de `pnpm check`) falla si algo no coincide.
+- **Workflow `release`** (`.github/workflows/release.yml`): `workflow_dispatch`, etiquetas `v*` y PR que toquen escritorio, daemon, CLI, web o `tools/{package,version}`.
+  Matriz Ubuntu y Windows: comprueba la versión única (y con etiqueta, que la etiqueta sea `v<versión>`), construye web, paquete e instaladores, **prueba los
+  instaladores** (abajo), los renombra sin espacios (`nexo-workspace_<versión>_<sistema>_x64[-setup].<ext>`, `tools/package/collect-installers.mjs`), calcula
+  `SHA256SUMS-<sistema>.txt` y sube los artefactos. Solo con etiqueta, el job `draft-release` (único con `contents: write`, con `GITHUB_TOKEN`) une las
+  sumas en `SHA256SUMS`, las verifica con `sha256sum --check` y crea un **borrador** con `gh release create --draft`. En los PR no se publica nada. Sin firma
+  y sin secretos nuevos.
+- **Smoke de los instaladores** (`tools/package/installer-smoke.mjs`; instala de verdad, solo en el CI o en una VM):
+  - Linux, `.deb`: `apt-get install`, comprueba archivos y bits de ejecución, arranca la **app** bajo `xvfb-run` + `dbus-run-session`, espera a que lance el daemon
+    empaquetado y responda `/health`, comprueba que el proceso del daemon es el `node` instalado, cierra la app, detiene el daemon con la CLI instalada y desinstala
+    (sin restos y con el estado intacto). AppImage: `--appimage-extract` y la misma prueba con `AppRun`.
+  - Windows, NSIS: `/S /D=<carpeta con espacios y ñ>`, comprueba el diseño, arranca la app, `/health`, que el daemon use el `node.exe` instalado, cierra solo la app
+    y desinstala en silencio **con el daemon vivo** (lo detiene el gancho y se borra `node.exe`); el estado queda. MSI: instala, repite la prueba, desinstala.
+  - Hallazgo del smoke: mientras la app esté abierta, la interfaz vuelve a lanzar el daemon si cae; por eso la prueba cierra la app antes de detenerlo.
+- **Pruebas**: `tools/test/installers.test.ts` (nombres, sumas, `collect`), `tools/test/version.test.ts`, `apps/daemon/src/claude-path.test.ts` (PATH vacío,
+  entradas hostiles, directorio llamado `claude`, archivos reales) y, en Rust, `launcher::tests::los_instaladores_estan_activos_y_sus_archivos_existen`.
+- **Fuera de F6.2**: firma de código (SmartScreen y AppImage avisan), actualizaciones automáticas, macOS, arm64, Flatpak/Snap/RPM y publicar el release (siempre manual).
 
 ## Servidor MCP (F5.1)
 
@@ -2401,7 +2447,7 @@ Unitarias: `ui/TabBar.test.tsx` (rueda, fundidos por lado con medidas simuladas)
 dibujos distintos, todo SVG, licencia, y un archivo no declarado no se sirve). Adversarial: desplazamientos de rueda enormes (`1e12`, `Number.MAX_VALUE`) y sin desborde. E2E (`e2e/pulido.spec.ts`, `e2e/companion.spec.ts`):
 anchos de pestaña entre 96 y 200 px, fundido y rueda con ocho pestañas más, una ruta del Historial en una sola línea a 360 px, y Robi decodificado con una imagen distinta en reposo, pensando, terminado y esperando.
 
-**Qué queda fuera.** Que el instalador de F6 incluya Robi (encaja de forma natural: es una carpeta que se copia a `companions/`), una hoja de sprites de `thinking`, y partir con criterio una ruta en el bloque del agente.
+**Qué queda fuera.** (Robi ya viaja en el paquete desde F6.2, sin instalarse sola.) Una hoja de sprites de `thinking`, y partir con criterio una ruta en el bloque del agente.
 
 ## Seguridad
 

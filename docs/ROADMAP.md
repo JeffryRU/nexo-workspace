@@ -147,4 +147,10 @@ Antigravity y de Ollama, una consulta propia de los límites de Claude (solo inf
   como bundles esbuild, `node-pty` aparte con su binario nativo, la web, los lanzadores `nexo`/`nexo-mcp` y el Node oficial (SHA-256 fijado en el repositorio y
   cruzado con `SHASUMS256.txt`, solo al construir); `launcher.rs` usa el paquete en release y conserva el flujo de desarrollo; smoke test en Ubuntu y Windows
   (/health, terminal, agente falso, parada) desde una ruta con espacios y no ASCII. Ver «Empaquetado (F6.1)» y el ADR 0008.
-- **F6.2 Instaladores** (pendiente): Windows (NSIS/MSI) y Linux (AppImage, .deb) sobre ese paquete, icono, workflow de release y docs de instalación.
+- **F6.2 Instaladores, icono y release** (#79, hecho): Tauri genera NSIS y MSI (Windows) y .deb y AppImage (Linux) sobre el paquete de F6.1, con metadatos, gancho NSIS que detiene el daemon y
+  icono propio (`apps/desktop/icon.svg`); versión única sincronizada por script y comprobada en `pnpm check`; workflow `release` (`workflow_dispatch`, etiquetas `v*` y PR) que construye en Ubuntu y
+  Windows, prueba los instaladores instalándolos de verdad (app, daemon empaquetado, `/health`, desinstalación con el estado intacto), publica `SHA256SUMS` y, solo con etiqueta, deja un borrador;
+  Claude Code del PATH del usuario cuando el paquete no lo trae; Robi como recurso opcional del paquete; `docs/instalacion.md`. Ver «Instaladores y release (F6.2)».
+  Fuera: firma de código, actualizaciones automáticas, macOS y arm64.
+
+F6 queda completa: el usuario descarga un instalador, lo ejecuta y obtiene la app con su daemon y su Node, sin tocar el repositorio.

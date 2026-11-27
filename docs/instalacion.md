@@ -4,12 +4,12 @@ Nexo Workspace se instala con un instalador por sistema. Todos llevan **su propi
 instalar Node, pnpm ni clonar el repositorio. Los instaladores salen del workflow `Release` (ver
 [Arquitectura](ARCHITECTURE.md#instaladores-y-release-f62)) y, de momento, **no están firmados**.
 
-| Sistema | Instalador | Notas |
-| ------- | ---------- | ----- |
+| Sistema             | Instalador                                              | Notas                                               |
+| ------------------- | ------------------------------------------------------- | --------------------------------------------------- |
 | Windows 10/11 (x64) | `nexo-workspace_<versión>_windows_x64-setup.exe` (NSIS) | Por usuario: no pide administrador. Lo recomendado. |
-| Windows 10/11 (x64) | `nexo-workspace_<versión>_windows_x64.msi` | Para despliegues con herramientas MSI. |
-| Linux (x64) | `nexo-workspace_<versión>_linux_x64.deb` | Debian, Ubuntu y derivadas. |
-| Linux (x64) | `nexo-workspace_<versión>_linux_x64.AppImage` | Cualquier distribución con WebKitGTK 4.1. |
+| Windows 10/11 (x64) | `nexo-workspace_<versión>_windows_x64.msi`              | Para despliegues con herramientas MSI.              |
+| Linux (x64)         | `nexo-workspace_<versión>_linux_x64.deb`                | Debian, Ubuntu y derivadas.                         |
+| Linux (x64)         | `nexo-workspace_<versión>_linux_x64.AppImage`           | Cualquier distribución con WebKitGTK 4.1.           |
 
 ## Requisitos
 
@@ -96,8 +96,8 @@ después de desinstalar. Si el daemon seguía vivo al desinstalar el `.deb` o el
 
 ## Dónde quedan tus datos
 
-| Qué | Windows | Linux |
-| --- | ------- | ----- |
+| Qué                          | Windows               | Linux                                          |
+| ---------------------------- | --------------------- | ---------------------------------------------- |
 | Estado, configuración y logs | `%LOCALAPPDATA%\Nexo` | `$XDG_STATE_HOME/nexo` o `~/.local/state/nexo` |
 
 `NEXO_STATE_DIR` cambia esa carpeta. Dentro están el registro del daemon (`daemon.log`, rotado a 2 MB), `daemon.json` y el
