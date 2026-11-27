@@ -128,7 +128,10 @@ Antigravity y de Ollama, una consulta propia de los límites de Claude (solo inf
   `CompanionPort` con `companion-fs` (topes, rutas validadas, sin enlaces, bytes mágicos, SVG validado y servido solo como imagen), métodos
   `companion.list|get|select|asset|state` y evento `companion.state`, «sin mascota» por omisión y persistido, `companionApi`, `nexo companion`,
   paquete de prueba, falso y suite de conformidad en el testkit. Ver «Compañeros (F5.2)».
-- **F5.3 Interfaz de la mascota** (#72, pendiente): dibujar el estado con los recursos del compañero elegido y el selector en la configuración.
+- **F5.3 Interfaz de la mascota** (#72, hecho): selector con «sin mascota» de primera clase, la mascota en la esquina de la ventana que reacciona a `companion.state`
+  (recursos como `<img>` desde un caché por id sin fugas de URL, `idle` de respaldo, hojas de sprites, `prefers-reduced-motion`, ocultable, `aria-live` discreto),
+  guía [`docs/mascotas.md`](mascotas.md) (crear un paquete y conectar una mascota externa por MCP/WebSocket), pruebas unitarias, adversariales, de propiedades y E2E,
+  capturas `f5-*`. Ver «Interfaz de la mascota (F5.3)». **F5 completa.**
 - La primera mascota es un proyecto aparte; Nexo funciona al 100 % sin ninguna.
 
 ## F6 — Empaquetado
