@@ -1519,8 +1519,8 @@ lectura y no se ejecutan en el CI.
 
 `limits.status` y el evento `limits.updated` dicen cuánto queda de los límites de uso de **Claude** y **Codex**: por ventana, el
 porcentaje usado, cuándo se reinicia, de dónde salió el dato y si sigue siendo fresco. Solo ventanas de uso: **nunca** datos de la
-cuenta (correo, nombre, id, plan, créditos). La interfaz que los dibuja es la #64; aquí están el puerto, el servicio, el
-protocolo, la CLI y el cliente.
+cuenta (correo, nombre, id, plan, créditos). La interfaz que los dibuja es la F4.5 (ver «Interfaz de historial y límites (F4.5)»); aquí están el puerto,
+el servicio, el protocolo, la CLI y el cliente.
 
 ### Puerto: capacidad opcional del proveedor
 
@@ -1606,6 +1606,71 @@ frescura (o «desconocido» / el motivo). Con `--json` emite el resultado de `li
 `account/rateLimits/read` y notificaciones, y el transporte falso de Claude). Hay pruebas adversariales de respuestas malformadas,
 porcentajes fuera de rango, fechas raras, datos de cuenta que no deben salir, una avalancha de notificaciones y un proveedor que no
 responde; propiedades (fast-check) de la normalización en el contrato, el servicio y los dos adaptadores; e integración en el daemon.
+
+## Interfaz de historial y límites (F4.5)
+
+Cierra la F4: la web dibuja lo que el daemon ya sabía (`history.*` de la F4.3 y `limits.*` de la F4.4). Todo vive en
+`apps/web/src/history/` y `apps/web/src/limits/`, con textos en `i18n/es.ts`. No hay métodos nuevos en el protocolo.
+
+### Historial (`HistoryDialog`)
+
+Un botón «Historial» en la barra de estado abre una ventana modal (`role="dialog"`, foco al abrir; Escape cierra o vuelve de una sesión a la
+lista). Tiene dos vistas:
+
+- **Lista.** `useHistoryList` pide `history.list` de 50 en 50 con `useInfiniteQuery` (cursor = `nextCursor`) y junta las páginas con
+  `mergeProjects` (una carpeta partida entre páginas se une, una sesión repetida se descarta y el orden es el del daemon; `C:\Work\App` y
+  `c:/work/app/` son la misma carpeta, como en el daemon). Agrupa por carpeta (nombre del proyecto y ruta), con el proveedor, la fecha local,
+  el número de mensajes y dos acciones por sesión: **Ver** y **Reanudar en una pestaña**, desactivadas con una explicación si el proveedor no
+  permite leer (`readable`) o reanudar (`resumable`). Por cada proveedor que no listó bien (`providers[]`: `unsupported`, `unavailable`, `timeout`,
+  `error`) sale un aviso con su motivo, y el resto sigue funcionando.
+- **Sesión antigua.** `history.read` por páginas de 100 bloques (`useHistoryBlocks`, «Cargar más bloques»). Los bloques normalizados se
+  pintan con el **mismo `BlockView` del panel de agente** (Markdown seguro, diffs, acciones plegables), pero con un modelo de solo lectura
+  (`createReadOnlyModel`): la sesión figura como cerrada, así que un permiso o una pregunta que quedó pendiente sale desactivado, no hay
+  redactor y nada llama a `agent.send` ni a `agent.respond`. Los enlaces a archivos del texto usan el entorno Markdown de la F4.2 con la carpeta de
+  la sesión: abren el visor (`actions.openInViewerHere`, desde el panel con foco) y cierran la ventana; no hay `loadImage`, así que ninguna imagen se
+  carga (ni local ni remota).
+
+**Decisión: la búsqueda es del cliente.** Filtra, sin mayúsculas ni acentos, por título, nombre y carpeta **sobre lo ya cargado**; la ventana
+avisa de que «Cargar más» la amplía. Alternativa descartada: un parámetro `query` en `history.list`. Habría que recorrer todas las sesiones de
+cada proveedor (un proceso por consulta en Codex y ACP) para cada pulsación de tecla, y los proveedores no filtran por texto; el daemon cachea
+la lista 15 s, así que recargar tras cada letra no ayuda. El filtro por **proveedor** sí va al daemon (`provider`), porque cambia qué procesos se
+consultan. El «primer mensaje» no viaja en la lista (solo el título que dé el proveedor, que en Codex suele serlo), así que no se busca en él.
+
+**Tope de pintado.** Con miles de sesiones solo se pintan las primeras 500 (`capSessions`), con un aviso «Se muestran 500 de N»; la búsqueda
+sigue recorriendo todas las cargadas y es el modo de llegar al resto.
+
+**Reanudar.** `actions.resumeInNewTab`: `tab.create` + `pane.split { kind: 'agent' }` + cerrar el panel inicial + `agent.create { paneId, provider,
+resume, cwd }`, y enfoca el panel. Mientras se reanuda el botón se desactiva (dos clics seguidos crean una sola pestaña). Si el daemon rechaza
+la reanudación sale el aviso de siempre y la ventana sigue abierta; la pestaña queda con el panel de inicio.
+
+**Texto ajeno.** Títulos, carpetas, motivos de error y mensajes son datos del historial, no instrucciones: los títulos y las rutas se pintan como
+texto plano (nunca `innerHTML`), los bloques con el render seguro de la F2.5/F4.2 (sin HTML crudo, enlaces `javascript:` ni recursos remotos), y
+la vista no manda nada de ese texto al daemon (solo `history.list` y `history.read`; reanudar solo envía la ficha y la carpeta de la sesión).
+
+### Límites de uso (`LimitsIndicator`)
+
+En la barra de estado, un botón con un chip por proveedor que ofrece límites (`unsupported` no aparece; sin ninguno, no hay indicador): el
+**peor porcentaje** de sus ventanas (`worstPercent`, acotado a 0-100; un valor que no es número no cuenta) o «desconocido» si no hay ventanas con
+dato (p. ej. Claude sin sesión). Color por umbral: normal por debajo del 70 %, alto desde el 70 %, crítico desde el 90 %, y crítico también si el
+proveedor dice que el límite se alcanzó. El color nunca es lo único: el chip lleva el porcentaje y el botón un `aria-label` con el detalle por proveedor.
+
+El botón despliega un **detalle** (`aria-expanded`; Escape lo cierra y devuelve el foco) con, por proveedor, su estado, cada ventana (nombre, duración,
+porcentaje y barra), el **reinicio en hora local** con lo que falta («en 2 h 5 min»; «ya pasó» si la hora ya venció), la frescura, cuándo se
+observó, el origen (consulta directa, aviso del proveedor, evento de una sesión) y el motivo si lo hay, y el botón **Refrescar**
+(`limits.status { refresh: true }`; si falla lo dice y conserva lo anterior). `limits.status` se pide al conectar y `limits.updated` **sustituye** la
+entrada de ese proveedor en la caché de `@tanstack/solid-query` (`replaceProvider`), así que el indicador cambia solo, sin sondeo. Si el daemon no
+responde o contesta algo raro, el indicador simplemente no aparece. Una consulta directa posterior manda sobre el último aviso (así lo resuelve
+el servicio de la F4.4).
+
+### Pruebas
+
+Unitarias y adversariales de los componentes (`HistoryDialog*.test.tsx`, `LimitsIndicator*.test.tsx`: títulos y mensajes con HTML, Markdown, órdenes y
+escapes; ids y fechas raros; 2000 sesiones; cerrar con la lectura en curso; reanudar dos veces; porcentajes negativos, mayores de 100, NaN e
+infinitos; fechas inválidas; una avalancha de 3000 `limits.updated`; respuestas vacías o que fallan), de propiedades (fast-check) del agrupado,
+filtrado y recorte del historial y del resumen, los umbrales y el formato de los límites (`view*.test.ts`), y E2E con el daemon real y el Codex
+falso (`e2e/history.spec.ts`): lista por proyecto, búsqueda, sesión antigua con texto hostil, enlace que abre el visor, reanudar en una pestaña,
+proveedor sin historial, e indicador que sale de la consulta y cambia con el aviso de una sesión. Capturas: `docs/capturas/f4-5-*.png`
+(`NEXO_CAPTURAS=1 pnpm e2e -g capturas`).
 
 ## Protocolo (v1)
 

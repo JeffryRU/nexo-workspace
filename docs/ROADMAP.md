@@ -106,7 +106,15 @@ notificación del sistema si la ventana no tiene el foco, y las mediciones de re
 - **F4.4 Límites de uso (Claude, Codex)** (hecho): `UsageLimitsPort` (capacidad opcional de `AgentProviderPort`) con `account/rateLimits/read` y la notificación
   `account/rateLimits/updated` de Codex y los `rate_limit_event` del Agent SDK de Claude (solo informan durante una sesión; sin ellos, «desconocido»), métodos
   `limits.status` y evento `limits.updated` (ventanas con porcentaje usado, reinicio, origen y frescura; caché, plazos y contención de avisos), `limitsApi`,
-  `nexo limits` y suites de conformidad. Sin datos de la cuenta en ningún borde. La interfaz de límites es la #64. Ver «Límites de uso de los proveedores (F4.4)».
+  `nexo limits` y suites de conformidad. Sin datos de la cuenta en ningún borde. Ver «Límites de uso de los proveedores (F4.4)».
+- **F4.5 Interfaz de historial y límites, y cierre de F4** (hecho): ventana «Historial» (por proyecto, filtro por proveedor en el daemon, búsqueda en el
+  cliente, paginación incremental, estado por proveedor, «Reanudar en una pestaña»), sesión antigua de solo lectura con el render de bloques del panel
+  de agente y enlaces que abren el visor, e indicador de límites en la barra de estado (peor porcentaje por proveedor, umbrales, «desconocido»,
+  detalle con reinicio local, frescura y origen, refresco y actualización con `limits.updated`). Pruebas unitarias, adversariales, de propiedades y E2E
+  con proveedores falsos; capturas `f4-5-*`. Ver «Interfaz de historial y límites (F4.5)».
+
+**F4 completa** (fs-sandbox, visor, historial, límites e interfaz). Queda fuera, y está dicho en cada sección: leer sesiones de ACP (solo listan), el historial de
+Antigravity y de Ollama, una consulta propia de los límites de Claude (solo informa el SDK dentro de una sesión) y la verificación en vivo de su `utilization`.
 
 ## F5 — MCP y mascota
 
